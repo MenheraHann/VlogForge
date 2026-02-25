@@ -1,6 +1,7 @@
 """
 数据模型定义
 所有请求/响应的 Pydantic 模型
+v4 架构：4 Agent（ADA/DA/VA/VGA）
 """
 
 from enum import Enum
@@ -25,27 +26,81 @@ class Duration(str, Enum):
 
 
 class JobStatus(str, Enum):
-    """任务状态"""
+    """任务状态（v4：已移除 QA 环节）"""
     PENDING = "pending"             # 等待开始
-    SCRIPT_GENERATING = "script"    # 正在生成脚本
-    IMAGES_GENERATING = "images"    # 正在生成分镜图
-    VIDEOS_GENERATING = "videos"    # 正在生成视频片段
-    QA_REVIEWING = "qa"             # 质控审核中
-    STITCHING = "stitching"         # 拼接视频中
+    SCRIPT_GENERATING = "script"    # DA 正在生成脚本
+    IMAGES_GENERATING = "images"    # VA 正在生成分镜图
+    VIDEOS_GENERATING = "videos"    # VGA 正在生成视频片段
+    STITCHING = "stitching"         # FFmpeg 拼接视频中
     COMPLETED = "completed"         # 完成
     FAILED = "failed"               # 失败
 
 
+class AssetType(str, Enum):
+    """素材类型"""
+    ITEM = "item"       # 物品
+    MODEL = "model"     # 人物
+    SCENE = "scene"     # 场景
+
+
+# ========== 素材模型 ==========
+
+class ItemAsset(BaseModel):
+    """物品素材档案"""
+    id: str = Field(..., description="素材 ID，如 item_001")
+    name: str = Field(..., description="物品名称")
+    category: str = Field(..., description="物品类别，如面部护肤")
+    usage: str = Field(..., description="使用方式描述")
+    selling_point: str = Field(..., description="核心卖点")
+    original_images: list[str] = Field(default_factory=list, description="用户上传的原始图片路径")
+    instruction_image: Optional[str] = Field(None, description="ADA 生成的产品说明图路径")
+    full_description: str = Field("", description="ADA 生成的完整产品描述")
+    size_category: str = Field("small", description="尺寸分类: small 允许, large 拒绝")
+
+
+class ModelAsset(BaseModel):
+    """人物素材档案"""
+    id: str = Field(..., description="素材 ID，如 model_001")
+    name: str = Field(..., description="人物名称/标签")
+    appearance: str = Field(..., description="外貌描述")
+    personality: str = Field("", description="气质/性格描述")
+    outfits: str = Field("", description="穿搭描述")
+    reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
+    selected_look: Optional[str] = Field(None, description="用户选中的造型图路径")
+    full_description: str = Field("", description="ADA 生成的完整人设描述")
+
+
+class SceneAsset(BaseModel):
+    """场景素材档案"""
+    id: str = Field(..., description="素材 ID，如 scene_001")
+    name: str = Field(..., description="场景名称")
+    environment: str = Field(..., description="环境描述")
+    lighting: str = Field("", description="光线描述")
+    mood: str = Field("", description="氛围描述")
+    reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
+    selected_scene: Optional[str] = Field(None, description="用户选中的场景图路径")
+    full_description: str = Field("", description="ADA 生成的完整场景描述")
+
+
 # ========== 请求模型 ==========
 
+class VideoGenerateRequest(BaseModel):
+    """视频生成请求（v4：基于素材库选择）"""
+    item_id: str = Field(..., description="选中的物品素材 ID")
+    model_id: str = Field(..., description="选中的人物素材 ID")
+    scene_id: str = Field(..., description="选中的场景素材 ID")
+    platform: Platform = Field(..., description="目标平台")
+    duration: Duration = Field(..., description="视频时长")
+    extra_requirements: str = Field("", description="用户额外要求（可选）")
+
+
 class GenerateRequest(BaseModel):
-    """用户提交的生成请求（6 项输入）"""
+    """用户提交的生成请求（旧版兼容，后续切换到 VideoGenerateRequest）"""
     product_type: str = Field(..., description="产品类型，如：洗面奶、面膜、手机App")
     product_usage: str = Field(..., description="产品使用方式描述")
     platform: Platform = Field(..., description="目标平台")
     duration: Duration = Field(..., description="视频时长")
     selling_point: str = Field(..., description="核心卖点，一句话")
-    # 产品参考图通过文件上传单独处理，不在 JSON body 中
 
 
 # ========== 脚本相关模型 ==========
@@ -69,11 +124,21 @@ class StyleGuide(BaseModel):
     lighting: str = Field(..., description="光线描述")
 
 
+class SelfCheck(BaseModel):
+    """DA 脚本自检评分（D6 决策）"""
+    person_match: int = Field(..., ge=1, le=5, description="人物匹配度 1-5")
+    product_accuracy: int = Field(..., ge=1, le=5, description="产品准确度 1-5")
+    scene_consistency: int = Field(..., ge=1, le=5, description="场景一致性 1-5")
+    overall_quality: int = Field(..., ge=1, le=5, description="整体质量 1-5")
+    issues: str = Field("", description="发现的问题（为空表示无问题）")
+
+
 class ScriptOutput(BaseModel):
-    """TA 输出的完整脚本"""
+    """DA 输出的完整脚本（v4：含自检评分）"""
     title: str = Field(..., description="视频标题")
     style_guide: StyleGuide
     segments: list[ScriptSegment]
+    self_check: SelfCheck = Field(..., description="DA 自检评分")
 
 
 # ========== 响应模型 ==========

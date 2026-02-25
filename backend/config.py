@@ -22,9 +22,28 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "vlogforge-artifacts")
 # 服务
 PORT = int(os.getenv("PORT", "8000"))
 
+# ========== 模型配置 ==========
+
+# 文本生成模型（DA 脚本生成、ADA 文本分析）
+TEXT_MODEL = "gemini-2.5-flash"
+
+# 图片生成模型（Nano Banana：ADA 生图 + VA 图生图）
+IMAGE_GEN_MODEL = "gemini-2.0-flash-exp"
+
+# 视频生成模型（Veo 3.1：VGA 首尾帧视频）
+VIDEO_GEN_MODEL = "veo-3.1-generate-001"
+
+# ========== 存储路径 ==========
+
 # 本地产物存储路径（开发阶段使用，部署后切换到 Cloud Storage）
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "artifacts")
 os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+
+# 素材存储路径
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
+
+# ========== 视频参数映射 ==========
 
 # 视频时长 → 分段数映射
 DURATION_SEGMENT_MAP = {
@@ -39,3 +58,8 @@ PLATFORM_ASPECT_MAP = {
     "xiaohongshu": "9:16",
     "youtube": "16:9",
 }
+
+# ========== self_check 阈值 ==========
+
+# 任一维度低于此值触发重跑（D6 决策）
+SELF_CHECK_THRESHOLD = 3

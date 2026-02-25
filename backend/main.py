@@ -1,26 +1,35 @@
 """
 VlogForge - AI Vlog 带货视频生成器
 FastAPI 入口文件
+v4 架构：素材库 + 视频生成两阶段
 """
 
 import os
 import uuid
 import json
+import asyncio
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import PORT, ARTIFACTS_DIR, DURATION_SEGMENT_MAP, PLATFORM_ASPECT_MAP
+from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, DURATION_SEGMENT_MAP, PLATFORM_ASPECT_MAP
 from backend.models import (
-    Platform, Duration, JobStatus,
-    GenerateRequest, JobResponse, ProgressResponse,
+    Platform, Duration, JobStatus, AssetType,
+    ItemAsset, ModelAsset, SceneAsset,
+    JobResponse, ProgressResponse,
 )
 from backend.services.job_manager import JobManager
+from backend.services.asset_manager import AssetManager
 from backend.agents.da_agent import run_pipeline
+from backend.agents.ada_agent import (
+    create_item_asset,
+    create_model_asset,
+    create_scene_asset,
+)
 
 # 日志配置
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -29,7 +38,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="VlogForge",
     description="AI Vlog 带货视频生成器 - Gemini Live Agent Challenge",
-    version="0.1.0",
+    version="0.4.0",
 )
 
 # 跨域（开发阶段允许所有来源）
@@ -41,17 +50,176 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 任务管理器
+# 管理器
 job_manager = JobManager()
+asset_manager = AssetManager()
 
 
-# ========== API 端点 ==========
+# ========== 健康检查 ==========
 
 @app.get("/health")
 async def health_check():
     """健康检查"""
-    return {"status": "ok", "service": "VlogForge"}
+    stats = asset_manager.get_stats()
+    return {"status": "ok", "service": "VlogForge", "assets": stats}
 
+
+# ========== 素材 API ==========
+
+@app.post("/api/assets/item")
+async def create_item(
+    description: str = Form(..., description="产品描述"),
+    images: Optional[list[UploadFile]] = File(None, description="产品图片"),
+):
+    """创建物品素材"""
+    asset_id = asset_manager.generate_id(AssetType.ITEM)
+    logger.info(f"[API] 创建物品素材: {asset_id}")
+
+    # 读取上传图片
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    asset = await create_item_asset(
+        asset_id=asset_id,
+        description=description,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    # 检查是否被拒绝（大型物品）
+    if asset.size_category == "large":
+        return {
+            "status": "rejected",
+            "reason": "大型物品不支持，仅接受上半身可演示的小型产品",
+            "asset": asset.model_dump(),
+        }
+
+    asset_manager.save_item(asset)
+    return {"status": "ok", "asset": asset.model_dump()}
+
+
+@app.post("/api/assets/model")
+async def create_model(
+    description: str = Form(..., description="人物描述"),
+    images: Optional[list[UploadFile]] = File(None, description="参考图"),
+):
+    """创建人物素材（返回多套造型供选择）"""
+    asset_id = asset_manager.generate_id(AssetType.MODEL)
+    logger.info(f"[API] 创建人物素材: {asset_id}")
+
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    asset, look_paths = await create_model_asset(
+        asset_id=asset_id,
+        description=description,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    asset_manager.save_model(asset)
+    return {
+        "status": "ok",
+        "asset": asset.model_dump(),
+        "look_options": look_paths,
+        "message": "请选择一个造型方案",
+    }
+
+
+@app.post("/api/assets/model/{asset_id}/select")
+async def select_model_look(asset_id: str, look_index: int = Form(...)):
+    """选择人物造型"""
+    model = asset_manager.get_model(asset_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
+
+    # look_index 对应 look_a.png, look_b.png, ...
+    look_path = os.path.join("assets", asset_id, f"look_{chr(97 + look_index)}.png")
+    asset_manager.update_model_look(asset_id, look_path)
+    return {"status": "ok", "selected_look": look_path}
+
+
+@app.post("/api/assets/scene")
+async def create_scene(
+    description: str = Form(..., description="场景描述"),
+    images: Optional[list[UploadFile]] = File(None, description="参考图"),
+):
+    """创建场景素材（返回多个方案供选择）"""
+    asset_id = asset_manager.generate_id(AssetType.SCENE)
+    logger.info(f"[API] 创建场景素材: {asset_id}")
+
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    asset, option_paths = await create_scene_asset(
+        asset_id=asset_id,
+        description=description,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    asset_manager.save_scene(asset)
+    return {
+        "status": "ok",
+        "asset": asset.model_dump(),
+        "scene_options": option_paths,
+        "message": "请选择一个场景方案",
+    }
+
+
+@app.post("/api/assets/scene/{asset_id}/select")
+async def select_scene_option(asset_id: str, scene_index: int = Form(...)):
+    """选择场景方案"""
+    scene = asset_manager.get_scene(asset_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail=f"场景素材 {asset_id} 不存在")
+
+    scene_path = os.path.join("assets", asset_id, f"scene_{chr(97 + scene_index)}.png")
+    asset_manager.update_scene_selection(asset_id, scene_path)
+    return {"status": "ok", "selected_scene": scene_path}
+
+
+@app.get("/api/assets")
+async def list_assets():
+    """列出所有素材"""
+    return {
+        "items": [a.model_dump() for a in asset_manager.list_items()],
+        "models": [a.model_dump() for a in asset_manager.list_models()],
+        "scenes": [a.model_dump() for a in asset_manager.list_scenes()],
+        "stats": asset_manager.get_stats(),
+    }
+
+
+@app.get("/api/assets/{asset_id}")
+async def get_asset(asset_id: str):
+    """获取单个素材详情"""
+    asset = asset_manager.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"素材 {asset_id} 不存在")
+    return {"status": "ok", "asset": asset.model_dump()}
+
+
+@app.delete("/api/assets/{asset_id}")
+async def delete_asset(asset_id: str):
+    """删除素材"""
+    if asset_id.startswith("item_"):
+        ok = asset_manager.delete_item(asset_id)
+    elif asset_id.startswith("model_"):
+        ok = asset_manager.delete_model(asset_id)
+    elif asset_id.startswith("scene_"):
+        ok = asset_manager.delete_scene(asset_id)
+    else:
+        raise HTTPException(status_code=400, detail="无效的素材 ID 格式")
+
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"素材 {asset_id} 不存在")
+    return {"status": "ok", "message": f"素材 {asset_id} 已删除"}
+
+
+# ========== 视频生成 API（旧版兼容） ==========
 
 @app.post("/api/generate", response_model=JobResponse)
 async def generate_video(
@@ -63,8 +231,8 @@ async def generate_video(
     product_images: list[UploadFile] = File(..., description="产品参考图"),
 ):
     """
-    创建视频生成任务
-    接收用户 6 项输入，启动 Agent 流水线
+    创建视频生成任务（旧版接口，直接传产品信息）
+    后续将切换到 /api/generate/v2（基于素材库）
     """
     job_id = str(uuid.uuid4())[:8]
     logger.info(f"[Job {job_id}] 收到生成请求: 产品={product_type}, 平台={platform}, 时长={duration}")
@@ -102,12 +270,72 @@ async def generate_video(
     job_manager.create_job(job_id, job_data)
 
     # 启动 DA Agent 流水线（后台异步执行，不阻塞响应）
-    import asyncio
     asyncio.create_task(run_pipeline(job_id, job_manager))
     logger.info(f"[Job {job_id}] DA 流水线已启动")
 
     return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，正在生成脚本...")
 
+
+# ========== 视频生成 API（v2：基于素材库） ==========
+
+@app.post("/api/generate/v2", response_model=JobResponse)
+async def generate_video_v2(
+    item_id: str = Form(..., description="物品素材 ID"),
+    model_id: str = Form(..., description="人物素材 ID"),
+    scene_id: str = Form(..., description="场景素材 ID"),
+    platform: Platform = Form(..., description="目标平台"),
+    duration: Duration = Form(..., description="视频时长"),
+    extra_requirements: str = Form("", description="额外要求"),
+):
+    """
+    创建视频生成任务（v2：基于素材库选择）
+    用户从素材库选择 1 物品 + 1 人物 + 1 场景，组合生成视频
+    """
+    # 验证素材存在
+    item = asset_manager.get_item(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"物品素材 {item_id} 不存在")
+
+    model = asset_manager.get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"人物素材 {model_id} 不存在")
+
+    scene = asset_manager.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail=f"场景素材 {scene_id} 不存在")
+
+    job_id = str(uuid.uuid4())[:8]
+    logger.info(
+        f"[Job {job_id}] v2 生成请求: "
+        f"物品={item.name}, 人物={model.name}, 场景={scene.name}"
+    )
+
+    segment_info = DURATION_SEGMENT_MAP[duration.value]
+    aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
+
+    # 创建任务（包含素材档案信息）
+    job_data = {
+        "job_id": job_id,
+        "mode": "v2_assets",
+        "item": item.model_dump(),
+        "model": model.model_dump(),
+        "scene": scene.model_dump(),
+        "platform": platform.value,
+        "duration": duration.value,
+        "extra_requirements": extra_requirements,
+        "segment_count": segment_info["segments"],
+        "frame_count": segment_info["frames"],
+        "aspect_ratio": aspect_ratio,
+    }
+    job_manager.create_job(job_id, job_data)
+
+    asyncio.create_task(run_pipeline(job_id, job_manager))
+    logger.info(f"[Job {job_id}] DA v2 流水线已启动")
+
+    return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，正在生成脚本...")
+
+
+# ========== 任务查询 API ==========
 
 @app.get("/api/status/{job_id}", response_model=ProgressResponse)
 async def get_status(job_id: str):
@@ -132,7 +360,6 @@ async def stream_progress(job_id: str):
             yield f"data: {data}\n\n"
             if progress.status in (JobStatus.COMPLETED, JobStatus.FAILED):
                 break
-            import asyncio
             await asyncio.sleep(2)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -156,7 +383,15 @@ async def download_video(job_id: str):
     )
 
 
-# 挂载前端静态文件
+# 挂载素材静态文件（供前端加载素材图片）
+if os.path.exists(ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+
+# 挂载产物静态文件（供前端加载视频等）
+if os.path.exists(ARTIFACTS_DIR):
+    app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
+
+# 挂载前端静态文件（放最后，避免拦截 API 路由）
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

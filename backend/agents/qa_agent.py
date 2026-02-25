@@ -1,15 +1,5 @@
 """
-QA Agent - 质控（Review Agent）
-负责：审核生成的视频片段质量
-检查画面瑕疵、场景一致性、与脚本的匹配度
+[已废弃] QA Agent - 质控
+v4 架构决策（D7）：QA 已完全移除，由 DA 的 self_check 自检替代。
+此文件仅保留作为历史参考，不再被任何模块引用。
 """
-
-import logging
-
-logger = logging.getLogger(__name__)
-
-# TODO: D12 实现
-# - 提取视频关键帧
-# - 用 Gemini 多模态理解分析画面质量
-# - 比对生成结果与预期分镜图
-# - 输出通过/不通过 + 问题描述

@@ -1,123 +1,118 @@
 # VlogForge 开发进度
 
+> 最后更新：2026-02-25（后端 + 前端全量完成）
+
 ## 项目概述
 
 参加 **Gemini Live Agent Challenge**（Creative Storyteller 赛道），做一个 **AI Vlog 带货视频生成器**。
-用户输入产品信息，Agent 系统自动生成真人 vlog 风格的短视频广告。
+用户定制物品、人物、场景三大素材，AI 自动组合生成真人 vlog 风格的带货短视频。
 
-## 核心工作流
+## 核心架构（4 Agent）
+
+| 角色 | 代号 | 阶段 | 核心 API | 状态 |
+|------|------|------|----------|------|
+| 素材设计师 | ADA | 素材创建 | Gemini 文本 + Nano Banana | **已完成** |
+| 创意总监 | DA | 视频生成 | Gemini 文本 (self_check) | **已完成** |
+| 美术指导 | VA | 视频生成 | Nano Banana (链式 img2img) | **已完成** |
+| 剪辑师 | VGA | 视频生成 | Veo 3.1 (首尾帧) | **已完成** |
+
+## 两大工作流
+
+### 素材创建
 
 ```
-用户输入 6 项信息 → DA 编排 → TA 写脚本 → VA 出分镜图(Nano Banana) → VGA 生成视频(Veo 3.1 首尾帧) → QA 审核 → FFmpeg 拼接 → 输出最终视频
+用户添加物品/人物/场景 → ADA（通过 asset_type 切换模式）→ 素材档案存入素材库
 ```
 
-关键技术点：
-- 分镜图形成链条：Frame A→B = 视频1，Frame B→C = 视频2（相邻视频共享一帧）
-- 拼接时裁掉重复帧保证流畅
-- 部分分镜需要植入用户的产品参考图
+### 视频生成
 
-## 当前完成状态（D1 已完成）
-
-- [x] 项目目录结构
-- [x] requirements.txt / .env.example / .gitignore / Dockerfile
-- [x] FastAPI 基础框架（main.py + config.py + models.py）
-- [x] 任务管理器（job_manager.py）
-- [x] 存储工具（storage.py）
-- [x] 所有 Agent 和 tools 的占位文件
-- [ ] 依赖安装（需在 Mac 上执行）
-- [ ] GenAI SDK 联通验证
-
-## 接下来要做的事
-
-### 立即执行：环境搭建（Mac）
-
-```bash
-cd /你的项目路径/Gemini_Live_Agent_Challenge
-
-# 1. 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate
-
-# 2. 安装依赖
-pip install -r requirements.txt
-
-# 3. 安装 FFmpeg
-brew install ffmpeg
-
-# 4. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 GEMINI_API_KEY
-
-# 5. 验证 FastAPI 能跑起来
-python -m uvicorn backend.main:app --reload
-# 访问 http://localhost:8000/health 应返回 {"status":"ok","service":"VlogForge"}
-
-# 6. 验证 GenAI SDK
-python -c "from google import genai; print('GenAI SDK OK')"
+```
+用户选择素材 + 参数 → DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧视频) → FFmpeg(拼接) → 最终视频
 ```
 
-### D2：实现 TA Agent（脚本策划）
+## 已完成
 
-**目标**：输入产品信息 → 输出完整的 vlog 脚本（JSON 格式）
+### 基础架构 (D1-D7)
 
-需要完成的文件：
-1. `backend/prompts/ta_system.py` — TA 的系统提示词，要求：
-   - 根据产品类型、使用方式、卖点生成 vlog 脚本
-   - 输出 N 个分段，每段包含：旁白、动作描述、首帧提示词、尾帧提示词、Veo 描述词
-   - 首帧N+1 必须和尾帧N 一致（链式衔接）
-   - 标记哪些帧需要植入产品
-   - 输出风格指南（人物外貌、场景、光线统一描述）
-   - 输出为 JSON 格式，匹配 ScriptOutput 模型
+- [x] D1：项目骨架（目录结构、FastAPI、config、models、job_manager、storage）
+- [x] D2：脚本生成能力（原 TA，现已合入 DA）
+- [x] D3：DA Agent 骨架（asyncio 后台流水线 + job 进度管理）
+- [x] D4：基础前端
+- [x] D5-D7：架构精简（ADA 合并、TA→DA、QA 移除、VA 链式图生图方案确定）
 
-2. `backend/agents/ta_agent.py` — TA Agent 实现：
-   - 调用 Gemini API 生成文本
-   - 解析 JSON 为 ScriptOutput
-   - 错误处理（JSON 解析失败时重试）
+### 配置 + 数据模型
 
-### D3：实现 DA Agent 骨架
+- [x] `backend/config.py` — 模型名称（TEXT_MODEL / IMAGE_GEN_MODEL / VIDEO_GEN_MODEL）、存储路径、参数映射、self_check 阈值
+- [x] `backend/models.py` — 移除 QA_REVIEWING；新增 AssetType / ItemAsset / ModelAsset / SceneAsset / SelfCheck / VideoGenerateRequest
 
-**目标**：接收用户输入 → 调度 TA → 返回脚本
+### 工具层
 
-需要完成的文件：
-1. `backend/prompts/da_system.py` — DA 的系统提示词
-2. `backend/agents/da_agent.py` — DA 编排逻辑：
-   - 接收 job_data
-   - 调用 TA 生成脚本
-   - 更新 job 状态和进度
-   - 后续阶段再加 VA、VGA、QA 调度
+- [x] `backend/tools/image_gen.py` — Nano Banana 封装（text_to_image / image_to_image / interleaved_output / save_image）
+- [x] `backend/tools/video_gen.py` — Veo 3.1 封装（generate_video_segment 首尾帧 / generate_video_from_first_frame）
+- [x] `backend/tools/ffmpeg_tools.py` — FFmpeg 封装（stitch_segments / trim_overlaps / get_video_duration）
 
-3. `backend/main.py` — 在 /api/generate 端点中启动 DA 流水线（异步）
+### 提示词
 
-### D4：基础前端
+- [x] `backend/prompts/da_prompts.py` — DA 脚本生成 prompt（含 self_check、素材档案模式 + 旧版兼容模式）
+- [x] `backend/prompts/ada_prompts.py` — ADA 三套 prompt（物品/人物/场景模式，含系统提示 + 图片生成提示 + JSON Schema）
 
-**目标**：用户可以通过网页提交输入并看到生成的脚本
+### Agent 层
 
-需要完成的文件：
-1. `frontend/index.html` — 输入表单（6 项）+ 输出展示区
-2. `frontend/styles.css` — 样式
-3. `frontend/app.js` — 前端逻辑（提交表单、轮询进度、展示脚本）
+- [x] `backend/agents/ada_agent.py` — 素材设计师（create_item_asset / create_model_asset / create_scene_asset）
+- [x] `backend/agents/da_agent.py` — 创意总监（吸收 TA、self_check 校验、v2 素材模式、编排 VA/VGA/FFmpeg）
+- [x] `backend/agents/va_agent.py` — 美术指导（链式 img2img，generate_storyboard）
+- [x] `backend/agents/vga_agent.py` — 剪辑师（并行 Veo 视频生成，generate_segments）
 
-## 排期总览（18 天 + 2 天容错）
+### 服务层
 
-| 阶段 | 天数 | 内容 | 验收点 |
-|------|------|------|--------|
-| 一 | D1-D4 | 基础 + TA + DA + 前端 | 任意产品 → 完整脚本 |
-| 二 | D5-D8 | VA 图片生成 + 产品植入 | 视觉连贯的分镜图组 |
-| 三 | D9-D13 | VGA 视频 + FFmpeg + QA | 输入 → 完整视频 |
-| 四 | D14-D18 | 部署 + 打磨 + 演示视频 | 提交参赛 |
-| 容错 | D19-D20 | 修 bug、补细节 | — |
+- [x] `backend/services/asset_manager.py` — 素材库 CRUD（内存存储、自增 ID、选型管理）
+- [x] `backend/services/job_manager.py` — 任务管理（创建于 D1）
+
+### API 端点
+
+- [x] `backend/main.py` — 13 个 API 端点：
+  - 健康检查：`GET /health`
+  - 素材 CRUD：`POST /api/assets/item|model|scene`、`POST .../select`、`GET /api/assets`、`GET /api/assets/{id}`、`DELETE /api/assets/{id}`
+  - 视频生成：`POST /api/generate`（旧版）、`POST /api/generate/v2`（素材模式）
+  - 进度查询：`GET /api/status/{id}`、`GET /api/stream/{id}`（SSE）、`GET /api/download/{id}`
+  - 静态文件：`/assets/` + `/artifacts/` + `/`（前端）
+
+### 前端
+
+- [x] `frontend/index.html` — v4 SPA 结构（导航 + 素材库 + 生成视频 + 进度 + 结果 5 个视图）
+- [x] `frontend/styles.css` — 暗色 glassmorphic 主题（紫-青渐变、卡片、模态框、标签页、选择器）
+- [x] `frontend/app.js` — 完整交互逻辑（素材 CRUD + 方案选择 + v2 生成 + SSE 进度 + Toast 通知）
+
+### 废弃代码
+
+- [x] `backend/agents/ta_agent.py` — 标记废弃（已合入 DA）
+- [x] `backend/agents/qa_agent.py` — 标记废弃（已移除）
+- [x] `backend/prompts/ta_system.py` — 标记废弃（迁移至 da_prompts.py）
+
+## 待开发
+
+### 阶段五：部署 + 打磨
+
+- [ ] Google Cloud Run 部署配置（Dockerfile + cloudbuild.yaml）
+- [ ] GCS 文件存储接入（替代本地 assets/artifacts 目录）
+- [ ] 真实 API Key 联调测试
+- [ ] 演示视频录制
+- [ ] 提交参赛
 
 ## 技术选型
 
 - Agent 框架：Google ADK (Python)
 - 文本生成：Gemini 2.5 Flash
-- 图片生成：Gemini 原生图片生成（Nano Banana）
-- 视频生成：Veo 3.1 API（首尾帧）
+- 图片生成：Gemini 原生图片生成（Nano Banana, `gemini-2.0-flash-exp`）
+- 视频生成：Veo 3.1 API（首尾帧, `veo-3.1-generate-001`）
 - 视频拼接：FFmpeg
 - 后端：FastAPI
-- 前端：HTML/CSS/JS
+- 前端：HTML/CSS/JS（原生 SPA）
 - 部署：Google Cloud Run + Cloud Storage
 
-## 完整方案
+## 参考文档
 
-详见 `Structure.md`（架构）和 `流程.md`（用户工作流）
+- `PRD.md` — 产品需求（用户流程 + 素材库 + 数据结构）
+- `Team_Structure.md` — Agent 架构（角色 + 协作流程 + 代码映射）
+- `decisions.md` — 技术决策记录（D2-D7）
+- `Rule.md` — 比赛规则
