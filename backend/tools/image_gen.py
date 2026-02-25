@@ -11,19 +11,16 @@ import os
 import logging
 from typing import Optional
 
-from google import genai
 from google.genai import types
 
-from backend.config import GEMINI_API_KEY, IMAGE_GEN_MODEL
+from backend.config import get_genai_client, IMAGE_GEN_MODEL
 
 logger = logging.getLogger(__name__)
 
 
-def _get_client() -> genai.Client:
-    """获取 Gemini 客户端"""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY 未配置，请在 .env 中设置")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def _get_client():
+    """获取 Gemini 客户端（图片生成用 global）"""
+    return get_genai_client(location="global")
 
 
 def _extract_image_from_response(response) -> bytes:

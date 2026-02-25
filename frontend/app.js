@@ -1,7 +1,8 @@
 /**
- * VlogForge 前端交互逻辑 (v4.1)
- * 主页：三列素材库 + 快速生成区
- * 生成视频页：从素材库选择组合（模式 A）
+ * VlogForge 前端交互逻辑 (v5)
+ * 统一主页：素材库三列 + 生成区拖拽槽位
+ * 智能问卷：物品创建走 analyze → 问卷确认 → confirm
+ * 素材详情：点击卡片展开详情面板
  */
 
 // ========== 工具 ==========
@@ -36,35 +37,21 @@ function showToast(message, type = "info") {
 
 // ========== 状态 ==========
 let assets = { items: [], models: [], scenes: [] };
-let selectedAssets = { item: null, model: null, scene: null };
 let currentJobId = null;
 let eventSource = null;
 let currentScript = null;
 
-// 快速生成区的上传文件
-let quickFiles = { item: [], model: [], scene: [] };
+// 生成区槽位绑定的素材
+let slotAssets = { item: null, model: null, scene: null };
 
 // ========== 导航 ==========
-const navLinks = $$(".nav-link");
 
 function showView(viewId) {
   $$(".view").forEach((v) => v.classList.remove("active"));
-  navLinks.forEach((l) => l.classList.remove("active"));
   const view = $(`#view-${viewId}`);
   if (view) view.classList.add("active");
-  const link = $(`.nav-link[data-view="${viewId}"]`);
-  if (link) link.classList.add("active");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-
-navLinks.forEach((link) => {
-  link.addEventListener("click", () => {
-    const viewId = link.dataset.view;
-    showView(viewId);
-    if (viewId === "home") refreshAssets();
-    if (viewId === "generate") { refreshAssets().then(() => refreshGenerateView()); }
-  });
-});
 
 $("#nav-logo").addEventListener("click", () => { showView("home"); refreshAssets(); });
 
@@ -106,16 +93,32 @@ function renderColumnList(type, list, containerSel) {
   });
 }
 
+function getAssetThumbUrl(asset) {
+  const imgPath = asset.instruction_image || asset.selected_look || asset.selected_scene;
+  if (!imgPath) return null;
+  const filename = imgPath.split("/").pop();
+  return `/assets/${asset.id}/${filename}`;
+}
+
 function createMiniCard(type, asset) {
   const card = document.createElement("div");
   card.className = "asset-mini-card";
+  card.draggable = true;
+
+  // 拖拽数据
+  const slotType = type === "items" ? "item" : type === "models" ? "model" : "scene";
+  card.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData("application/vlogforge-asset", JSON.stringify({ type: slotType, id: asset.id }));
+    e.dataTransfer.effectAllowed = "copy";
+    card.classList.add("dragging");
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
 
   // 缩略图
-  const imgPath = asset.instruction_image_path || asset.selected_look || asset.selected_scene;
+  const thumbUrl = getAssetThumbUrl(asset);
   let thumbHtml = "";
-  if (imgPath) {
-    const filename = imgPath.split("/").pop();
-    thumbHtml = `<img class="asset-mini-thumb" src="/assets/${asset.id}/${filename}" alt="${escapeHtml(asset.name)}" onerror="this.style.display='none'">`;
+  if (thumbUrl) {
+    thumbHtml = `<img class="asset-mini-thumb" src="${thumbUrl}" alt="${escapeHtml(asset.name)}" onerror="this.style.display='none'">`;
   } else {
     const icons = { items: "&#128230;", models: "&#128100;", scenes: "&#127968;" };
     thumbHtml = `<div class="asset-mini-thumb-placeholder">${icons[type]}</div>`;
@@ -129,7 +132,12 @@ function createMiniCard(type, asset) {
 
   // 状态标签
   let badge = "";
-  if (type === "models") {
+  if (type === "items") {
+    const qs = asset.questionnaire_status || "completed";
+    badge = qs === "completed"
+      ? `<span class="asset-mini-badge success">已完成</span>`
+      : `<span class="asset-mini-badge warning">待确认</span>`;
+  } else if (type === "models") {
     badge = asset.selected_look
       ? `<span class="asset-mini-badge success">已选造型</span>`
       : `<span class="asset-mini-badge warning">待选造型</span>`;
@@ -149,10 +157,18 @@ function createMiniCard(type, asset) {
     </div>
     <div class="asset-mini-actions">
       ${badge}
+      <button class="btn-sm btn-detail" data-detail="${asset.id}">详情</button>
       <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
     </div>
   `;
 
+  // 点击详情
+  card.querySelector("[data-detail]").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openDetailModal(type, asset);
+  });
+
+  // 点击删除
   card.querySelector("[data-delete]").addEventListener("click", async (e) => {
     e.stopPropagation();
     if (!confirm(`确定删除 ${asset.name}？`)) return;
@@ -160,6 +176,8 @@ function createMiniCard(type, asset) {
       const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("删除失败");
       showToast(`${asset.name} 已删除`, "success");
+      // 如果槽位绑定了这个素材，清空
+      if (slotAssets[slotType] && slotAssets[slotType].id === asset.id) clearSlot(slotType);
       refreshAssets();
     } catch (err) {
       showToast(`删除失败: ${err.message}`, "error");
@@ -168,6 +186,80 @@ function createMiniCard(type, asset) {
 
   return card;
 }
+
+// ========== 素材详情模态框 ==========
+
+function openDetailModal(type, asset) {
+  const modal = $("#detail-modal");
+  const title = $("#detail-modal-title");
+  const body = $("#detail-modal-body");
+
+  const labels = { items: "物品", models: "人物", scenes: "场景" };
+  title.textContent = `${labels[type]}详情 - ${asset.name}`;
+
+  let content = "";
+
+  if (type === "items") {
+    const thumbUrl = getAssetThumbUrl(asset);
+    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
+
+    // 卖点
+    const sp = asset.selling_points || {};
+    let spHtml = "";
+    if (sp.P0 && sp.P0.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p0">P0 核心</span>${sp.P0.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+    if (sp.P1 && sp.P1.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p1">P1 辅助</span>${sp.P1.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+    if (sp.P2 && sp.P2.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p2">P2 补充</span>${sp.P2.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+
+    // product_info
+    let infoHtml = "";
+    const pi = asset.product_info || {};
+    for (const [k, v] of Object.entries(pi)) {
+      if (v) infoHtml += `<div class="detail-field"><span class="detail-field-label">${escapeHtml(k)}</span><span class="detail-field-value">${escapeHtml(v)}</span></div>`;
+    }
+
+    content = `
+      ${imgHtml}
+      <div class="detail-section">
+        <div class="detail-field"><span class="detail-field-label">类别</span><span class="detail-field-value">${escapeHtml(asset.category)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">核心卖点</span><span class="detail-field-value">${escapeHtml(asset.selling_point)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">使用方式</span><span class="detail-field-value">${escapeHtml(asset.usage)}</span></div>
+      </div>
+      ${spHtml ? `<div class="detail-section"><h4>卖点优先级</h4>${spHtml}</div>` : ""}
+      ${infoHtml ? `<div class="detail-section"><h4>产品信息</h4>${infoHtml}</div>` : ""}
+      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
+    `;
+  } else if (type === "models") {
+    const thumbUrl = getAssetThumbUrl(asset);
+    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
+    content = `
+      ${imgHtml}
+      <div class="detail-section">
+        <div class="detail-field"><span class="detail-field-label">外貌</span><span class="detail-field-value">${escapeHtml(asset.appearance)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">气质</span><span class="detail-field-value">${escapeHtml(asset.personality)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">穿搭</span><span class="detail-field-value">${escapeHtml(asset.outfits)}</span></div>
+      </div>
+      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
+    `;
+  } else {
+    const thumbUrl = getAssetThumbUrl(asset);
+    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
+    content = `
+      ${imgHtml}
+      <div class="detail-section">
+        <div class="detail-field"><span class="detail-field-label">环境</span><span class="detail-field-value">${escapeHtml(asset.environment)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">光线</span><span class="detail-field-value">${escapeHtml(asset.lighting)}</span></div>
+        <div class="detail-field"><span class="detail-field-label">氛围</span><span class="detail-field-value">${escapeHtml(asset.mood)}</span></div>
+      </div>
+      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
+    `;
+  }
+
+  body.innerHTML = content;
+  modal.style.display = "flex";
+}
+
+$("#detail-modal-close").addEventListener("click", () => { $("#detail-modal").style.display = "none"; });
+$("#detail-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) $("#detail-modal").style.display = "none"; });
 
 // ========== 添加按钮 ==========
 $$(".btn-add").forEach((btn) => {
@@ -247,46 +339,189 @@ function openCreateModal(type) {
     submitBtn.textContent = "创建中...";
 
     const desc = $("#create-desc").value.trim();
-    const apiType = type === "items" ? "item" : type === "models" ? "model" : "scene";
 
-    const formData = new FormData();
-    formData.append("description", desc);
-    createFiles.forEach((f) => formData.append("images", f));
+    if (type === "items") {
+      // 物品走智能问卷流程
+      await handleItemCreate(desc, createFiles, submitBtn, labels[type]);
+    } else {
+      // 人物/场景走原有流程
+      const apiType = type === "models" ? "model" : "scene";
+      const formData = new FormData();
+      formData.append("description", desc);
+      createFiles.forEach((f) => formData.append("images", f));
 
-    try {
-      const res = await fetch(`/api/assets/${apiType}`, { method: "POST", body: formData });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "创建失败"); }
-      const data = await res.json();
-
-      if (data.status === "rejected") {
-        showToast(`创建失败: ${data.reason}`, "error");
+      try {
+        const res = await fetch(`/api/assets/${apiType}`, { method: "POST", body: formData });
+        if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "创建失败"); }
+        const data = await res.json();
+        showToast(`${data.asset.name} 创建成功`, "success");
         closeCreateModal();
-        return;
+
+        if (type === "models" && data.look_options) {
+          openSelectModal("model", data.asset, data.look_options);
+        } else if (type === "scenes" && data.scene_options) {
+          openSelectModal("scene", data.asset, data.scene_options);
+        }
+        refreshAssets();
+      } catch (err) {
+        showToast(`创建失败: ${err.message}`, "error");
+        submitBtn.disabled = false;
+        submitBtn.textContent = `创建${labels[type]}`;
       }
-
-      showToast(`${data.asset.name} 创建成功`, "success");
-      closeCreateModal();
-
-      if (type === "models" && data.look_options) {
-        openSelectModal("model", data.asset, data.look_options);
-      } else if (type === "scenes" && data.scene_options) {
-        openSelectModal("scene", data.asset, data.scene_options);
-      }
-
-      refreshAssets();
-    } catch (err) {
-      showToast(`创建失败: ${err.message}`, "error");
-      submitBtn.disabled = false;
-      submitBtn.textContent = `创建${labels[type]}`;
     }
   });
 
   modal.style.display = "flex";
 }
 
+// 物品创建 → 走智能问卷
+async function handleItemCreate(desc, files, submitBtn, label) {
+  const formData = new FormData();
+  formData.append("description", desc);
+  files.forEach((f) => formData.append("images", f));
+
+  try {
+    // 第 1 步：analyze
+    const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "分析失败"); }
+    const data = await res.json();
+
+    if (data.status === "rejected") {
+      showToast(`物品被拒绝: ${data.reason}`, "error");
+      closeCreateModal();
+      return;
+    }
+
+    showToast(`${data.asset.name} 分析完成，请确认产品信息`, "success");
+    closeCreateModal();
+
+    // 打开问卷确认
+    openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
+    refreshAssets();
+  } catch (err) {
+    showToast(`分析失败: ${err.message}`, "error");
+    submitBtn.disabled = false;
+    submitBtn.textContent = `创建${label}`;
+  }
+}
+
 function closeCreateModal() { $("#create-modal").style.display = "none"; }
 $("#modal-close").addEventListener("click", closeCreateModal);
 $("#create-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
+
+// ========== 智能问卷模态框 ==========
+
+function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
+  const modal = $("#questionnaire-modal");
+  const title = $("#questionnaire-title");
+  const body = $("#questionnaire-body");
+
+  title.textContent = `产品信息确认 - ${asset.name}`;
+
+  // 卖点展示
+  let spHtml = "";
+  if (sellingPoints) {
+    const sp = sellingPoints;
+    if (sp.P0 && sp.P0.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p0">P0 核心</span>${sp.P0.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+    if (sp.P1 && sp.P1.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p1">P1 辅助</span>${sp.P1.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+    if (sp.P2 && sp.P2.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p2">P2 补充</span>${sp.P2.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+  }
+
+  // 问卷字段
+  let fieldsHtml = "";
+  (questionnaire || []).forEach((f, i) => {
+    const priorityClass = `priority-${f.priority.toLowerCase()}`;
+    const requiredMark = f.required ? '<span class="required">*</span>' : '<span class="optional">可选</span>';
+    const sourceLabel = f.source === "ai" ? '<span class="ai-badge">AI 预填</span>' : '<span class="user-badge">待填写</span>';
+
+    fieldsHtml += `
+      <div class="q-field ${priorityClass}">
+        <div class="q-field-header">
+          <label>${escapeHtml(f.label)} ${requiredMark}</label>
+          <div class="q-field-tags">
+            <span class="q-priority">${f.priority}</span>
+            ${sourceLabel}
+          </div>
+        </div>
+        <input type="text" class="q-input" data-key="${f.key}" data-priority="${f.priority}"
+          data-required="${f.required}" value="${escapeHtml(f.value)}"
+          placeholder="${f.source === 'user' ? '请填写...' : ''}">
+      </div>
+    `;
+  });
+
+  body.innerHTML = `
+    ${spHtml ? `<div class="q-section"><h4>ADA 识别的卖点</h4>${spHtml}</div>` : ""}
+    <div class="q-section">
+      <h4>请确认或修改以下信息</h4>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">AI 预填的内容可直接确认，空白项请补充填写</p>
+      ${fieldsHtml}
+    </div>
+    <button class="btn-submit" id="q-confirm-btn">确认并创建素材</button>
+  `;
+
+  // 确认按钮
+  body.querySelector("#q-confirm-btn").addEventListener("click", async () => {
+    const btn = body.querySelector("#q-confirm-btn");
+
+    // 验证必填项
+    const inputs = body.querySelectorAll(".q-input");
+    const confirmed = [];
+    let hasError = false;
+
+    inputs.forEach((input) => {
+      const isRequired = input.dataset.required === "true";
+      const value = input.value.trim();
+      if (isRequired && !value) {
+        input.classList.add("error");
+        hasError = true;
+      } else {
+        input.classList.remove("error");
+      }
+      confirmed.push({
+        key: input.dataset.key,
+        label: input.previousElementSibling ? "" : "",
+        value: value,
+        priority: input.dataset.priority,
+      });
+    });
+
+    // 从 DOM 获取 label
+    confirmed.forEach((f, idx) => {
+      const labelEl = inputs[idx].closest(".q-field").querySelector("label");
+      f.label = labelEl ? labelEl.textContent.replace(/[*可选]/g, "").trim() : f.key;
+    });
+
+    if (hasError) {
+      showToast("请填写所有必填项", "error");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "确认中...";
+
+    try {
+      const formData = new FormData();
+      formData.append("confirmed_fields", JSON.stringify(confirmed));
+
+      const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
+
+      showToast("产品档案创建完成", "success");
+      $("#questionnaire-modal").style.display = "none";
+      refreshAssets();
+    } catch (err) {
+      showToast(`确认失败: ${err.message}`, "error");
+      btn.disabled = false;
+      btn.textContent = "确认并创建素材";
+    }
+  });
+
+  modal.style.display = "flex";
+}
+
+$("#questionnaire-close").addEventListener("click", () => { $("#questionnaire-modal").style.display = "none"; });
+$("#questionnaire-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) $("#questionnaire-modal").style.display = "none"; });
 
 // ========== 选择方案模态框 ==========
 
@@ -358,155 +593,216 @@ function closeSelectModal() { $("#select-modal").style.display = "none"; }
 $("#select-modal-close").addEventListener("click", closeSelectModal);
 $("#select-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeSelectModal(); });
 
-// ========== 快速生成区：上传逻辑 ==========
+// ========== 拖拽槽位 ==========
 
-function setupQuickUpload(type, maxFiles) {
-  const zone = $(`#upload-${type}-zone`);
-  const input = $(`#upload-${type}-input`);
+function setupSlot(slotType) {
+  const slotBody = $(`#slot-${slotType}-body`);
+  const clearBtn = $(`#slot-${slotType}-clear`);
+  const fileInput = slotBody.querySelector(".slot-file-input");
 
-  zone.addEventListener("click", (e) => {
-    if (e.target.closest(".remove-img")) return;
-    input.click();
+  // 点击上传
+  slotBody.addEventListener("click", () => {
+    if (slotAssets[slotType]) return; // 已绑定素材则不触发上传
+    fileInput.click();
   });
 
-  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag-over"); });
-  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
-  zone.addEventListener("drop", (e) => {
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length === 0) return;
+    // 临时上传 → 创建素材
+    handleSlotUpload(slotType, Array.from(fileInput.files));
+    fileInput.value = "";
+  });
+
+  // 拖拽接收
+  slotBody.addEventListener("dragover", (e) => {
     e.preventDefault();
-    zone.classList.remove("drag-over");
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-    addQuickFiles(type, files, maxFiles);
+    e.dataTransfer.dropEffect = "copy";
+    slotBody.classList.add("drag-over");
+  });
+  slotBody.addEventListener("dragleave", () => slotBody.classList.remove("drag-over"));
+  slotBody.addEventListener("drop", (e) => {
+    e.preventDefault();
+    slotBody.classList.remove("drag-over");
+
+    const raw = e.dataTransfer.getData("application/vlogforge-asset");
+    if (!raw) return;
+
+    try {
+      const { type, id } = JSON.parse(raw);
+      if (type !== slotType) {
+        showToast(`类型不匹配：需要${slotType === "item" ? "物品" : slotType === "model" ? "人物" : "场景"}素材`, "warning");
+        return;
+      }
+
+      // 查找素材
+      const listKey = type === "item" ? "items" : type === "model" ? "models" : "scenes";
+      const asset = assets[listKey].find((a) => a.id === id);
+      if (!asset) { showToast("素材不存在", "error"); return; }
+
+      // 验证状态
+      if (type === "model" && !asset.selected_look) { showToast("请先选择造型", "warning"); return; }
+      if (type === "scene" && !asset.selected_scene) { showToast("请先选择方案", "warning"); return; }
+      if (type === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast("请先完成产品信息确认", "warning"); return; }
+
+      bindSlot(slotType, asset);
+    } catch (err) {
+      console.error("[Drop] 解析失败:", err);
+    }
   });
 
-  input.addEventListener("change", () => {
-    addQuickFiles(type, Array.from(input.files), maxFiles);
-    input.value = "";
+  // 清空
+  clearBtn.addEventListener("click", () => clearSlot(slotType));
+}
+
+function bindSlot(slotType, asset) {
+  slotAssets[slotType] = asset;
+  const slotBody = $(`#slot-${slotType}-body`);
+  const clearBtn = $(`#slot-${slotType}-clear`);
+
+  const thumbUrl = getAssetThumbUrl(asset);
+  slotBody.classList.remove("slot-empty");
+  slotBody.innerHTML = `
+    ${thumbUrl ? `<img src="${thumbUrl}" class="slot-thumb" onerror="this.style.display='none'">` : ""}
+    <div class="slot-asset-name">${escapeHtml(asset.name)}</div>
+  `;
+  clearBtn.style.display = "block";
+  updateGenButton();
+}
+
+function clearSlot(slotType) {
+  slotAssets[slotType] = null;
+  const slotBody = $(`#slot-${slotType}-body`);
+  const clearBtn = $(`#slot-${slotType}-clear`);
+  const icons = { item: "&#128230;", model: "&#128100;", scene: "&#127968;" };
+
+  slotBody.classList.add("slot-empty");
+  slotBody.innerHTML = `
+    <span class="slot-icon">${icons[slotType]}</span>
+    <span class="slot-hint">拖入素材 或 点击上传</span>
+    <input type="file" class="slot-file-input" accept="image/*" ${slotType === "item" ? "multiple" : ""} hidden>
+  `;
+  clearBtn.style.display = "none";
+
+  // 重新绑定 file input
+  const fileInput = slotBody.querySelector(".slot-file-input");
+  slotBody.addEventListener("click", () => { if (!slotAssets[slotType]) fileInput.click(); });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length === 0) return;
+    handleSlotUpload(slotType, Array.from(fileInput.files));
+    fileInput.value = "";
   });
+
+  updateGenButton();
 }
 
-function addQuickFiles(type, files, maxFiles) {
-  const remaining = maxFiles - quickFiles[type].length;
-  quickFiles[type].push(...files.slice(0, remaining));
-  renderQuickPreview(type);
-  updateQuickGenButton();
-}
+async function handleSlotUpload(slotType, files) {
+  const apiType = slotType;
+  showToast(`正在创建${slotType === "item" ? "物品" : slotType === "model" ? "人物" : "场景"}...`, "info");
 
-function renderQuickPreview(type) {
-  const placeholder = $(`#upload-${type}-placeholder`);
-  const preview = $(`#upload-${type}-preview`);
+  const formData = new FormData();
+  formData.append("description", "请根据图片分析");
+  files.forEach((f) => formData.append("images", f));
 
-  if (quickFiles[type].length === 0) {
-    placeholder.style.display = "flex";
-    preview.innerHTML = "";
-    return;
+  try {
+    if (slotType === "item") {
+      // 走问卷流程
+      const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("分析失败");
+      const data = await res.json();
+      if (data.status === "rejected") { showToast(data.reason, "error"); return; }
+      showToast(`${data.asset.name} 分析完成`, "success");
+      openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
+      refreshAssets();
+    } else {
+      const res = await fetch(`/api/assets/${apiType}`, { method: "POST", body: formData });
+      if (!res.ok) throw new Error("创建失败");
+      const data = await res.json();
+
+      // 自动选择第一个方案
+      if (slotType === "model" && data.look_options && data.look_options.length > 0) {
+        const sf = new FormData(); sf.append("look_index", 0);
+        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
+        data.asset.selected_look = data.look_options[0];
+      }
+      if (slotType === "scene" && data.scene_options && data.scene_options.length > 0) {
+        const sf = new FormData(); sf.append("scene_index", 0);
+        await fetch(`/api/assets/scene/${data.asset.id}/select`, { method: "POST", body: sf });
+        data.asset.selected_scene = data.scene_options[0];
+      }
+
+      bindSlot(slotType, data.asset);
+      showToast(`${data.asset.name} 已创建`, "success");
+      refreshAssets();
+    }
+  } catch (err) {
+    showToast(`创建失败: ${err.message}`, "error");
   }
-
-  placeholder.style.display = "none";
-  preview.innerHTML = "";
-  quickFiles[type].forEach((file, i) => {
-    const w = document.createElement("div"); w.className = "img-wrapper";
-    const img = document.createElement("img"); img.src = URL.createObjectURL(file);
-    const btn = document.createElement("button"); btn.className = "remove-img"; btn.textContent = "\u00D7";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      quickFiles[type].splice(i, 1);
-      renderQuickPreview(type);
-      updateQuickGenButton();
-    });
-    w.appendChild(img); w.appendChild(btn); preview.appendChild(w);
-  });
 }
 
-function updateQuickGenButton() {
-  const btn = $("#btn-quick-gen");
-  // 物品图片必传
-  btn.disabled = quickFiles.item.length === 0;
+// 初始化三个槽位
+setupSlot("item");
+setupSlot("model");
+setupSlot("scene");
+
+// ========== 生成按钮 ==========
+
+function updateGenButton() {
+  // 物品必填
+  $("#btn-generate").disabled = !slotAssets.item;
 }
 
-// 初始化三个上传区
-setupQuickUpload("item", 3);
-setupQuickUpload("model", 1);
-setupQuickUpload("scene", 1);
+$("#btn-generate").addEventListener("click", async () => {
+  if (!slotAssets.item) return;
 
-// ========== 快速生成：提交 ==========
-
-$("#btn-quick-gen").addEventListener("click", async () => {
-  if (quickFiles.item.length === 0) {
-    showToast("请上传至少一张物品图片", "error");
-    return;
-  }
-
-  const btn = $("#btn-quick-gen");
+  const btn = $("#btn-generate");
   btn.disabled = true;
   btn.classList.add("loading");
 
-  const prompt = $("#quick-prompt").value.trim();
-  const platform = $("#quick-platform").value;
-  const duration = $("#quick-duration").value;
+  const platform = $("#gen-platform").value;
+  const duration = $("#gen-duration").value;
+  const extra = $("#gen-prompt").value.trim();
 
   try {
-    // 步骤 1：创建物品素材
-    showToast("正在分析物品...", "info");
-    const itemFormData = new FormData();
-    itemFormData.append("description", prompt || "请根据图片分析产品");
-    quickFiles.item.forEach((f) => itemFormData.append("images", f));
-
-    const itemRes = await fetch("/api/assets/item", { method: "POST", body: itemFormData });
-    if (!itemRes.ok) throw new Error("物品创建失败");
-    const itemData = await itemRes.json();
-
-    if (itemData.status === "rejected") {
-      showToast(`物品被拒绝: ${itemData.reason}`, "error");
-      btn.disabled = false;
-      btn.classList.remove("loading");
-      return;
+    // 如果人物/场景槽位为空，先自动创建
+    if (!slotAssets.model) {
+      showToast("正在自动创建人物...", "info");
+      const fd = new FormData();
+      fd.append("description", extra || "适合vlog带货的亲和女生");
+      const res = await fetch("/api/assets/model", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.look_options && data.look_options.length > 0) {
+        const sf = new FormData(); sf.append("look_index", 0);
+        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
+      }
+      slotAssets.model = data.asset;
+      slotAssets.model.selected_look = data.look_options?.[0] || null;
     }
 
-    // 步骤 2：创建人物素材
-    showToast("正在创建人物...", "info");
-    const modelFormData = new FormData();
-    modelFormData.append("description", prompt || "适合vlog带货的亲和女生");
-    quickFiles.model.forEach((f) => modelFormData.append("images", f));
-
-    const modelRes = await fetch("/api/assets/model", { method: "POST", body: modelFormData });
-    if (!modelRes.ok) throw new Error("人物创建失败");
-    const modelData = await modelRes.json();
-
-    // 自动选择第一个造型
-    if (modelData.look_options && modelData.look_options.length > 0) {
-      const selectForm = new FormData();
-      selectForm.append("look_index", 0);
-      await fetch(`/api/assets/model/${modelData.asset.id}/select`, { method: "POST", body: selectForm });
+    if (!slotAssets.scene) {
+      showToast("正在自动创建场景...", "info");
+      const fd = new FormData();
+      fd.append("description", extra || "适合vlog拍摄的室内场景");
+      const res = await fetch("/api/assets/scene", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.scene_options && data.scene_options.length > 0) {
+        const sf = new FormData(); sf.append("scene_index", 0);
+        await fetch(`/api/assets/scene/${data.asset.id}/select`, { method: "POST", body: sf });
+      }
+      slotAssets.scene = data.asset;
+      slotAssets.scene.selected_scene = data.scene_options?.[0] || null;
     }
 
-    // 步骤 3：创建场景素材
-    showToast("正在创建场景...", "info");
-    const sceneFormData = new FormData();
-    sceneFormData.append("description", prompt || "适合vlog拍摄的室内场景");
-    quickFiles.scene.forEach((f) => sceneFormData.append("images", f));
-
-    const sceneRes = await fetch("/api/assets/scene", { method: "POST", body: sceneFormData });
-    if (!sceneRes.ok) throw new Error("场景创建失败");
-    const sceneData = await sceneRes.json();
-
-    // 自动选择第一个场景方案
-    if (sceneData.scene_options && sceneData.scene_options.length > 0) {
-      const selectForm = new FormData();
-      selectForm.append("scene_index", 0);
-      await fetch(`/api/assets/scene/${sceneData.asset.id}/select`, { method: "POST", body: selectForm });
-    }
-
-    // 步骤 4：提交视频生成
+    // 提交生成
     showToast("正在提交视频生成...", "info");
-    const genFormData = new FormData();
-    genFormData.append("item_id", itemData.asset.id);
-    genFormData.append("model_id", modelData.asset.id);
-    genFormData.append("scene_id", sceneData.asset.id);
-    genFormData.append("platform", platform);
-    genFormData.append("duration", duration);
-    genFormData.append("extra_requirements", prompt);
+    const genForm = new FormData();
+    genForm.append("item_id", slotAssets.item.id);
+    genForm.append("model_id", slotAssets.model.id);
+    genForm.append("scene_id", slotAssets.scene.id);
+    genForm.append("platform", platform);
+    genForm.append("duration", duration);
+    genForm.append("extra_requirements", extra);
 
-    const genRes = await fetch("/api/generate/v2", { method: "POST", body: genFormData });
+    const genRes = await fetch("/api/generate/v2", { method: "POST", body: genForm });
     if (!genRes.ok) { const err = await genRes.json(); throw new Error(err.detail || "生成失败"); }
     const genData = await genRes.json();
 
@@ -515,98 +811,7 @@ $("#btn-quick-gen").addEventListener("click", async () => {
     showView("progress");
     startSSE(currentJobId);
     showToast("视频生成任务已创建", "success");
-
-    // 刷新素材库
     refreshAssets();
-  } catch (err) {
-    showToast(`快速生成失败: ${err.message}`, "error");
-  } finally {
-    btn.disabled = false;
-    btn.classList.remove("loading");
-  }
-});
-
-// ========== 生成视频视图（模式 A） ==========
-
-function refreshGenerateView() {
-  renderGenSelector("item", assets.items, "#gen-item-selector");
-  renderGenSelector("model", assets.models, "#gen-model-selector");
-  renderGenSelector("scene", assets.scenes, "#gen-scene-selector");
-  updateGenButton();
-}
-
-function renderGenSelector(type, list, containerSel) {
-  const container = $(containerSel);
-  if (list.length === 0) {
-    container.innerHTML = `<div class="gen-empty"><p>暂无${type === "item" ? "物品" : type === "model" ? "人物" : "场景"}素材</p></div>`;
-    return;
-  }
-
-  const listDiv = document.createElement("div");
-  listDiv.className = "gen-asset-list";
-
-  list.forEach((asset) => {
-    const item = document.createElement("div");
-    item.className = "gen-asset-item";
-    if (selectedAssets[type] && selectedAssets[type].id === asset.id) item.classList.add("selected");
-
-    const imgPath = asset.instruction_image_path || asset.selected_look || asset.selected_scene;
-    let imgHtml = "";
-    if (imgPath) {
-      const filename = imgPath.split("/").pop();
-      imgHtml = `<img src="/assets/${asset.id}/${filename}" alt="${escapeHtml(asset.name)}" onerror="this.style.display='none'">`;
-    } else {
-      const icons = { item: "&#128230;", model: "&#128100;", scene: "&#127968;" };
-      imgHtml = `<div class="gen-asset-item-placeholder">${icons[type]}</div>`;
-    }
-
-    item.innerHTML = `${imgHtml}<div class="gen-asset-item-name">${escapeHtml(asset.name)}</div>`;
-
-    item.addEventListener("click", () => {
-      if (type === "model" && !asset.selected_look) { showToast("请先选择造型", "warning"); return; }
-      if (type === "scene" && !asset.selected_scene) { showToast("请先选择方案", "warning"); return; }
-      selectedAssets[type] = asset;
-      container.querySelectorAll(".gen-asset-item").forEach((el) => el.classList.remove("selected"));
-      item.classList.add("selected");
-      updateGenButton();
-    });
-
-    listDiv.appendChild(item);
-  });
-
-  container.innerHTML = "";
-  container.appendChild(listDiv);
-}
-
-function updateGenButton() {
-  $("#btn-generate-v2").disabled = !(selectedAssets.item && selectedAssets.model && selectedAssets.scene);
-}
-
-// 模式 A 生成
-$("#btn-generate-v2").addEventListener("click", async () => {
-  if (!selectedAssets.item || !selectedAssets.model || !selectedAssets.scene) return;
-
-  const btn = $("#btn-generate-v2");
-  btn.disabled = true;
-  btn.classList.add("loading");
-
-  const formData = new FormData();
-  formData.append("item_id", selectedAssets.item.id);
-  formData.append("model_id", selectedAssets.model.id);
-  formData.append("scene_id", selectedAssets.scene.id);
-  formData.append("platform", $("#gen-platform").value);
-  formData.append("duration", $("#gen-duration").value);
-  formData.append("extra_requirements", $("#gen-extra").value.trim());
-
-  try {
-    const res = await fetch("/api/generate/v2", { method: "POST", body: formData });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "请求失败"); }
-    const data = await res.json();
-    currentJobId = data.job_id;
-    resetProgressUI();
-    showView("progress");
-    startSSE(currentJobId);
-    showToast("视频生成任务已创建", "info");
   } catch (err) {
     showToast(`生成失败: ${err.message}`, "error");
   } finally {
@@ -777,12 +982,10 @@ $("#btn-back").addEventListener("click", () => {
 $("#btn-new-task").addEventListener("click", () => {
   currentJobId = null;
   currentScript = null;
-  selectedAssets = { item: null, model: null, scene: null };
-  quickFiles = { item: [], model: [], scene: [] };
-  renderQuickPreview("item");
-  renderQuickPreview("model");
-  renderQuickPreview("scene");
-  updateQuickGenButton();
+  slotAssets = { item: null, model: null, scene: null };
+  clearSlot("item");
+  clearSlot("model");
+  clearSlot("scene");
   showView("home");
   refreshAssets();
 });

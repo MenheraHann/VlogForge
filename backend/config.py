@@ -4,10 +4,13 @@
 """
 
 import os
+import logging
 from dotenv import load_dotenv
+from google import genai
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 
 # Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -21,6 +24,37 @@ GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "vlogforge-artifacts")
 
 # 服务
 PORT = int(os.getenv("PORT", "8000"))
+
+# ========== Gemini 客户端（统一入口） ==========
+
+# 优先使用 Vertex AI（不受地区限制），降级到 API Key
+USE_VERTEX_AI = bool(GOOGLE_CLOUD_PROJECT)
+
+
+def get_genai_client(location: str = "") -> genai.Client:
+    """
+    获取 Gemini 客户端（统一工厂方法）。
+    - Vertex AI 模式：通过 GCP 认证，不受本地 IP 限制
+    - API Key 模式：降级方案，受地区限制
+
+    参数:
+        location: Vertex AI 区域。视频/图片生成用 "global"，文本用 "us-central1"。
+                  空字符串时使用 .env 中的 GOOGLE_CLOUD_LOCATION。
+    """
+    if USE_VERTEX_AI:
+        loc = location or GOOGLE_CLOUD_LOCATION
+        logger.info(f"[Config] 使用 Vertex AI 客户端: project={GOOGLE_CLOUD_PROJECT}, location={loc}")
+        return genai.Client(
+            vertexai=True,
+            project=GOOGLE_CLOUD_PROJECT,
+            location=loc,
+        )
+    else:
+        if not GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY 和 GOOGLE_CLOUD_PROJECT 均未配置")
+        logger.info("[Config] 使用 API Key 客户端")
+        return genai.Client(api_key=GEMINI_API_KEY)
+
 
 # ========== 模型配置 ==========
 

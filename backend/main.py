@@ -26,6 +26,8 @@ from backend.services.job_manager import JobManager
 from backend.services.asset_manager import AssetManager
 from backend.agents.da_agent import run_pipeline
 from backend.agents.ada_agent import (
+    analyze_item,
+    confirm_item,
     create_item_asset,
     create_model_asset,
     create_scene_asset,
@@ -97,6 +99,81 @@ async def create_item(
 
     asset_manager.save_item(asset)
     return {"status": "ok", "asset": asset.model_dump()}
+
+
+# ========== 物品智能问卷 API（v5 两步流程） ==========
+
+@app.post("/api/assets/item/analyze")
+async def analyze_item_asset(
+    description: str = Form(..., description="产品描述"),
+    images: Optional[list[UploadFile]] = File(None, description="产品图片"),
+):
+    """
+    物品分析（第 1 步）：ADA 分析产品 → 返回智能问卷。
+    前端根据返回的 questionnaire_fields 渲染表单给用户确认。
+    """
+    asset_id = asset_manager.generate_id(AssetType.ITEM)
+    logger.info(f"[API] 物品分析: {asset_id}")
+
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    asset = await analyze_item(
+        asset_id=asset_id,
+        description=description,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    # 大型物品直接拒绝
+    if asset.size_category == "large":
+        return {
+            "status": "rejected",
+            "reason": "大型物品不支持，仅接受上半身可演示的小型产品",
+            "asset": asset.model_dump(),
+        }
+
+    # 暂存到素材库（pending 状态）
+    asset_manager.save_item(asset)
+
+    return {
+        "status": "ok",
+        "asset": asset.model_dump(),
+        "questionnaire": [f.model_dump() for f in asset.questionnaire_fields],
+        "selling_points": asset.selling_points,
+        "message": "请确认或修改以下产品信息",
+    }
+
+
+@app.post("/api/assets/item/{asset_id}/confirm")
+async def confirm_item_asset(
+    asset_id: str,
+    confirmed_fields: str = Form(..., description="确认后的字段 JSON 数组"),
+):
+    """
+    物品确认（第 2 步）：用户确认问卷 → ADA 生成最终档案 + 产品说明图。
+    confirmed_fields 格式: [{"key":"...", "label":"...", "value":"...", "priority":"P0/P1/P2"}]
+    """
+    asset = asset_manager.get_item(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"物品素材 {asset_id} 不存在")
+
+    try:
+        fields = json.loads(confirmed_fields)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="confirmed_fields 格式错误，需为 JSON 数组")
+
+    logger.info(f"[API] 物品确认: {asset_id}, 字段数={len(fields)}")
+
+    updated_asset = await confirm_item(asset, fields)
+    asset_manager.save_item(updated_asset)
+
+    return {
+        "status": "ok",
+        "asset": updated_asset.model_dump(),
+        "message": "产品档案已完成",
+    }
 
 
 @app.post("/api/assets/model")

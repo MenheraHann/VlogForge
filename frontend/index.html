@@ -20,14 +20,10 @@
         <span class="logo-icon">&#9655;</span>
         <span class="logo-text">VlogForge</span>
       </div>
-      <div class="nav-links">
-        <a class="nav-link active" data-view="home">素材库</a>
-        <a class="nav-link" data-view="generate">生成视频</a>
-      </div>
     </div>
   </nav>
 
-  <!-- ========== 主页：素材库 + 快速生成 ========== -->
+  <!-- ========== 主页：素材库 + 统一生成区 ========== -->
   <section id="view-home" class="view active">
     <div class="container-wide">
 
@@ -66,66 +62,60 @@
 
       <!-- 分隔线 -->
       <div class="section-divider">
-        <span>快速生成</span>
+        <span>生成视频</span>
       </div>
 
-      <!-- 快速生成区 -->
-      <div class="quick-gen card glass-card">
-        <!-- 文本框 -->
+      <!-- 统一生成区 -->
+      <div class="gen-area card glass-card">
+        <!-- 一句话描述 -->
         <div class="form-group">
-          <label for="quick-prompt">一句话描述你想要的视频</label>
-          <textarea id="quick-prompt" rows="2"
-            placeholder="如：帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶的 vlog"></textarea>
+          <label for="gen-prompt">一句话描述（可选）</label>
+          <textarea id="gen-prompt" rows="2"
+            placeholder="如：开场要搞笑一点 / 重点展示使用过程"></textarea>
         </div>
 
-        <!-- 三个上传区 -->
-        <div class="upload-row">
-          <!-- 物品图片（必传） -->
-          <div class="upload-col">
-            <label>物品图片 <span class="required">*必传</span></label>
-            <div class="upload-zone" id="upload-item-zone">
-              <input type="file" id="upload-item-input" accept="image/*" multiple hidden>
-              <div class="upload-placeholder" id="upload-item-placeholder">
-                <span class="upload-icon">&#128230;</span>
-                <span>上传产品图 (1~3张)</span>
-              </div>
-              <div class="upload-preview-sm" id="upload-item-preview"></div>
+        <!-- 三个拖拽槽位 -->
+        <div class="slot-row">
+          <!-- 物品槽位（必填） -->
+          <div class="slot" id="slot-item" data-slot="item">
+            <div class="slot-header">物品 <span class="required">*必填</span></div>
+            <div class="slot-body slot-empty" id="slot-item-body">
+              <span class="slot-icon">&#128230;</span>
+              <span class="slot-hint">拖入素材 或 点击上传</span>
+              <input type="file" class="slot-file-input" accept="image/*" multiple hidden>
             </div>
+            <button class="slot-clear" id="slot-item-clear" style="display:none;">&#10005; 清空</button>
           </div>
 
-          <!-- 人物参考（可选） -->
-          <div class="upload-col">
-            <label>人物参考图 <span class="optional">可选</span></label>
-            <div class="upload-zone" id="upload-model-zone">
-              <input type="file" id="upload-model-input" accept="image/*" hidden>
-              <div class="upload-placeholder" id="upload-model-placeholder">
-                <span class="upload-icon">&#128100;</span>
-                <span>上传参考照片</span>
-              </div>
-              <div class="upload-preview-sm" id="upload-model-preview"></div>
+          <!-- 人物槽位（可选） -->
+          <div class="slot" id="slot-model" data-slot="model">
+            <div class="slot-header">人物 <span class="optional">可选</span></div>
+            <div class="slot-body slot-empty" id="slot-model-body">
+              <span class="slot-icon">&#128100;</span>
+              <span class="slot-hint">拖入素材 或 点击上传</span>
+              <input type="file" class="slot-file-input" accept="image/*" hidden>
             </div>
+            <button class="slot-clear" id="slot-model-clear" style="display:none;">&#10005; 清空</button>
           </div>
 
-          <!-- 场景参考（可选） -->
-          <div class="upload-col">
-            <label>场景参考图 <span class="optional">可选</span></label>
-            <div class="upload-zone" id="upload-scene-zone">
-              <input type="file" id="upload-scene-input" accept="image/*" hidden>
-              <div class="upload-placeholder" id="upload-scene-placeholder">
-                <span class="upload-icon">&#127968;</span>
-                <span>上传参考照片</span>
-              </div>
-              <div class="upload-preview-sm" id="upload-scene-preview"></div>
+          <!-- 场景槽位（可选） -->
+          <div class="slot" id="slot-scene" data-slot="scene">
+            <div class="slot-header">场景 <span class="optional">可选</span></div>
+            <div class="slot-body slot-empty" id="slot-scene-body">
+              <span class="slot-icon">&#127968;</span>
+              <span class="slot-hint">拖入素材 或 点击上传</span>
+              <input type="file" class="slot-file-input" accept="image/*" hidden>
             </div>
+            <button class="slot-clear" id="slot-scene-clear" style="display:none;">&#10005; 清空</button>
           </div>
         </div>
 
         <!-- 参数配置 -->
         <div class="form-row">
           <div class="form-group">
-            <label for="quick-platform">目标平台</label>
+            <label for="gen-platform">目标平台</label>
             <div class="select-wrapper">
-              <select id="quick-platform">
+              <select id="gen-platform">
                 <option value="douyin">抖音 (9:16 竖屏)</option>
                 <option value="xiaohongshu">小红书 (9:16 竖屏)</option>
                 <option value="youtube">YouTube (16:9 横屏)</option>
@@ -133,9 +123,9 @@
             </div>
           </div>
           <div class="form-group">
-            <label for="quick-duration">视频时长</label>
+            <label for="gen-duration">视频时长</label>
             <div class="select-wrapper">
-              <select id="quick-duration">
+              <select id="gen-duration">
                 <option value="15s">15 秒</option>
                 <option value="30s" selected>30 秒</option>
                 <option value="60s">60 秒</option>
@@ -145,7 +135,7 @@
         </div>
 
         <!-- 生成按钮 -->
-        <button class="btn-generate" id="btn-quick-gen" disabled>
+        <button class="btn-generate" id="btn-generate" disabled>
           <span class="btn-text">开始生成</span>
           <span class="btn-icon">&#10132;</span>
         </button>
@@ -175,91 +165,27 @@
     </div>
   </div>
 
-  <!-- ========== 生成视频视图（模式 A：从素材库选择） ========== -->
-  <section id="view-generate" class="view">
-    <div class="container">
-      <div class="view-header">
-        <h1>生成视频</h1>
-        <p class="view-desc">从素材库选择素材组合，生成带货视频</p>
+  <!-- ========== 素材详情模态框 ========== -->
+  <div id="detail-modal" class="modal-overlay" style="display:none;">
+    <div class="modal modal-lg card glass-card">
+      <div class="modal-header">
+        <h2 id="detail-modal-title">素材详情</h2>
+        <button class="modal-close" id="detail-modal-close">&times;</button>
       </div>
-
-      <div class="gen-flow">
-        <!-- 选择物品 -->
-        <div class="gen-step card glass-card">
-          <div class="gen-step-header">
-            <span class="gen-step-num">1</span>
-            <h3>选择物品</h3>
-          </div>
-          <div class="gen-selector" id="gen-item-selector">
-            <div class="gen-empty"><p>暂无物品素材</p></div>
-          </div>
-        </div>
-
-        <!-- 选择人物 -->
-        <div class="gen-step card glass-card">
-          <div class="gen-step-header">
-            <span class="gen-step-num">2</span>
-            <h3>选择人物</h3>
-          </div>
-          <div class="gen-selector" id="gen-model-selector">
-            <div class="gen-empty"><p>暂无人物素材</p></div>
-          </div>
-        </div>
-
-        <!-- 选择场景 -->
-        <div class="gen-step card glass-card">
-          <div class="gen-step-header">
-            <span class="gen-step-num">3</span>
-            <h3>选择场景</h3>
-          </div>
-          <div class="gen-selector" id="gen-scene-selector">
-            <div class="gen-empty"><p>暂无场景素材</p></div>
-          </div>
-        </div>
-
-        <!-- 配置参数 -->
-        <div class="gen-step card glass-card">
-          <div class="gen-step-header">
-            <span class="gen-step-num">4</span>
-            <h3>配置参数</h3>
-          </div>
-          <div class="gen-config">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="gen-platform">目标平台</label>
-                <div class="select-wrapper">
-                  <select id="gen-platform">
-                    <option value="douyin">抖音 (9:16 竖屏)</option>
-                    <option value="xiaohongshu">小红书 (9:16 竖屏)</option>
-                    <option value="youtube">YouTube (16:9 横屏)</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="gen-duration">视频时长</label>
-                <div class="select-wrapper">
-                  <select id="gen-duration">
-                    <option value="15s">15 秒</option>
-                    <option value="30s" selected>30 秒</option>
-                    <option value="60s">60 秒</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="gen-extra">额外要求（可选）</label>
-              <textarea id="gen-extra" rows="2" placeholder="如：开头要有产品特写，语速快一点..."></textarea>
-            </div>
-          </div>
-        </div>
-
-        <button class="btn-generate" id="btn-generate-v2" disabled>
-          <span class="btn-text">开始生成</span>
-          <span class="btn-icon">&#10132;</span>
-        </button>
-      </div>
+      <div class="modal-body" id="detail-modal-body"></div>
     </div>
-  </section>
+  </div>
+
+  <!-- ========== 智能问卷模态框 ========== -->
+  <div id="questionnaire-modal" class="modal-overlay" style="display:none;">
+    <div class="modal modal-lg card glass-card">
+      <div class="modal-header">
+        <h2 id="questionnaire-title">产品信息确认</h2>
+        <button class="modal-close" id="questionnaire-close">&times;</button>
+      </div>
+      <div class="modal-body" id="questionnaire-body"></div>
+    </div>
+  </div>
 
   <!-- ========== 进度视图 ========== -->
   <section id="view-progress" class="view">

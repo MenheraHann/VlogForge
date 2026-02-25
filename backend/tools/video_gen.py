@@ -17,10 +17,9 @@ import os
 import asyncio
 import logging
 
-from google import genai
 from google.genai import types
 
-from backend.config import GEMINI_API_KEY, VIDEO_GEN_MODEL, VIDEO_EXTEND_MODEL
+from backend.config import get_genai_client, VIDEO_GEN_MODEL, VIDEO_EXTEND_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +29,9 @@ POLL_INTERVAL = 10
 MAX_WAIT_TIME = 300
 
 
-def _get_client() -> genai.Client:
-    """获取 Gemini 客户端"""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY 未配置，请在 .env 中设置")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def _get_client():
+    """获取 Gemini 客户端（视频生成用 global）"""
+    return get_genai_client(location="global")
 
 
 async def generate_video_segment(

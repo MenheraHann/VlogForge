@@ -12,10 +12,9 @@ import logging
 import traceback
 from typing import Optional
 
-from google import genai
 from google.genai import types
 
-from backend.config import GEMINI_API_KEY, TEXT_MODEL, SELF_CHECK_THRESHOLD, ARTIFACTS_DIR
+from backend.config import get_genai_client, TEXT_MODEL, SELF_CHECK_THRESHOLD, ARTIFACTS_DIR
 from backend.models import JobStatus, ScriptOutput, SelfCheck
 from backend.services.job_manager import JobManager
 from backend.agents import va_agent, vga_agent
@@ -32,11 +31,9 @@ logger = logging.getLogger(__name__)
 DA_MODEL = TEXT_MODEL
 
 
-def _get_client() -> genai.Client:
-    """获取 Gemini 客户端（懒加载，避免启动时无 Key 报错）"""
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY 未配置，请在 .env 中设置")
-    return genai.Client(api_key=GEMINI_API_KEY)
+def _get_client():
+    """获取 Gemini 客户端（文本生成用 us-central1）"""
+    return get_genai_client(location="us-central1")
 
 
 def _build_response_schema() -> dict:

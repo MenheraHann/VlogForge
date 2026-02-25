@@ -45,17 +45,54 @@ class AssetType(str, Enum):
 
 # ========== 素材模型 ==========
 
+class QuestionnaireStatus(str, Enum):
+    """问卷状态"""
+    PENDING = "pending"           # 等待用户填写
+    IN_PROGRESS = "in_progress"   # 用户正在填写
+    COMPLETED = "completed"       # 已完成
+
+
+class QuestionnaireField(BaseModel):
+    """问卷中的一个字段"""
+    key: str = Field(..., description="字段标识，如 selling_point")
+    label: str = Field(..., description="显示标签，如 核心卖点")
+    value: str = Field("", description="当前值（AI 预填或用户填写）")
+    priority: str = Field("P1", description="优先级: P0/P1/P2")
+    source: str = Field("ai", description="来源: ai=AI预填, user=待用户填写")
+    required: bool = Field(True, description="是否必填")
+
+
 class ItemAsset(BaseModel):
-    """物品素材档案"""
+    """物品素材档案（v5：支持智能问卷 + P0/P1/P2 卖点）"""
     id: str = Field(..., description="素材 ID，如 item_001")
     name: str = Field(..., description="物品名称")
     category: str = Field(..., description="物品类别，如面部护肤")
-    usage: str = Field(..., description="使用方式描述")
-    selling_point: str = Field(..., description="核心卖点")
+    size_category: str = Field("small", description="尺寸分类: small 允许, large 拒绝")
+
+    # v5: 动态产品信息（ADA 问卷收集，字段不固定）
+    product_info: dict = Field(default_factory=dict, description="动态产品信息，key 由 ADA 按品类决定")
+
+    # v5: 卖点优先级
+    selling_points: dict = Field(
+        default_factory=lambda: {"P0": [], "P1": [], "P2": []},
+        description="按优先级分组的卖点列表",
+    )
+
+    # v5: 问卷状态
+    questionnaire_status: QuestionnaireStatus = Field(
+        QuestionnaireStatus.PENDING, description="问卷收集进度"
+    )
+    questionnaire_fields: list[QuestionnaireField] = Field(
+        default_factory=list, description="问卷字段列表（analyze 返回，confirm 时回收）"
+    )
+
+    # 兼容旧字段
+    selling_point: str = Field("", description="核心卖点（兼容旧版，取 P0 第一条）")
+    usage: str = Field("", description="使用方式描述")
+
     original_images: list[str] = Field(default_factory=list, description="用户上传的原始图片路径")
     instruction_image: Optional[str] = Field(None, description="ADA 生成的产品说明图路径")
     full_description: str = Field("", description="ADA 生成的完整产品描述")
-    size_category: str = Field("small", description="尺寸分类: small 允许, large 拒绝")
 
 
 class ModelAsset(BaseModel):
