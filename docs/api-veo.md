@@ -11,12 +11,12 @@ Veo 是 Google 的视频生成模型，VlogForge 使用 **Veo 3.1** 的**首尾�
 
 **模型列表：**
 
-| 模型 ID | 特点 | 时长 | 比例 | 音频 |
-|---------|------|------|------|------|
-| `veo-3.1-generate-001` | 正式版，高质量 | 4/6/8s | 16:9, 9:16 | 支持 |
-| `veo-3.1-fast-generate-001` | 快速版，低延迟 | 4/6/8s | 16:9, 9:16 | 支持 |
-| `veo-3.1-generate-preview` | 预览版，支持视频延长和参考图 | 4/6/8s | 16:9, 9:16 | 支持 |
-| `veo-3.0-generate-001` | 旧版 | 4/6/8s | 仅 16:9 | 支持 |
+| 模型 ID                       | 特点                         | 时长   | 比例       | 音频 |
+| ----------------------------- | ---------------------------- | ------ | ---------- | ---- |
+| `veo-3.1-generate-001`      | 正式版，高质量               | 4/6/8s | 16:9, 9:16 | 支持 |
+| `veo-3.1-fast-generate-001` | 快速版，低延迟               | 4/6/8s | 16:9, 9:16 | 支持 |
+| `veo-3.1-generate-preview`  | 预览版，支持视频延长和参考图 | 4/6/8s | 16:9, 9:16 | 支持 |
+| `veo-3.0-generate-001`      | 旧版                         | 4/6/8s | 仅 16:9    | 支持 |
 
 **重要发现：Veo 3+ 自带语音/对话生成**（`generate_audio=True`），旁白可以直接在视频中生成，不需要额外 TTS。
 
@@ -211,18 +211,18 @@ operation = client.models.generate_videos(
 
 ## 四、GenerateVideosConfig 完整参数
 
-| 参数 | 可选值 | 说明 |
-|------|--------|------|
-| `aspect_ratio` | `"16:9"`, `"9:16"` | 画面比例 |
-| `number_of_videos` | 1~4 | 生成数量（Veo 3+ 最多 2） |
-| `duration_seconds` | 4, 6, 8 | 视频时长（秒） |
-| `resolution` | `"720p"`, `"1080p"`, `"4k"` | 分辨率 |
-| `enhance_prompt` | `True`/`False` | 自动优化提示词 |
-| `generate_audio` | `True`/`False` | 生成语音/对话（Veo 3+） |
-| `person_generation` | `"allow_adult"`, `"dont_allow"` | 是否允许生成人物 |
-| `last_frame` | `types.Image` | 尾帧图片（首尾帧功能） |
-| `reference_images` | `list[VideoGenerationReferenceImage]` | 角色参考图（最多 3 张） |
-| `output_gcs_uri` | GCS 路径字符串 | 输出到 Cloud Storage |
+| 参数                  | 可选值                                  | 说明                      |
+| --------------------- | --------------------------------------- | ------------------------- |
+| `aspect_ratio`      | `"16:9"`, `"9:16"`                  | 画面比例                  |
+| `number_of_videos`  | 1~4                                     | 生成数量（Veo 3+ 最多 2） |
+| `duration_seconds`  | 4, 6, 8                                 | 视频时长（秒）            |
+| `resolution`        | `"720p"`, `"1080p"`, `"4k"`       | 分辨率                    |
+| `enhance_prompt`    | `True`/`False`                      | 自动优化提示词            |
+| `generate_audio`    | `True`/`False`                      | 生成语音/对话（Veo 3+）   |
+| `person_generation` | `"allow_adult"`, `"dont_allow"`     | 是否允许生成人物          |
+| `last_frame`        | `types.Image`                         | 尾帧图片（首尾帧功能）    |
+| `reference_images`  | `list[VideoGenerationReferenceImage]` | 角色参考图（最多 3 张）   |
+| `output_gcs_uri`    | GCS 路径字符串                          | 输出到 Cloud Storage      |
 
 ---
 
@@ -231,6 +231,7 @@ operation = client.models.generate_videos(
 两种获取视频的方式：
 
 **方式 1：直接获取 bytes（不设 output_gcs_uri）**
+
 ```python
 video_bytes = operation.result.generated_videos[0].video.video_bytes
 with open("output.mp4", "wb") as f:
@@ -238,6 +239,7 @@ with open("output.mp4", "wb") as f:
 ```
 
 **方式 2：存到 GCS（设置 output_gcs_uri）**
+
 ```python
 config = types.GenerateVideosConfig(
     output_gcs_uri="gs://your-bucket/output/",
@@ -309,6 +311,7 @@ operation = client.models.generate_videos(
 ```
 
 **注意事项：**
+
 - 首尾帧的画面要有相似性（同一人物、同一场景），效果最好
 - `generate_audio=True` 时 Veo 会根据 prompt 中的对话内容生成语音
 - 各片段可以**并行生成**，最后由 FFmpeg 拼接

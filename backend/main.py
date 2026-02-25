@@ -20,6 +20,7 @@ from backend.models import (
     GenerateRequest, JobResponse, ProgressResponse,
 )
 from backend.services.job_manager import JobManager
+from backend.agents.da_agent import run_pipeline
 
 # 日志配置
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -100,10 +101,12 @@ async def generate_video(
     }
     job_manager.create_job(job_id, job_data)
 
-    # TODO: 启动 DA Agent 流水线（异步）
-    # 当前阶段先返回任务 ID，后续实现 Agent 调度
+    # 启动 DA Agent 流水线（后台异步执行，不阻塞响应）
+    import asyncio
+    asyncio.create_task(run_pipeline(job_id, job_manager))
+    logger.info(f"[Job {job_id}] DA 流水线已启动")
 
-    return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，即将开始生成")
+    return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，正在生成脚本...")
 
 
 @app.get("/api/status/{job_id}", response_model=ProgressResponse)
