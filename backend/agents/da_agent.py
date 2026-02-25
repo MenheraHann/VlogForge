@@ -47,6 +47,10 @@ def _build_response_schema() -> dict:
                 "type": "STRING",
                 "description": "视频标题，吸引点击，口语化",
             },
+            "voice_anchor": {
+                "type": "STRING",
+                "description": "声音锚定描述（全英文），详细描述人物声音特征：性别、年龄、语言、语调、语速、说话风格。用于所有视频片段保持声音一致。",
+            },
             "style_guide": {
                 "type": "OBJECT",
                 "properties": {
@@ -153,7 +157,7 @@ def _build_response_schema() -> dict:
                 ],
             },
         },
-        "required": ["title", "style_guide", "segments", "self_check"],
+        "required": ["title", "voice_anchor", "style_guide", "segments", "self_check"],
     }
 
 
@@ -384,18 +388,28 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         # storyboard_urls = await va_agent.generate_storyboard(script, job)
         # job_manager.update_job(job_id, storyboard_urls=storyboard_urls, ...)
 
-        # ========== 阶段 3：VGA 生成视频片段（占位） ==========
+        # ========== 阶段 3：VGA 链式延长生成视频片段（占位） ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.VIDEOS_GENERATING,
             progress=0.40,
-            message="视频片段生成待实现（VGA Agent — 首尾帧视频）...",
+            message="视频片段生成待实现（VGA Agent — 链式延长）...",
         )
-        logger.info(f"[DA][Job {job_id}] VGA 占位 — 首尾帧视频待实现")
+        logger.info(f"[DA][Job {job_id}] VGA 占位 — 链式延长视频待实现")
 
-        # TODO: 接入 VGA Agent
-        # segment_urls = await vga_agent.generate_segments(storyboard_urls, script, job)
-        # job_manager.update_job(job_id, segment_urls=segment_urls, ...)
+        # TODO: 接入 VGA Agent（链式延长模式，串行生成）
+        # from backend.agents import vga_agent
+        # segment_paths = await vga_agent.generate_segments(
+        #     script=script,
+        #     storyboard_paths=storyboard_paths,
+        #     output_dir=os.path.join(ARTIFACTS_DIR, job_id, "segments"),
+        #     aspect_ratio=job["aspect_ratio"],
+        #     voice_anchor=script.voice_anchor,
+        #     on_segment_done=lambda i, total: job_manager.update_job(
+        #         job_id, progress=0.40 + 0.40 * (i + 1) / total,
+        #         message=f"视频片段生成中 ({i+1}/{total})...",
+        #     ),
+        # )
 
         # ========== 阶段 4：FFmpeg 拼接（占位） ==========
         job_manager.update_job(

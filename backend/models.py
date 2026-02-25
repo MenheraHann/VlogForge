@@ -134,8 +134,9 @@ class SelfCheck(BaseModel):
 
 
 class ScriptOutput(BaseModel):
-    """DA 输出的完整脚本（v4：含自检评分）"""
+    """DA 输出的完整脚本（v5：含声音锚定 + 自检评分）"""
     title: str = Field(..., description="视频标题")
+    voice_anchor: str = Field("", description="声音锚定描述（英文），用于所有视频片段保持声音一致")
     style_guide: StyleGuide
     segments: list[ScriptSegment]
     self_check: SelfCheck = Field(..., description="DA 自检评分")

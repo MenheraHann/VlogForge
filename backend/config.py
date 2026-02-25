@@ -30,8 +30,11 @@ TEXT_MODEL = "gemini-2.5-flash"
 # 图片生成模型（Nano Banana：ADA 生图 + VA 图生图）
 IMAGE_GEN_MODEL = "gemini-2.0-flash-exp"
 
-# 视频生成模型（Veo 3.1：VGA 首尾帧视频）
+# 视频生成模型（Veo 3.1：VGA 首段首帧视频）
 VIDEO_GEN_MODEL = "veo-3.1-generate-001"
+
+# 视频延长模型（Veo 3.1 Preview：支持视频延长，保持声音连贯）
+VIDEO_EXTEND_MODEL = "veo-3.1-generate-preview"
 
 # ========== 存储路径 ==========
 
