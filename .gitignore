@@ -15,8 +15,16 @@ env/
 # 环境变量（含密钥，禁止提交）
 .env
 
-# 中间产物（生成的图片/视频）
+# 中间产物（生成的图片/视频/素材）
 artifacts/
+assets/
+
+# 文档截图
+docs/image/
+
+# 工具配置（Beads / Claude Code）
+.beads/
+.claude/
 
 # IDE
 .vscode/
