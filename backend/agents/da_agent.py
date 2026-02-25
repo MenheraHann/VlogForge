@@ -1,21 +1,25 @@
 """
 DA Agent - 创意总监（Director Agent）
 负责：脚本生成 + 自检校验 + 编排 VA/VGA/FFmpeg
-v4 架构：DA 直接生成脚本（原 TA 合入），QA 已移除
+v5 架构：DA 直接生成脚本（原 TA 合入），VGA 链式延长，QA 已移除
 
-当前实现：脚本生成 + self_check 自检，VA/VGA/FFmpeg 为占位
+流水线：DA(脚本+自检) → VA(链式图生图) → VGA(链式延长视频) → FFmpeg(拼接)
 """
 
 import json
+import os
 import logging
 import traceback
+from typing import Optional
 
 from google import genai
 from google.genai import types
 
-from backend.config import GEMINI_API_KEY, TEXT_MODEL, SELF_CHECK_THRESHOLD
+from backend.config import GEMINI_API_KEY, TEXT_MODEL, SELF_CHECK_THRESHOLD, ARTIFACTS_DIR
 from backend.models import JobStatus, ScriptOutput, SelfCheck
 from backend.services.job_manager import JobManager
+from backend.agents import va_agent, vga_agent
+from backend.tools import ffmpeg_tools
 from backend.prompts.da_prompts import (
     DA_SCRIPT_SYSTEM_PROMPT,
     build_da_script_prompt,
@@ -375,63 +379,114 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] 脚本完成：「{script.title}」")
 
-        # ========== 阶段 2：VA 链式图生图（占位） ==========
+        # ========== 阶段 2：VA 链式图生图 ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.IMAGES_GENERATING,
             progress=0.20,
-            message="分镜图生成待实现（VA Agent — 链式图生图）...",
+            message="VA 正在生成分镜图...",
         )
-        logger.info(f"[DA][Job {job_id}] VA 占位 — 链式图生图待实现")
+        logger.info(f"[DA][Job {job_id}] 开始 VA 链式图生图")
 
-        # TODO: 接入 VA Agent
-        # storyboard_urls = await va_agent.generate_storyboard(script, job)
-        # job_manager.update_job(job_id, storyboard_urls=storyboard_urls, ...)
+        # 从 job 数据中读取素材图片
+        person_image = _load_asset_image(job, "model", "selected_look")
+        scene_image = _load_asset_image(job, "scene", "selected_scene")
+        product_image = _load_first_product_image(job)
 
-        # ========== 阶段 3：VGA 链式延长生成视频片段（占位） ==========
+        storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
+        storyboard_paths = await va_agent.generate_storyboard(
+            script=script,
+            output_dir=storyboard_dir,
+            person_image=person_image,
+            scene_image=scene_image,
+            product_image=product_image,
+        )
+
+        # 转换为 URL 供前端显示
+        storyboard_urls = [
+            f"/artifacts/{job_id}/storyboard/{os.path.basename(p)}"
+            for p in storyboard_paths
+        ]
+        job_manager.update_job(
+            job_id,
+            progress=0.35,
+            message=f"分镜图生成完成: {len(storyboard_paths)} 帧",
+            storyboard_urls=storyboard_urls,
+        )
+        logger.info(f"[DA][Job {job_id}] VA 完成: {len(storyboard_paths)} 帧")
+
+        # ========== 阶段 3：VGA 链式延长生成视频片段 ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.VIDEOS_GENERATING,
             progress=0.40,
-            message="视频片段生成待实现（VGA Agent — 链式延长）...",
+            message="VGA 正在链式延长生成视频片段...",
         )
-        logger.info(f"[DA][Job {job_id}] VGA 占位 — 链式延长视频待实现")
+        logger.info(f"[DA][Job {job_id}] 开始 VGA 链式延长视频生成")
 
-        # TODO: 接入 VGA Agent（链式延长模式，串行生成）
-        # from backend.agents import vga_agent
-        # segment_paths = await vga_agent.generate_segments(
-        #     script=script,
-        #     storyboard_paths=storyboard_paths,
-        #     output_dir=os.path.join(ARTIFACTS_DIR, job_id, "segments"),
-        #     aspect_ratio=job["aspect_ratio"],
-        #     voice_anchor=script.voice_anchor,
-        #     on_segment_done=lambda i, total: job_manager.update_job(
-        #         job_id, progress=0.40 + 0.40 * (i + 1) / total,
-        #         message=f"视频片段生成中 ({i+1}/{total})...",
-        #     ),
-        # )
+        segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
+        total_segments = len(script.segments)
 
-        # ========== 阶段 4：FFmpeg 拼接（占位） ==========
+        def _on_segment_done(i: int, total: int):
+            """VGA 每段完成时更新进度"""
+            job_manager.update_job(
+                job_id,
+                progress=0.40 + 0.40 * (i + 1) / total,
+                message=f"视频片段生成中 ({i + 1}/{total})...",
+            )
+
+        segment_paths = await vga_agent.generate_segments(
+            script=script,
+            storyboard_paths=storyboard_paths,
+            output_dir=segment_dir,
+            aspect_ratio=job["aspect_ratio"],
+            voice_anchor=script.voice_anchor,
+            on_segment_done=_on_segment_done,
+        )
+
+        segment_urls = [
+            f"/artifacts/{job_id}/segments/{os.path.basename(p)}"
+            for p in segment_paths
+        ]
+        job_manager.update_job(
+            job_id,
+            progress=0.82,
+            message=f"视频片段全部完成: {len(segment_paths)} 段",
+            segment_urls=segment_urls,
+        )
+        logger.info(f"[DA][Job {job_id}] VGA 完成: {len(segment_paths)} 段")
+
+        # ========== 阶段 4：FFmpeg 拼接 ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.STITCHING,
             progress=0.85,
-            message="视频拼接待实现（FFmpeg）...",
+            message="FFmpeg 正在拼接最终视频...",
         )
-        logger.info(f"[DA][Job {job_id}] FFmpeg 占位 — 视频拼接待实现")
+        logger.info(f"[DA][Job {job_id}] 开始 FFmpeg 拼接")
 
-        # TODO: 接入 FFmpeg
-        # final_path = await ffmpeg_tools.stitch(segment_urls, job)
-        # job_manager.update_job(job_id, final_video=final_path, ...)
+        final_dir = os.path.join(ARTIFACTS_DIR, job_id)
+        final_path = os.path.join(final_dir, "final.mp4")
+
+        # 链式延长模式下不需要裁重复帧（每段独立生成，无共享帧）
+        await ffmpeg_tools.stitch_segments(
+            segment_paths=segment_paths,
+            output_path=final_path,
+            trim_overlap_frames=False,
+        )
+
+        logger.info(f"[DA][Job {job_id}] FFmpeg 拼接完成: {final_path}")
 
         # ========== 标记完成 ==========
+        # final_video 存文件路径，get_progress 会自动生成下载 URL
         job_manager.update_job(
             job_id,
             status=JobStatus.COMPLETED,
             progress=1.0,
-            message="脚本生成完成（VA/VGA/FFmpeg 待实现）",
+            message=f"视频生成完成：「{script.title}」",
+            final_video=final_path,
         )
-        logger.info(f"[DA][Job {job_id}] 流水线完成")
+        logger.info(f"[DA][Job {job_id}] 流水线完成: {final_path}")
 
     except Exception as e:
         logger.error(f"[DA][Job {job_id}] 流水线失败: {e}\n{traceback.format_exc()}")
@@ -441,3 +496,61 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
             progress=0.0,
             message=f"生成失败：{str(e)}",
         )
+
+
+def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[bytes]:
+    """
+    从 job 数据中读取素材图片。
+
+    参数:
+        job: 任务数据
+        asset_key: 素材 key（如 "model", "scene"）
+        image_field: 图片字段名（如 "selected_look", "selected_scene"）
+
+    返回:
+        图片 bytes，如果文件不存在返回 None
+    """
+    asset = job.get(asset_key)
+    if not asset:
+        return None
+
+    path = asset.get(image_field)
+    if not path or not os.path.exists(path):
+        return None
+
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except Exception as e:
+        logger.warning(f"[DA] 读取素材图片失败 ({asset_key}/{image_field}): {e}")
+        return None
+
+
+def _load_first_product_image(job: dict) -> Optional[bytes]:
+    """
+    读取产品图片（优先 instruction_image，其次 original_images 第一张）。
+    """
+    item = job.get("item")
+    if not item:
+        return None
+
+    # 优先使用 ADA 生成的产品说明图
+    instruction = item.get("instruction_image")
+    if instruction and os.path.exists(instruction):
+        try:
+            with open(instruction, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+
+    # 降级到用户上传的原始图片
+    originals = item.get("original_images", [])
+    for path in originals:
+        if path and os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    return f.read()
+            except Exception:
+                continue
+
+    return None
