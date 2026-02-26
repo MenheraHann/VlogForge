@@ -56,6 +56,7 @@
 > 历史经验：Google 黑客松通常给参赛者 $50 ~ $300 不等的额度，具体金额由 Google 审批决定。
 
 **申请建议**：
+
 - 尽早申请，额度可能需要几个工作日到账
 - 填写时注明你的 GCP Project ID
 - 说明需要使用 Veo 视频生成（计算密集型）
@@ -74,16 +75,16 @@
 
 ### 奖项总览（总奖池约 $80,000）
 
-| 奖项 | 现金 (USD) | GCP Credits | 名额 |
-|------|-----------|-------------|------|
-| **Grand Prize** 总冠军 | $25,000 | $3,000 | 1 |
-| **Best of Live Agents** | $10,000 | $1,000 | 1 |
-| **Best of Creative Storytellers** | $10,000 | $1,000 | 1 |
-| **Best of UI Navigators** | $10,000 | $1,000 | 1 |
-| **Best Multimodal Integration & UX** | $5,000 | $500 | 1 |
-| **Best Technical Execution** | $5,000 | $500 | 1 |
-| **Best Innovation** | $5,000 | $500 | 1 |
-| **Honorable Mentions** 荣誉提名 | $2,000 | $500 | 5 |
+| 奖项                                       | 现金 (USD)       | GCP Credits | 名额 |
+| ------------------------------------------ | ---------------- | ----------- | ---- |
+| **Grand Prize** 总冠军               | $25,000 | $3,000 | 1           |      |
+| **Best of Live Agents**              | $10,000 | $1,000 | 1           |      |
+| **Best of Creative Storytellers**    | $10,000 | $1,000 | 1           |      |
+| **Best of UI Navigators**            | $10,000 | $1,000 | 1           |      |
+| **Best Multimodal Integration & UX** | $5,000 | $500    | 1           |      |
+| **Best Technical Execution**         | $5,000 | $500    | 1           |      |
+| **Best Innovation**                  | $5,000 | $500    | 1           |      |
+| **Honorable Mentions** 荣誉提名      | $2,000 | $500    | 5           |      |
 
 我们参加的是 **Creative Storyteller** 赛道，对应奖项 $10,000 + $1,000 GCP Credits。
 
@@ -94,20 +95,23 @@
 Veo 是整个项目中最贵的 API 调用，需要注意成本控制。
 
 ### 预估单价
+
 - Veo 3.x 视频生成：约 **$0.30 ~ $0.50 / 秒**
 - 一段 8 秒视频 ≈ **$2.5 ~ $4**
 
 ### VlogForge 单次完整生成的估算
+
 - 5 个分段 × 8 秒 = 40 秒视频
 - 预估成本：**$12 ~ $20 / 次**
 
 ### 省钱建议
-| 阶段 | 策略 |
-|------|------|
+
+| 阶段     | 策略                                           |
+| -------- | ---------------------------------------------- |
 | 开发调试 | 用 `veo-3.1-fast-generate-001`（更快更便宜） |
-| 开发调试 | 时长用 4s，分辨率用 720p |
-| 开发调试 | `number_of_videos=1` |
-| 正式演示 | 切换 `veo-3.1-generate-001`，8s + 1080p |
+| 开发调试 | 时长用 4s，分辨率用 720p                       |
+| 开发调试 | `number_of_videos=1`                         |
+| 正式演示 | 切换 `veo-3.1-generate-001`，8s + 1080p      |
 
 ---
 
@@ -132,12 +136,12 @@ PORT=8000
 
 ## 六、关键时间节点
 
-| 日期 | 事项 |
-|------|------|
-| 2026-02-16 | 比赛开始 |
-| **2026-03-16 17:00 PT** | **提交截止** |
-| 2026-03-17 ~ 04-03 | 评审期 |
-| 2026-04-22~24 | Google Cloud Next 2026 公布获奖 |
+| 日期                          | 事项                            |
+| ----------------------------- | ------------------------------- |
+| 2026-02-16                    | 比赛开始                        |
+| **2026-03-16 17:00 PT** | **提交截止**              |
+| 2026-03-17 ~ 04-03            | 评审期                          |
+| 2026-04-22~24                 | Google Cloud Next 2026 公布获奖 |
 
 > 距离截止还有约 **19 天**。
 
@@ -145,16 +149,16 @@ PORT=8000
 
 ## 七、关键链接汇总
 
-| 用途 | 链接 |
-|------|------|
-| 比赛主页 | https://geminiliveagentchallenge.devpost.com/ |
-| 比赛规则 | https://geminiliveagentchallenge.devpost.com/rules |
-| **GCP Credits 申请** | https://forms.gle/rKNPXA1o6XADvQGb7 |
-| AI Studio（获取 API Key） | https://aistudio.google.com/apikey |
-| Google Cloud 免费试用 | https://cloud.google.com/free |
-| Gemini API 文档 | https://ai.google.dev/gemini-api/docs |
-| Veo API 文档 | https://ai.google.dev/gemini-api/docs/video |
-| GenMedia 示例代码 | https://github.com/GoogleCloudPlatform/generative-ai/tree/main/vision |
+| 用途                       | 链接                                                                  |
+| -------------------------- | --------------------------------------------------------------------- |
+| 比赛主页                   | https://geminiliveagentchallenge.devpost.com/                         |
+| 比赛规则                   | https://geminiliveagentchallenge.devpost.com/rules                    |
+| **GCP Credits 申请** | https://forms.gle/rKNPXA1o6XADvQGb7                                   |
+| AI Studio（获取 API Key）  | https://aistudio.google.com/apikey                                    |
+| Google Cloud 免费试用      | https://cloud.google.com/free                                         |
+| Gemini API 文档            | https://ai.google.dev/gemini-api/docs                                 |
+| Veo API 文档               | https://ai.google.dev/gemini-api/docs/video                           |
+| GenMedia 示例代码          | https://github.com/GoogleCloudPlatform/generative-ai/tree/main/vision |
 
 ---
 
@@ -168,6 +172,7 @@ PORT=8000
 - [ ] **部署到 Google Cloud** — 必须使用至少一个 Google Cloud 服务
 
 ### 加分项（可选）
+
 - [ ] 发布关于使用 Google AI & Cloud 构建的内容（带 `#GeminiLiveAgentChallenge` 标签）
 - [ ] 加入 Google Developer Group (GDG)
 - [ ] 使用脚本/IaC 实现自动化云部署
