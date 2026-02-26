@@ -30,8 +30,12 @@ MAX_WAIT_TIME = 300
 
 
 def _get_client():
-    """获取 Gemini 客户端（视频生成用 global）"""
-    return get_genai_client(location="global")
+    """获取 Gemini Developer API 客户端（generate_videos 仅 Developer API 支持，不支持 Vertex AI）"""
+    from backend.config import GEMINI_API_KEY
+    from google import genai
+    if not GEMINI_API_KEY:
+        raise RuntimeError("视频生成需要 GEMINI_API_KEY（Vertex AI 不支持 generate_videos）")
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 
 async def generate_video_segment(
