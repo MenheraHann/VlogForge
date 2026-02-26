@@ -61,7 +61,7 @@ def _build_response_schema() -> dict:
                     },
                     "scene_description": {
                         "type": "STRING",
-                        "description": "场景统一描述（地点、环境、背景元素）",
+                        "description": "场景统一描述（基于人物素材中的 scene_context，包含地点、环境、背景元素）",
                     },
                     "visual_style": {
                         "type": "STRING",
@@ -138,7 +138,7 @@ def _build_response_schema() -> dict:
                     },
                     "scene_consistency": {
                         "type": "INTEGER",
-                        "description": "场景一致性 1-5",
+                        "description": "场景与人物素材中场景信息的一致性 1-5",
                     },
                     "overall_quality": {
                         "type": "INTEGER",
@@ -310,10 +310,10 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
 
         # 构建用户提示词（根据任务模式选择）
         if job.get("mode") == "v2_assets":
-            # v2 模式：基于素材档案
+            # v2 模式：基于素材档案（v10：场景从人物素材获取）
             item = job["item"]
             model = job["model"]
-            scene = job["scene"]
+            scene_context = model.get("scene_context", "")
             user_prompt = build_da_script_prompt(
                 item_name=item["name"],
                 item_usage=item["usage"],
@@ -322,9 +322,7 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
                 model_appearance=model["appearance"],
                 model_personality=model["personality"],
                 model_outfits=model["outfits"],
-                scene_environment=scene["environment"],
-                scene_lighting=scene["lighting"],
-                scene_mood=scene["mood"],
+                scene_context=scene_context,
                 platform=job["platform"],
                 duration=job["duration"],
                 segment_count=job["segment_count"],
@@ -385,9 +383,8 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] 开始 VA 链式图生图")
 
-        # 从 job 数据中读取素材图片
-        person_image = _load_asset_image(job, "model", "selected_look")
-        scene_image = _load_asset_image(job, "scene", "selected_scene")
+        # 从 job 数据中读取素材图片（v10：人物图改为 portrait_image，已包含场景）
+        person_image = _load_asset_image(job, "model", "portrait_image")
         product_image = _load_first_product_image(job)
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
@@ -395,7 +392,6 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
             script=script,
             output_dir=storyboard_dir,
             person_image=person_image,
-            scene_image=scene_image,
             product_image=product_image,
         )
 
@@ -501,8 +497,8 @@ def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[b
 
     参数:
         job: 任务数据
-        asset_key: 素材 key（如 "model", "scene"）
-        image_field: 图片字段名（如 "selected_look", "selected_scene"）
+        asset_key: 素材 key（如 "model"）
+        image_field: 图片字段名（如 "portrait_image"）
 
     返回:
         图片 bytes，如果文件不存在返回 None

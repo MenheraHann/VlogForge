@@ -1,7 +1,7 @@
 """
 ADA Agent 提示词模板
-素材设计师（Asset Designer Agent）三套 prompt：物品 / 人物 / 场景
-v5 架构：智能问卷 + P0/P1/P2 卖点优先级
+素材设计师（Asset Designer Agent）两套 prompt：物品 / 人物（含场景）
+v10 架构：场景融入人物，人物生成一张「人在场景中的半身近景」portrait_image
 """
 
 # ========== 物品模式 — 第 1 步：分析 + 生成问卷 ==========
@@ -295,11 +295,11 @@ def get_item_response_schema() -> dict:
 
 # ========== 人物模式 ==========
 
-ADA_MODEL_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当前工作在**人物模式**。
+ADA_MODEL_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当前工作在**人物模式**（v10：场景已融入人物）。
 
 ## Task
 
-根据用户提供的参考图或描述，拓展出完整的 vlog 模特人设档案。
+根据用户提供的参考图或描述，拓展出完整的 vlog 模特人设档案，**包括拍摄场景信息**。
 
 ## Context
 
@@ -308,80 +308,64 @@ ADA_MODEL_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当�
 2. appearance：完整的外貌描述（年龄范围、性别、发型发色、脸型五官、肤色、身材）
 3. personality：气质性格（如"亲和活泼"、"知性优雅"、"酷飒干练"）
 4. outfits：穿搭描述（提供 2-3 套适合 vlog 拍摄的穿搭方案）
-5. full_description：完整的人设描述（150-250字），适合作为图片生成的详细提示词
+5. scene_context：场景信息（拍摄环境、光线、氛围等。例如"客厅，背景是沙发，夜晚自然光，明亮的环境"）
+6. full_description：完整的人设描述（150-250字），适合作为图片生成的详细提示词，**必须包含场景信息**
 
 规则：
 - 人设要适合 vlog 带货场景，亲和力强，符合目标受众审美
 - 描述要具体、可视化，能让图片生成模型准确还原
 - 穿搭要实际、不过于夸张，适合日常 vlog 风格
+- **场景规则（核心）**：
+  - 如果用户描述中包含场景信息（如"在浴室""客厅里"），直接使用
+  - 如果用户没有提供场景描述，**自动补充一个合适的室内家居场景**（优先：客厅、卧室、书房、浴室等）
+  - 场景要符合产品使用场景（如护肤品 → 浴室/卧室，书籍 → 书房/客厅）
+  - 强调 vlog 风格：手机拍摄的真实质感，自然光（非影棚专业灯光），明亮温暖的环境
+  - 场景不宜太大太空旷，要有家居生活感
 
 ## Reference
 
 输入示例："20 多岁亚洲女生，短发，邻家感，日常穿搭"
-输出：name="邻家短发女生", appearance="20-25岁亚洲女性，短发及肩..."
+输出：
+- name="邻家短发女生"
+- appearance="20-25岁亚洲女性，短发及肩..."
+- scene_context="客厅，背景是米色布艺沙发和绿植，夜晚暖色灯光，明亮温馨的环境"
 
 ## 输出格式
 严格按照 JSON Schema 输出。
 """
 
-ADA_MODEL_IMAGE_PROMPT = """请根据以下人物设定生成造型图：
+ADA_MODEL_IMAGE_PROMPT = """请根据以下人物设定生成一张「人在场景中的半身近景」照片：
 
 人物描述：{full_description}
 外貌：{appearance}
 穿搭：{outfits}
+场景：{scene_context}
 
 要求：
-- 生成该人物的半身正面照
-- 真人写实风格，像手机拍摄的自然照片
-- 表情自然亲和，适合 vlog 出镜
-- 光线明亮柔和，背景干净
-- 展示穿搭和整体气质
+- 半身近景（胸部以上），人物面对镜头，表情自然亲和
+- 人物必须处于场景中，背景展示真实的家居环境
+- **手机拍摄的真实质感**，像用手机自拍或他拍的 vlog 画面
+- 自然光为主（非影棚专业灯光），环境明亮温暖
+- 真人写实风格，不要过度美颜/滤镜
+- 这张图同时用于：UI 缩略图、首帧参考、分镜参考（一图多用）
+- 提示词风格参考：半身近景、中国女性、25岁、长发、素颜、面对镜头、客厅，背景是沙发、夜晚自然光、明亮的环境、手机拍摄的真实质感
 """
-
-# v7: 双图体系 — 头像（面部特写）
-ADA_MODEL_AVATAR_PROMPT = """请根据以下人物设定生成一张面部特写头像：
-
-人物描述：{full_description}
-外貌：{appearance}
-
-要求：
-- 面部特写，从肩部以上
-- 真人写实风格，像手机自拍
-- 表情自然亲和，适合 vlog 博主形象
-- 光线明亮柔和，背景简洁
-- 适合用作小尺寸头像缩略图
-"""
-
-# v7: 双图体系 — 上半身三视图（正面/左侧/右侧）
-ADA_MODEL_BODY_THREE_VIEW_PROMPT = """请根据以下人物设定生成一张上半身三视图：
-
-人物描述：{full_description}
-外貌：{appearance}
-穿搭：{outfits}
-
-要求：
-- 在一张图中展示人物的正面、左侧面、右侧面三个角度
-- 上半身（腰部以上），三个视角水平排列
-- 真人写实风格
-- 展示发型、五官、穿搭等细节
-- 背景纯白，光线均匀
-- 适合让视频制作 AI 理解人物的完整形象
-"""
-
 
 def build_model_analysis_prompt(model_description: str) -> str:
-    """构建人物分析的用户提示词"""
-    return f"""请根据以下描述拓展完整的 vlog 模特人设：
+    """构建人物分析的用户提示词（v10：包含场景信息分析）"""
+    return f"""请根据以下描述拓展完整的 vlog 模特人设（包含拍摄场景信息）：
 
 【用户描述】
 {model_description}
 
-请输出完整的人设档案 JSON。如果用户提供了参考图，请以参考图的外貌为基准进行描述。
+请输出完整的人设档案 JSON，包含 scene_context 场景信息字段。
+如果用户提供了参考图，请以参考图的外貌为基准进行描述。
+如果用户描述中没有提及拍摄场景，请自动补充一个合适的室内家居场景。
 """
 
 
 def get_model_response_schema() -> dict:
-    """人物档案 JSON Schema"""
+    """人物档案 JSON Schema（v10：含 scene_context）"""
     return {
         "type": "OBJECT",
         "properties": {
@@ -389,108 +373,38 @@ def get_model_response_schema() -> dict:
             "appearance": {"type": "STRING", "description": "外貌描述"},
             "personality": {"type": "STRING", "description": "气质性格"},
             "outfits": {"type": "STRING", "description": "穿搭描述"},
-            "full_description": {"type": "STRING", "description": "完整人设描述"},
+            "scene_context": {
+                "type": "STRING",
+                "description": "场景信息：拍摄环境、光线、氛围等（如'客厅，背景是沙发，夜晚自然光，明亮的环境'）",
+            },
+            "full_description": {"type": "STRING", "description": "完整人设描述（必须包含场景信息）"},
         },
-        "required": ["name", "appearance", "personality", "outfits", "full_description"],
-    }
-
-
-# ========== 场景模式 ==========
-
-ADA_SCENE_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当前工作在**场景模式**。
-
-## Task
-
-根据用户提供的参考图或描述，丰富出完整的 vlog 拍摄场景档案。
-
-## Context
-
-输出字段：
-1. name：场景名称（简短，如"白色简约浴室"、"ins 风卧室"）
-2. environment：环境描述（空间布局、主要家具/物品、颜色、材质）
-3. lighting：光线描述（自然光/灯光、方向、强度、色温）
-4. mood：氛围描述（如"干净清爽"、"温馨慵懒"、"专业高级"）
-5. full_description：完整的场景描述（150-250字），适合作为图片生成的详细提示词
-
-规则：
-- 场景要适合 vlog 自拍拍摄，空间不宜太大
-- 优先室内场景（浴室、卧室、客厅、书房、厨房等）
-- 描述要具体、可视化，包含关键视觉元素
-- 光线描述要利于画面美观
-
-## Reference
-
-输入示例："明亮的浴室，白色系，有镜子"
-输出：name="白色简约浴室", environment="白色大理石瓷砖，圆形背光镜..."
-
-## 输出格式
-严格按照 JSON Schema 输出。
-"""
-
-ADA_SCENE_IMAGE_PROMPT = """请根据以下场景设定生成场景图：
-
-场景描述：{full_description}
-环境：{environment}
-光线：{lighting}
-氛围：{mood}
-
-要求：
-- 生成该场景的室内全景
-- 真人写实风格，像手机拍摄的实景照片
-- 适合作为 vlog 拍摄背景
-- 光线自然美观
-- 无人出镜，仅展示空间环境
-"""
-
-
-def build_scene_analysis_prompt(scene_description: str) -> str:
-    """构建场景分析的用户提示词"""
-    return f"""请根据以下描述丰富完整的 vlog 拍摄场景：
-
-【用户描述】
-{scene_description}
-
-请输出完整的场景档案 JSON。如果用户提供了参考图，请以参考图的场景为基准进行描述。
-"""
-
-
-def get_scene_response_schema() -> dict:
-    """场景档案 JSON Schema"""
-    return {
-        "type": "OBJECT",
-        "properties": {
-            "name": {"type": "STRING", "description": "场景名称"},
-            "environment": {"type": "STRING", "description": "环境描述"},
-            "lighting": {"type": "STRING", "description": "光线描述"},
-            "mood": {"type": "STRING", "description": "氛围描述"},
-            "full_description": {"type": "STRING", "description": "完整场景描述"},
-        },
-        "required": ["name", "environment", "lighting", "mood", "full_description"],
+        "required": ["name", "appearance", "personality", "outfits", "scene_context", "full_description"],
     }
 
 
 # ========== 一句话快速开始 — 拆解模式 ==========
 
-ADA_QUICKSTART_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当前工作在**一句话快速拆解模式**。
+ADA_QUICKSTART_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当前工作在**一句话快速拆解模式**（v10：场景融入人物）。
 
 ## Task
 
-用户输入了一句话描述 + 可能附带产品图片。你需要从这句话中拆解出三类素材信息：
+用户输入了一句话描述 + 可能附带产品图片。你需要从这句话中拆解出两类素材信息：
 1. **物品**（item）：要推广的产品
-2. **人物**（model）：出镜的 vlog 模特
-3. **场景**（scene）：拍摄环境
+2. **人物**（model）：出镜的 vlog 模特 + 拍摄场景（场景已融入人物描述）
 
 ## Context
 
 ### 拆解规则
-- 必须从用户的一句话中提取出物品、人物、场景三个维度的信息
+- 必须从用户的一句话中提取出物品和人物两个维度的信息
+- **场景信息融入人物描述**：model_description 中需要包含拍摄场景的描述（如"在客厅""浴室背景"等）
 - 如果用户只提到了部分维度（例如只提到产品没提到人物），你需要根据产品类型和使用场景**合理推断**缺失的维度
 - 推断要合理：化妆品搭配年轻女性 + 浴室/卧室，食品搭配美食博主 + 厨房，等等
+- 如果用户没有提到场景，自动补充一个合适的室内家居场景到 model_description 中
 
 ### 输出要求
 - item_description: 提取或推断出的产品描述，用于后续 ADA 物品分析
-- model_description: 提取或推断出的人物描述，用于后续 ADA 人物创建
-- scene_description: 提取或推断出的场景描述，用于后续 ADA 场景创建
+- model_description: 提取或推断出的人物描述 + 场景信息，用于后续 ADA 人物创建（场景会自动从中提取）
 - 每个描述都应该是一段简短的自然语言（1-2 句话），足以让后续的 ADA 各模式理解并展开
 
 ## Reference
@@ -499,15 +413,13 @@ ADA_QUICKSTART_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA）�
 输入："帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶的 vlog"
 输出：
 - item_description: "氨基酸洗面奶，温和配方"
-- model_description: "亚洲女生，适合美妆vlog出镜，亲和自然"
-- scene_description: "浴室场景，适合洗护类产品拍摄"
+- model_description: "亚洲女生，适合美妆vlog出镜，亲和自然，在浴室场景中拍摄"
 
 ### 示例 2
 输入："拍一个推荐这本悬疑小说的视频"
 输出：
 - item_description: "悬疑小说，需要结合图片判断具体书名和内容"
-- model_description: "文艺气质的年轻人，适合书籍推荐类vlog"（推断）
-- scene_description: "温馨书房或咖啡厅，有书架和柔和灯光"（推断）
+- model_description: "文艺气质的年轻人，适合书籍推荐类vlog，在温馨书房中拍摄，有书架和柔和灯光"（推断）
 
 ## 输出格式
 严格按照 JSON Schema 输出。
@@ -515,24 +427,26 @@ ADA_QUICKSTART_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA）�
 
 
 def build_quickstart_prompt(user_sentence: str) -> str:
-    """构建一句话快速拆解的用户提示词"""
-    return f"""请从以下一句话描述中拆解出物品、人物、场景三类素材信息：
+    """构建一句话快速拆解的用户提示词（v10：场景融入人物）"""
+    return f"""请从以下一句话描述中拆解出物品和人物（含场景）两类素材信息：
 
 【用户描述】
 {user_sentence}
 
-请输出拆解结果 JSON。如果用户附带了产品图片，请结合图片信息一起分析。
+请输出拆解结果 JSON。场景信息需融入 model_description 中。如果用户附带了产品图片，请结合图片信息一起分析。
 """
 
 
 def get_quickstart_schema() -> dict:
-    """一句话拆解 JSON Schema"""
+    """一句话拆解 JSON Schema（v10：无独立 scene_description，场景融入 model_description）"""
     return {
         "type": "OBJECT",
         "properties": {
             "item_description": {"type": "STRING", "description": "提取/推断的产品描述"},
-            "model_description": {"type": "STRING", "description": "提取/推断的人物描述"},
-            "scene_description": {"type": "STRING", "description": "提取/推断的场景描述"},
+            "model_description": {
+                "type": "STRING",
+                "description": "提取/推断的人物描述（需包含场景信息，如'亚洲女生，在客厅中拍摄'）",
+            },
         },
-        "required": ["item_description", "model_description", "scene_description"],
+        "required": ["item_description", "model_description"],
     }

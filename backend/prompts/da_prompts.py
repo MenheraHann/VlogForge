@@ -8,7 +8,7 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 
 ## 你的任务
 
-根据提供的素材信息（物品、人物、场景）和用户要求，生成一份完整的 vlog 带货视频脚本，包括：
+根据提供的素材信息（物品、人物（含拍摄场景））和用户要求，生成一份完整的 vlog 带货视频脚本，包括：
 1. 视频标题（吸引点击，口语化）
 2. 声音锚定描述（voice_anchor）：详细的声音特征描述，用于所有视频片段
 3. 风格指南（人物、场景、视觉风格、光线的统一描述）
@@ -26,7 +26,7 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 ### 帧提示词要求
 - 每个帧提示词都是独立的图片生成提示词，必须自包含（不能写"同上"或"同前"）
 - 包含：人物外貌、穿着、表情、动作、场景、光线、画面构图
-- 风格指南中的人物/场景描述必须融入每个帧提示词中，保证画面一致
+- 风格指南中的人物描述和人物素材中的场景信息必须融入每个帧提示词中，保证画面一致
 - 标记 needs_product=true 的分段，帧提示词中要自然融入产品描述
 
 ### 声音锚定描述（voice_anchor）
@@ -58,7 +58,7 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 ### 自检评分（self_check）
 - person_match：脚本中人物描述与素材信息的匹配程度（1-5）
 - product_accuracy：产品信息、使用方式、卖点的表达准确度（1-5）
-- scene_consistency：场景描述在各分段中的一致性（1-5）
+- scene_consistency：场景描述与人物素材中 scene_context 的一致性（1-5）
 - overall_quality：整体脚本质量（创意、自然度、完整性）（1-5）
 - issues：如果有任何问题，写在这里；没有问题留空字符串
 
@@ -76,16 +76,14 @@ def build_da_script_prompt(
     model_appearance: str,
     model_personality: str,
     model_outfits: str,
-    scene_environment: str,
-    scene_lighting: str,
-    scene_mood: str,
+    scene_context: str,
     platform: str,
     duration: str,
     segment_count: int,
     aspect_ratio: str,
     extra_requirements: str = "",
 ) -> str:
-    """构建 DA 脚本生成的用户提示词（基于素材档案，v4 标准路径）"""
+    """构建 DA 脚本生成的用户提示词（基于素材档案，v10 标准路径：场景从人物素材获取）"""
 
     platform_names = {
         "douyin": "抖音",
@@ -106,15 +104,11 @@ def build_da_script_prompt(
 - 核心卖点：{item_selling_point}
 - 详细描述：{item_description}
 
-【人物素材】
+【人物素材（含拍摄场景）】
 - 外貌：{model_appearance}
 - 气质：{model_personality}
 - 穿搭：{model_outfits}
-
-【场景素材】
-- 环境：{scene_environment}
-- 光线：{scene_lighting}
-- 氛围：{scene_mood}
+- 拍摄场景：{scene_context}
 
 【视频参数】
 - 目标平台：{platform_name}
@@ -128,7 +122,7 @@ def build_da_script_prompt(
 - 帧链条：分段 N 的 frame_end_prompt 必须和分段 N+1 的 frame_start_prompt 完全一致
 - 每段旁白控制在 3~4 秒（中文 30~45 字），留 2 秒给视觉过渡
 - 人物描述必须严格匹配人物素材的外貌和穿搭
-- 场景描述必须严格匹配场景素材的环境和光线
+- 场景描述必须严格匹配人物素材中的拍摄场景信息
 - 最后填写 self_check 自检评分，诚实评估自己的输出质量
 """
 

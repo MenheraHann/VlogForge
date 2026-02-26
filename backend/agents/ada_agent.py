@@ -1,7 +1,7 @@
 """
 ADA Agent - 素材设计师（Asset Designer Agent）
-负责：通过 asset_type 切换模式，处理物品/人物/场景的分析与生图
-v5 架构：智能问卷两步流程（analyze → confirm）+ P0/P1/P2 卖点优先级
+负责：通过 asset_type 切换模式，处理物品/人物（含场景）的分析与生图
+v10 架构：场景融入人物，人物生成一张 portrait_image（人在场景中的半身近景）
 """
 
 import json
@@ -13,7 +13,7 @@ from google.genai import types
 
 from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR
 from backend.models import (
-    AssetType, AssetStatus, ItemAsset, ModelAsset, SceneAsset,
+    AssetType, AssetStatus, ItemAsset, ModelAsset,
     QuestionnaireStatus, QuestionnaireField,
 )
 from backend.tools.image_gen import (
@@ -28,19 +28,13 @@ from backend.prompts.ada_prompts import (
     ADA_ITEM_THREE_VIEW_PROMPT,
     ADA_MODEL_SYSTEM_PROMPT,
     ADA_MODEL_IMAGE_PROMPT,
-    ADA_MODEL_AVATAR_PROMPT,
-    ADA_MODEL_BODY_THREE_VIEW_PROMPT,
-    ADA_SCENE_SYSTEM_PROMPT,
-    ADA_SCENE_IMAGE_PROMPT,
     ADA_QUICKSTART_SYSTEM_PROMPT,
     build_item_analyze_prompt,
     build_item_confirm_prompt,
     get_item_analyze_schema,
     get_item_confirm_schema,
     build_model_analysis_prompt,
-    build_scene_analysis_prompt,
     get_model_response_schema,
-    get_scene_response_schema,
     build_quickstart_prompt,
     get_quickstart_schema,
 )
@@ -322,12 +316,12 @@ async def create_model_asset(
     num_looks: int = 3,
 ) -> tuple[ModelAsset, list[str]]:
     """
-    创建人物素材，生成多套造型供用户选择。
+    创建人物素材（v10：含场景），生成多套「人在场景中的半身近景」方案供用户选择。
 
     返回:
-        (ModelAsset, look_paths): 人设档案 + 造型图路径列表
+        (ModelAsset, look_paths): 人设档案 + 方案图路径列表
     """
-    logger.info(f"[ADA] 人物模式: id={asset_id}, desc={description[:50]}...")
+    logger.info(f"[ADA] 人物模式(含场景): id={asset_id}, desc={description[:50]}...")
 
     user_prompt = build_model_analysis_prompt(description)
     data = await _text_analysis(
@@ -337,7 +331,7 @@ async def create_model_asset(
         input_images=images,
     )
 
-    logger.info(f"[ADA] 人设分析完成: {data.get('name')}")
+    logger.info(f"[ADA] 人设分析完成: {data.get('name')}, 场景={data.get('scene_context', '')[:30]}")
 
     # 保存参考图
     ref_paths = []
@@ -349,23 +343,25 @@ async def create_model_asset(
             save_image(img_bytes, path)
             ref_paths.append(path)
 
-    # 生成多套造型图
+    # v10: 生成多套「人在场景中的半身近景」方案图
+    scene_context = data.get("scene_context", "室内家居场景，自然光，明亮温暖的环境")
     look_paths = []
     for i in range(num_looks):
         image_prompt = ADA_MODEL_IMAGE_PROMPT.format(
             full_description=data["full_description"],
             appearance=data["appearance"],
             outfits=data["outfits"],
+            scene_context=scene_context,
         )
-        image_prompt += f"\n\n这是造型方案 {chr(65 + i)}，请生成有所区别的穿搭和姿态。"
+        image_prompt += f"\n\n这是方案 {chr(65 + i)}，请在保持人物一致的前提下，提供略有区别的姿态和表情。"
         try:
             img_bytes = await text_to_image(image_prompt)
             path = os.path.join(asset_dir, f"look_{chr(97 + i)}.png")
             save_image(img_bytes, path)
             look_paths.append(path)
-            logger.info(f"[ADA] 造型 {chr(65 + i)} 已生成")
+            logger.info(f"[ADA] 方案 {chr(65 + i)} 已生成（人在场景中的半身近景）")
         except Exception as e:
-            logger.warning(f"[ADA] 造型 {chr(65 + i)} 生成失败: {e}")
+            logger.warning(f"[ADA] 方案 {chr(65 + i)} 生成失败: {e}")
 
     asset = ModelAsset(
         id=asset_id,
@@ -373,6 +369,7 @@ async def create_model_asset(
         appearance=data["appearance"],
         personality=data["personality"],
         outfits=data["outfits"],
+        scene_context=scene_context,
         reference_images=ref_paths,
         selected_look=None,
         full_description=data["full_description"],
@@ -381,134 +378,43 @@ async def create_model_asset(
     return asset, look_paths
 
 
-# ========== 人物：选择造型后生成头像 + 上半身三视图（v7） ==========
+# ========== 人物：选择方案后确认 portrait_image（v10） ==========
 
-async def generate_model_images(asset: ModelAsset) -> ModelAsset:
+async def confirm_model_selection(asset: ModelAsset) -> ModelAsset:
     """
-    用户选定造型后，生成头像 + 上半身三视图。
-    调用后将 status 更新为 confirmed。
+    v10: 用户选定方案后，将选中的方案图设为 portrait_image，直接确认。
+    选中的图即为 portrait_image（一图多用：UI 缩略图 + 首帧参考 + 分镜参考）。
+    不再需要额外生成头像和三视图。
     """
-    logger.info(f"[ADA] 人物图片生成: id={asset.id}, look={asset.selected_look}")
+    logger.info(f"[ADA] 人物方案确认: id={asset.id}, selected_look={asset.selected_look}")
 
-    asset_dir = os.path.join(ASSETS_DIR, asset.id)
-    os.makedirs(asset_dir, exist_ok=True)
-
-    # ① 头像（面部特写，UI 展示）
-    try:
-        prompt = ADA_MODEL_AVATAR_PROMPT.format(
-            full_description=asset.full_description,
-            appearance=asset.appearance,
-        )
-        img_bytes = await text_to_image(prompt)
-        path = os.path.join(asset_dir, "avatar.png")
-        save_image(img_bytes, path)
-        asset.avatar_image = path
-        logger.info(f"[ADA] 人物头像已生成: {path}")
-    except Exception as e:
-        logger.warning(f"[ADA] 人物头像生成失败: {e}")
-
-    # ② 上半身三视图（DA/VA/VGA 参考）
-    try:
-        prompt = ADA_MODEL_BODY_THREE_VIEW_PROMPT.format(
-            full_description=asset.full_description,
-            appearance=asset.appearance,
-            outfits=asset.outfits,
-        )
-        img_bytes = await text_to_image(prompt)
-        path = os.path.join(asset_dir, "body_three_view.png")
-        save_image(img_bytes, path)
-        asset.body_three_view_image = path
-        logger.info(f"[ADA] 上半身三视图已生成: {path}")
-    except Exception as e:
-        logger.warning(f"[ADA] 上半身三视图生成失败: {e}")
-
+    # v10: 选中的方案图就是 portrait_image（一图多用）
+    asset.portrait_image = asset.selected_look
     asset.status = AssetStatus.CONFIRMED
-    logger.info(f"[ADA] 人物素材已确认: {asset.name}")
+    logger.info(f"[ADA] 人物素材已确认: {asset.name}, portrait_image={asset.portrait_image}")
     return asset
 
 
-# ========== 场景素材 ==========
-
-async def create_scene_asset(
-    asset_id: str,
-    description: str,
-    images: Optional[list[bytes]] = None,
-    num_options: int = 3,
-) -> tuple[SceneAsset, list[str]]:
-    """
-    创建场景素材，生成多个方案供用户选择。
-
-    返回:
-        (SceneAsset, option_paths): 场景档案 + 场景图路径列表
-    """
-    logger.info(f"[ADA] 场景模式: id={asset_id}, desc={description[:50]}...")
-
-    user_prompt = build_scene_analysis_prompt(description)
-    data = await _text_analysis(
-        user_prompt=user_prompt,
-        system_prompt=ADA_SCENE_SYSTEM_PROMPT,
-        response_schema=get_scene_response_schema(),
-        input_images=images,
-    )
-
-    logger.info(f"[ADA] 场景分析完成: {data.get('name')}")
-
-    # 保存参考图
-    ref_paths = []
-    asset_dir = os.path.join(ASSETS_DIR, asset_id)
-    os.makedirs(asset_dir, exist_ok=True)
-    if images:
-        for i, img_bytes in enumerate(images):
-            path = os.path.join(asset_dir, f"reference_{i}.png")
-            save_image(img_bytes, path)
-            ref_paths.append(path)
-
-    # 生成多个场景图
-    option_paths = []
-    for i in range(num_options):
-        image_prompt = ADA_SCENE_IMAGE_PROMPT.format(
-            full_description=data["full_description"],
-            environment=data["environment"],
-            lighting=data["lighting"],
-            mood=data["mood"],
-        )
-        image_prompt += f"\n\n这是场景方案 {chr(65 + i)}，请在保持整体风格的前提下提供不同的布局变化。"
-        try:
-            img_bytes = await text_to_image(image_prompt)
-            path = os.path.join(asset_dir, f"scene_{chr(97 + i)}.png")
-            save_image(img_bytes, path)
-            option_paths.append(path)
-            logger.info(f"[ADA] 场景方案 {chr(65 + i)} 已生成")
-        except Exception as e:
-            logger.warning(f"[ADA] 场景方案 {chr(65 + i)} 生成失败: {e}")
-
-    asset = SceneAsset(
-        id=asset_id,
-        name=data["name"],
-        environment=data["environment"],
-        lighting=data["lighting"],
-        mood=data["mood"],
-        reference_images=ref_paths,
-        selected_scene=None,
-        full_description=data["full_description"],
-    )
-
-    return asset, option_paths
+# 兼容旧版调用名（main.py 中可能引用 generate_model_images）
+async def generate_model_images(asset: ModelAsset) -> ModelAsset:
+    """兼容旧版：v10 中直接调用 confirm_model_selection"""
+    return await confirm_model_selection(asset)
 
 
-# ========== 一句话快速开始：拆解一句话为物品+人物+场景描述 ==========
+# ========== 一句话快速开始：拆解一句话为物品+人物（含场景）描述 ==========
 
 async def quickstart_parse(
     sentence: str,
     images: Optional[list[bytes]] = None,
 ) -> dict:
     """
-    解析一句话描述，拆解为物品/人物/场景三类素材描述。
+    v10: 解析一句话描述，拆解为物品和人物（含场景）两类素材描述。
+    场景信息已融入 model_description，不再有独立的 scene_description。
 
     返回:
-        {"item_description": "...", "model_description": "...", "scene_description": "..."}
+        {"item_description": "...", "model_description": "..."}
     """
-    logger.info(f"[ADA] 一句话拆解: {sentence[:80]}...")
+    logger.info(f"[ADA] 一句话拆解(v10): {sentence[:80]}...")
 
     user_prompt = build_quickstart_prompt(sentence)
     data = await _text_analysis(
@@ -520,8 +426,7 @@ async def quickstart_parse(
 
     logger.info(
         f"[ADA] 拆解完成: item={data.get('item_description', '')[:30]}, "
-        f"model={data.get('model_description', '')[:30]}, "
-        f"scene={data.get('scene_description', '')[:30]}"
+        f"model(含场景)={data.get('model_description', '')[:30]}"
     )
 
     return data

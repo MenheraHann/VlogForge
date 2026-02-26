@@ -40,7 +40,6 @@ class AssetType(str, Enum):
     """素材类型"""
     ITEM = "item"       # 物品
     MODEL = "model"     # 人物
-    SCENE = "scene"     # 场景
 
 
 class AssetStatus(str, Enum):
@@ -116,7 +115,7 @@ class ItemAsset(BaseModel):
 
 
 class ModelAsset(BaseModel):
-    """人物素材档案（v7：双图体系 + 卡片状态）"""
+    """人物素材档案（v10：场景融入人物，单图体系 portrait_image）"""
     id: str = Field(..., description="素材 ID，如 model_001")
     name: str = Field(..., description="人物名称/标签")
     status: AssetStatus = Field(AssetStatus.PENDING, description="卡片状态: pending/confirmed")
@@ -124,36 +123,22 @@ class ModelAsset(BaseModel):
     personality: str = Field("", description="气质/性格描述")
     outfits: str = Field("", description="穿搭描述")
     reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
-    selected_look: Optional[str] = Field(None, description="用户选中的造型图路径")
 
-    # v7: 双图体系
-    avatar_image: Optional[str] = Field(None, description="头像/面部特写路径（UI 素材卡片展示）")
-    body_three_view_image: Optional[str] = Field(None, description="上半身三视图路径（正/左/右，供 DA/VA/VGA）")
+    # v10: 场景信息融入人物
+    scene_context: str = Field("", description="场景信息，如「客厅，背景是米色沙发，夜晚自然光」")
+
+    # v10: 单图体系（人在场景中的半身近景照，一图多用：UI 缩略图 + Agent 参考）
+    portrait_image: str = Field("", description="人在场景中的半身近景照路径（一图多用）")
 
     full_description: str = Field("", description="ADA 生成的完整人设描述")
-
-
-class SceneAsset(BaseModel):
-    """场景素材档案（v7：单图双用 + 卡片状态）"""
-    id: str = Field(..., description="素材 ID，如 scene_001")
-    name: str = Field(..., description="场景名称")
-    status: AssetStatus = Field(AssetStatus.PENDING, description="卡片状态: pending/confirmed")
-    environment: str = Field(..., description="环境描述")
-    lighting: str = Field("", description="光线描述")
-    mood: str = Field("", description="氛围描述")
-    reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
-    # v7: 单图双用（UI 缩略图 + Agent 参考，vlog 镜头固定）
-    selected_scene: Optional[str] = Field(None, description="选中的场景图（同时用于 UI 缩略图 + Agent 参考）")
-    full_description: str = Field("", description="ADA 生成的完整场景描述")
 
 
 # ========== 请求模型 ==========
 
 class VideoGenerateRequest(BaseModel):
-    """视频生成请求（v4：基于素材库选择）"""
+    """视频生成请求（v10：场景融入人物，不再需要 scene_id）"""
     item_id: str = Field(..., description="选中的物品素材 ID")
     model_id: str = Field(..., description="选中的人物素材 ID")
-    scene_id: str = Field(..., description="选中的场景素材 ID")
     platform: Platform = Field(..., description="目标平台")
     duration: Duration = Field(..., description="视频时长")
     extra_requirements: str = Field("", description="用户额外要求（可选）")
@@ -184,7 +169,7 @@ class ScriptSegment(BaseModel):
 class StyleGuide(BaseModel):
     """风格指南，确保画面一致性"""
     person_description: str = Field(..., description="人物外貌统一描述")
-    scene_description: str = Field(..., description="场景统一描述")
+    scene_context: str = Field(..., description="场景信息（从人物素材中获取）")
     visual_style: str = Field(..., description="整体视觉风格")
     lighting: str = Field(..., description="光线描述")
 
@@ -193,7 +178,7 @@ class SelfCheck(BaseModel):
     """DA 脚本自检评分（D6 决策）"""
     person_match: int = Field(..., ge=1, le=5, description="人物匹配度 1-5")
     product_accuracy: int = Field(..., ge=1, le=5, description="产品准确度 1-5")
-    scene_consistency: int = Field(..., ge=1, le=5, description="场景一致性 1-5")
+    scene_context_match: int = Field(..., ge=1, le=5, description="场景上下文匹配度 1-5")
     overall_quality: int = Field(..., ge=1, le=5, description="整体质量 1-5")
     issues: str = Field("", description="发现的问题（为空表示无问题）")
 

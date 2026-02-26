@@ -121,10 +121,10 @@ body {
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
 
-/* ========== 三列素材布局 ========== */
+/* ========== 两列素材布局 ========== */
 .asset-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
   margin-bottom: 2rem;
 }
@@ -214,7 +214,7 @@ body {
 .quick-gen { padding: 1.75rem; }
 
 .upload-row {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
   margin-bottom: 1rem;
 }
 .upload-col label {
@@ -501,7 +501,7 @@ body {
 /* ========== 拖拽槽位 ==========  */
 .slot-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
   margin: 1.25rem 0;
 }

@@ -4,7 +4,7 @@ VA Agent - 美术指导（Visual Agent）
 v4 架构：使用 Nano Banana img2img 链式生成
 
 工作流：
-  帧 1 = 素材图（人物造型 + 场景 + 产品）+ 帧 1 提示词 → Nano Banana
+  帧 1 = 素材图（人物半身近景照（含场景） + 产品）+ 帧 1 提示词 → Nano Banana
   帧 N = 帧 N-1 的输出图 + 帧 N 提示词 → Nano Banana
   每帧基于上一帧生成，天然保持画面一致性
 """
@@ -30,11 +30,10 @@ VA_IMG2IMG_INSTRUCTION = """你是专业的 vlog 分镜图生成助手。
 
 # 首帧生成指令（多图输入）
 VA_FIRST_FRAME_INSTRUCTION = """你是专业的 vlog 分镜图生成助手。
-基于提供的素材图片（人物造型、场景、产品），按照帧描述生成第一帧分镜图。
+基于提供的素材图片（人物半身近景照（含拍摄场景）、产品），按照帧描述生成第一帧分镜图。
 关键要求：
-- 将人物放入指定场景中
 - 人物外貌和穿着严格匹配人物素材
-- 场景环境严格匹配场景素材
+- 场景环境严格匹配人物素材中的场景
 - 如需植入产品，自然地融入画面中
 - 画面风格：真人写实、vlog 自拍风格
 """
@@ -44,7 +43,6 @@ async def generate_storyboard(
     script: ScriptOutput,
     output_dir: str,
     person_image: Optional[bytes] = None,
-    scene_image: Optional[bytes] = None,
     product_image: Optional[bytes] = None,
 ) -> list[str]:
     """
@@ -53,8 +51,7 @@ async def generate_storyboard(
     参数:
         script: DA 输出的脚本（含帧提示词）
         output_dir: 分镜图输出目录
-        person_image: 人物造型图 bytes（selected_look）
-        scene_image: 场景图 bytes（selected_scene）
+        person_image: 人物半身近景照 bytes（portrait_image，已包含拍摄场景）
         product_image: 产品图 bytes（instruction_image 或 original）
 
     返回:
@@ -69,12 +66,10 @@ async def generate_storyboard(
     # ========== 帧 1：首帧（多图输入） ==========
     first_prompt = segments[0].frame_start_prompt
 
-    # 收集所有可用的素材图作为输入
+    # 收集所有可用的素材图作为输入（person_image 即 portrait_image，已包含场景）
     input_images = []
     if person_image:
         input_images.append(person_image)
-    if scene_image:
-        input_images.append(scene_image)
     if product_image and segments[0].needs_product:
         input_images.append(product_image)
 

@@ -27,7 +27,7 @@
   <section id="view-home" class="view active">
     <div class="container-wide">
 
-      <!-- 素材库三列 -->
+      <!-- 素材库两列 -->
       <div class="asset-columns">
         <!-- 物品列 -->
         <div class="asset-column">
@@ -49,15 +49,6 @@
           <div class="column-list" id="col-models"></div>
         </div>
 
-        <!-- 场景列 -->
-        <div class="asset-column">
-          <div class="column-header">
-            <h2>&#127968; 场景</h2>
-            <span class="column-count" id="count-scenes">0</span>
-          </div>
-          <button class="btn-add" data-create="scenes">+ 添加场景</button>
-          <div class="column-list" id="col-scenes"></div>
-        </div>
       </div>
 
       <!-- 分隔线 -->
@@ -76,11 +67,11 @@
             <button class="btn-quickstart" id="btn-quickstart" type="button">
               <span class="btn-quickstart-icon">&#9889;</span> 一句话快速创建素材
             </button>
-            <span class="quickstart-hint">AI 自动拆解为物品+人物+场景，一次创建三类素材</span>
+            <span class="quickstart-hint">AI 自动拆解为物品+人物，一次创建两类素材</span>
           </div>
         </div>
 
-        <!-- 三个拖拽槽位 -->
+        <!-- 两个拖拽槽位 -->
         <div class="slot-row">
           <!-- 物品槽位（必填） -->
           <div class="slot" id="slot-item" data-slot="item">
@@ -104,16 +95,6 @@
             <button class="slot-clear" id="slot-model-clear" style="display:none;">&#10005; 清空</button>
           </div>
 
-          <!-- 场景槽位（可选） -->
-          <div class="slot" id="slot-scene" data-slot="scene">
-            <div class="slot-header">场景 <span class="optional">可选</span></div>
-            <div class="slot-body slot-empty" id="slot-scene-body">
-              <span class="slot-icon">&#127968;</span>
-              <span class="slot-hint">拖入素材 或 点击上传</span>
-              <input type="file" class="slot-file-input" accept="image/*" hidden>
-            </div>
-            <button class="slot-clear" id="slot-scene-clear" style="display:none;">&#10005; 清空</button>
-          </div>
         </div>
 
         <!-- 参数配置 -->
