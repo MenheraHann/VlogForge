@@ -97,11 +97,27 @@ class AssetManager:
                     f"[AssetManager] 人物 {asset_id} ({model.name}) "
                     f"generating → confirmed（portrait_image 已存在，自动恢复）"
                 )
-            elif model.look_options:
-                # 有方案图但没选，需要用户手动操作，不自动修复
-                logger.warning(
+                continue
+
+            # 磁盘扫描：look_options 为空但目录里有 look_*.png，自动填充
+            if not model.look_options:
+                import glob
+                model_dir = os.path.join("assets", asset_id)
+                look_files = sorted(glob.glob(os.path.join(model_dir, "look_*.png")))
+                if look_files:
+                    model.look_options = look_files
+                    logger.info(
+                        f"[AssetManager] 人物 {asset_id} ({model.name}) "
+                        f"从磁盘恢复 {len(look_files)} 个方案图: {look_files}"
+                    )
+
+            if model.look_options:
+                # 有方案图但没选 → pending，等用户在前端选择
+                model.status = AssetStatus.PENDING
+                recovered_count += 1
+                logger.info(
                     f"[AssetManager] 人物 {asset_id} ({model.name}) "
-                    f"仍为 generating 状态，有 {len(model.look_options)} 个方案图待选择"
+                    f"generating → pending（{len(model.look_options)} 个方案图待选择）"
                 )
             else:
                 logger.warning(

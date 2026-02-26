@@ -107,8 +107,8 @@ async def _generate_model_looks(
             existing.reference_images = asset.reference_images
             existing.look_options = asset.look_options
             existing.full_description = asset.full_description
-            # 状态仍为 generating（等待用户选择造型方案）
-            existing.status = AssetStatus.GENERATING
+            # 造型图就绪 → pending，等待用户在前端选择方案
+            existing.status = AssetStatus.PENDING
             asset_manager.save_model(existing)
             logger.info(
                 f"[Model] {model_id} 造型方案生成完成，"
@@ -283,6 +283,7 @@ async def create_model(
     return {
         "status": "ok",
         "asset_id": asset_id,
+        "asset": model.model_dump(),
         "status_detail": "generating",
         "message": "人物正在创建中，请稍候",
     }

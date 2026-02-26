@@ -101,6 +101,18 @@ async def generate_storyboard(
             "frame_num": i + 2,
         })
 
+    # 防守性检查：重复帧告警
+    seen_prompts = {}
+    for spec in frame_specs:
+        p = spec["prompt"]
+        if p in seen_prompts:
+            logger.warning(
+                f"[VA] ⚠️ 重复帧提示词: 帧 {spec['frame_num']} 与帧 {seen_prompts[p]} 相同，"
+                f"生成的图片可能一模一样"
+            )
+        else:
+            seen_prompts[p] = spec["frame_num"]
+
     total_frames = len(frame_specs)
     logger.info(
         f"[VA] 全并行模式: {len(segments)} 段 → {total_frames} 帧, "

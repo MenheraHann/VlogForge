@@ -167,9 +167,11 @@ def _build_response_schema() -> dict:
 def _validate_frame_chain(script: ScriptOutput) -> list[str]:
     """
     验证帧链条连贯性：分段 N 的 frame_end_prompt 必须等于分段 N+1 的 frame_start_prompt。
+    同时验证关键帧唯一性：N+1 个关键帧不能有重复。
     返回问题列表，空列表表示全部通过。
     """
     issues = []
+    # 1. 帧链条连贯性
     for i in range(len(script.segments) - 1):
         current = script.segments[i]
         next_seg = script.segments[i + 1]
@@ -177,6 +179,20 @@ def _validate_frame_chain(script: ScriptOutput) -> list[str]:
             issues.append(
                 f"帧链断裂：分段 {current.segment_id} 尾帧 != 分段 {next_seg.segment_id} 首帧"
             )
+
+    # 2. 关键帧唯一性（首段首帧 + 各段尾帧 = N+1 帧）
+    keyframes = [script.segments[0].frame_start_prompt]
+    for seg in script.segments:
+        keyframes.append(seg.frame_end_prompt)
+    seen = {}
+    for i, prompt in enumerate(keyframes):
+        if prompt in seen:
+            issues.append(
+                f"关键帧重复：帧 {i + 1} 与帧 {seen[prompt] + 1} 的提示词完全相同"
+            )
+        else:
+            seen[prompt] = i
+
     return issues
 
 
@@ -262,12 +278,14 @@ async def generate_script(
                     f"[DA] 分段数不匹配: 期望 {segment_count}, 实际 {len(script.segments)}"
                 )
 
-            # 验证帧链条
+            # 验证帧链条 + 帧唯一性（硬校验，不通过则重试）
             chain_issues = _validate_frame_chain(script)
             if chain_issues:
                 for issue in chain_issues:
                     logger.warning(f"[DA] {issue}")
-                logger.info("[DA] 帧链有断裂，但不阻断流程（VA 会逐帧生成）")
+                raise ValueError(
+                    f"[DA] 脚本帧验证不通过（{len(chain_issues)} 个问题），触发重试"
+                )
 
             logger.info(
                 f"[DA] 脚本生成完成: 标题=「{script.title}」, "

@@ -94,7 +94,9 @@ async def generate_video_segment(
     # 下载生成的视频
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     for video in operation.result.generated_videos:
-        client.files.download(file=video.video, download_path=output_path)
+        video_bytes = client.files.download(file=video.video)
+        with open(output_path, "wb") as f:
+            f.write(video_bytes)
         logger.info(f"[VideoGen] 视频已保存: {output_path}")
         return output_path
 
@@ -153,7 +155,9 @@ async def generate_video_from_first_frame(
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     for video in operation.result.generated_videos:
-        client.files.download(file=video.video, download_path=output_path)
+        video_bytes = client.files.download(file=video.video)
+        with open(output_path, "wb") as f:
+            f.write(video_bytes)
         logger.info(f"[VideoGen] 视频已保存: {output_path}")
         return output_path
 
@@ -216,7 +220,9 @@ async def extend_video(
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     for video in operation.result.generated_videos:
-        client.files.download(file=video.video, download_path=output_path)
+        video_bytes = client.files.download(file=video.video)
+        with open(output_path, "wb") as f:
+            f.write(video_bytes)
         logger.info(f"[VideoGen] 延长视频已保存: {output_path}")
         return output_path
 

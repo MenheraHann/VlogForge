@@ -23,6 +23,12 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 - 第 1 段的 frame_start_prompt 是整个视频的第一帧
 - 最后一段的 frame_end_prompt 是整个视频的最后一帧
 
+### 关键帧唯一性（必须遵守）
+- N 个分段 → 产生 N+1 个关键帧（首段首帧 + 各段尾帧）
+- **每个关键帧的提示词必须在视觉上有明显区别**，禁止任何两帧描述相同或高度相似
+- 即使人物和场景不变，每帧也必须通过不同的动作、表情、构图、道具位置来体现差异
+- 错误示例：帧 1 "女孩坐在沙发上微笑" 与帧 3 "女孩坐在沙发上微笑" → 禁止重复
+
 ### 帧提示词要求
 - 每个帧提示词都是独立的图片生成提示词，必须自包含（不能写"同上"或"同前"）
 - 包含：人物外貌、穿着、表情、动作、场景、光线、画面构图
@@ -114,12 +120,13 @@ def build_da_script_prompt(
 - 目标平台：{platform_name}
 - 画面比例：{aspect_ratio}
 - 视频时长：{duration}
-- 分段数量：{segment_count} 段（请严格生成 {segment_count} 个 segment）
+- 分段数量：{segment_count} 段（请严格生成 {segment_count} 个 segment，共 {segment_count + 1} 个互不相同的关键帧）
 {extra_block}
 【提醒】
 - segment_id 从 1 到 {segment_count}
 - 至少有 2 个分段标记 needs_product=true（开场展示 + 产品使用场景）
 - 帧链条：分段 N 的 frame_end_prompt 必须和分段 N+1 的 frame_start_prompt 完全一致
+- 关键帧唯一性：{segment_count + 1} 个关键帧中，任意两帧的提示词必须有明显视觉差异，禁止重复
 - 每段旁白控制在 3~4 秒（中文 30~45 字），留 2 秒给视觉过渡
 - 人物描述必须严格匹配人物素材的外貌和穿搭
 - 场景描述必须严格匹配人物素材中的拍摄场景信息
@@ -156,12 +163,13 @@ def build_da_script_prompt_legacy(
 - 目标平台：{platform_name}
 - 画面比例：{aspect_ratio}
 - 视频时长：{duration}
-- 分段数量：{segment_count} 段（请严格生成 {segment_count} 个 segment）
+- 分段数量：{segment_count} 段（请严格生成 {segment_count} 个 segment，共 {segment_count + 1} 个互不相同的关键帧）
 
 【提醒】
 - segment_id 从 1 到 {segment_count}
 - 至少有 2 个分段标记 needs_product=true（开场展示 + 产品使用场景）
 - 帧链条：分段 N 的 frame_end_prompt 必须和分段 N+1 的 frame_start_prompt 完全一致
+- 关键帧唯一性：{segment_count + 1} 个关键帧中，任意两帧的提示词必须有明显视觉差异，禁止重复
 - 每段旁白控制在 3~4 秒（中文 30~45 字），留 2 秒给视觉过渡
 - 最后填写 self_check 自检评分，诚实评估自己的输出质量
 """

@@ -1059,7 +1059,8 @@ async function handleSlotUpload(slotType, files) {
       if (!res.ok) throw new Error("创建失败");
       const data = await res.json();
 
-      // 自动选择第一个方案，设置 portrait_image
+      // 异步模式：后端立即返回 generating 占位，无 look_options
+      // 同步模式：后端返回完整 asset + look_options
       if (data.look_options && data.look_options.length > 0) {
         const sf = new FormData(); sf.append("look_index", 0);
         await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
@@ -1067,8 +1068,13 @@ async function handleSlotUpload(slotType, files) {
       }
 
       await refreshAssets();
-      bindSlot(slotType, data.asset);
-      showToast(`${data.asset.name} 已创建`, "success");
+      if (data.asset) {
+        bindSlot(slotType, data.asset);
+        const statusMsg = data.status_detail === "generating" ? "创建中" : "已创建";
+        showToast(`${data.asset.name} ${statusMsg}`, "success");
+      }
+      // 启动轮询，等后台生成完成后自动刷新
+      startGeneratingPollIfNeeded();
     } catch (err) {
       showToast(`创建失败: ${err.message}`, "error");
       await refreshAssets();
