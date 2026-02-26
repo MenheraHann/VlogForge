@@ -82,11 +82,11 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 
 # ========== 视频参数映射 ==========
 
-# 视频时长 → 分段数映射
+# 视频时长 → 分段数映射（6s/段，裁切后约 5~5.5s/段）
 DURATION_SEGMENT_MAP = {
-    "15s": {"segments": 3, "frames": 4},
-    "30s": {"segments": 5, "frames": 6},
-    "60s": {"segments": 10, "frames": 11},
+    "15s": {"segments": 3, "frames": 4},    # 3×5.5 ≈ 16.5s
+    "30s": {"segments": 6, "frames": 7},    # 6×5.5 ≈ 33s
+    "60s": {"segments": 11, "frames": 12},  # 11×5.5 ≈ 60.5s
 }
 
 # 平台 → 画面比例映射

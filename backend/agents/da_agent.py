@@ -1,9 +1,9 @@
 """
 DA Agent - 创意总监（Director Agent）
 负责：脚本生成 + 自检校验 + 编排 VA/VGA/FFmpeg
-v5 架构：DA 直接生成脚本（原 TA 合入），VGA 链式延长，QA 已移除
+v6 架构：DA 直接生成脚本，VGA 首尾帧并行 + 智能裁切
 
-流水线：DA(脚本+自检) → VA(链式图生图) → VGA(链式延长视频) → FFmpeg(拼接)
+流水线：DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧并行+智能裁切) → FFmpeg(拼接)
 """
 
 import json
@@ -412,14 +412,14 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] VA 完成: {len(storyboard_paths)} 帧")
 
-        # ========== 阶段 3：VGA 链式延长生成视频片段 ==========
+        # ========== 阶段 3：VGA 首尾帧并行生成视频片段 ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.VIDEOS_GENERATING,
             progress=0.40,
-            message="VGA 正在链式延长生成视频片段...",
+            message="VGA 正在首尾帧并行生成视频片段...",
         )
-        logger.info(f"[DA][Job {job_id}] 开始 VGA 链式延长视频生成")
+        logger.info(f"[DA][Job {job_id}] 开始 VGA 首尾帧并行视频生成")
 
         segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
         total_segments = len(script.segments)
@@ -465,11 +465,11 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         final_dir = os.path.join(ARTIFACTS_DIR, job_id)
         final_path = os.path.join(final_dir, "final.mp4")
 
-        # 链式延长模式下不需要裁重复帧（每段独立生成，无共享帧）
+        # 首尾帧模式：相邻片段共享一帧（上段尾帧 = 下段首帧），需裁掉重复
         await ffmpeg_tools.stitch_segments(
             segment_paths=segment_paths,
             output_path=final_path,
-            trim_overlap_frames=False,
+            trim_overlap_frames=True,
         )
 
         logger.info(f"[DA][Job {job_id}] FFmpeg 拼接完成: {final_path}")

@@ -40,6 +40,7 @@ async def generate_video_segment(
     description: str,
     output_path: str,
     aspect_ratio: str = "9:16",
+    duration_seconds: int = 6,
     generate_audio: bool = True,
 ) -> str:
     """
@@ -51,6 +52,7 @@ async def generate_video_segment(
         description: 视频描述（含动作 + 台词，Veo 据此生成语音）
         output_path: 视频输出路径
         aspect_ratio: 画面比例 (9:16 或 16:9)
+        duration_seconds: 视频时长（4/6/8），默认 6s
         generate_audio: 是否生成语音
 
     返回:
@@ -83,6 +85,7 @@ async def generate_video_segment(
         config=types.GenerateVideoConfig(
             generate_audio=generate_audio,
             aspect_ratio=aspect_ratio,
+            duration_seconds=duration_seconds,
             number_of_videos=1,
             person_generation="allow_all",
         ),

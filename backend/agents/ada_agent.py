@@ -170,7 +170,7 @@ async def analyze_item(
 async def confirm_item(
     asset: ItemAsset,
     confirmed_fields: list[dict],
-) -> ItemAsset:
+) -> tuple[ItemAsset, dict]:
     """
     用户确认问卷后，生成最终产品档案 + 产品说明图（第 2 步）。
 
@@ -179,7 +179,7 @@ async def confirm_item(
         confirmed_fields: 用户确认后的字段列表 [{key, label, value, priority}]
 
     返回:
-        更新后的 ItemAsset，questionnaire_status=completed
+        (更新后的 ItemAsset, image_results): 资产档案 + 三图生成结果
     """
     logger.info(f"[ADA] 物品确认: id={asset.id}, 字段数={len(confirmed_fields)}")
 
@@ -210,6 +210,8 @@ async def confirm_item(
     asset.questionnaire_status = QuestionnaireStatus.COMPLETED
 
     # v7: 生成三张产品图（缩略图 + 三视图 + 功能介绍图）
+    image_results = {"thumbnail": False, "three_view": False, "feature": False}
+
     if asset.size_category != "large":
         asset_dir = os.path.join(ASSETS_DIR, asset.id)
         os.makedirs(asset_dir, exist_ok=True)
@@ -223,6 +225,7 @@ async def confirm_item(
             path = os.path.join(asset_dir, "thumbnail.png")
             save_image(img_bytes, path)
             asset.thumbnail_image = path
+            image_results["thumbnail"] = True
             logger.info(f"[ADA] 缩略图已生成: {path}")
         except Exception as e:
             logger.warning(f"[ADA] 缩略图生成失败: {e}")
@@ -236,6 +239,7 @@ async def confirm_item(
             path = os.path.join(asset_dir, "three_view.png")
             save_image(img_bytes, path)
             asset.three_view_image = path
+            image_results["three_view"] = True
             logger.info(f"[ADA] 三视图已生成: {path}")
         except Exception as e:
             logger.warning(f"[ADA] 三视图生成失败: {e}")
@@ -250,14 +254,16 @@ async def confirm_item(
             path = os.path.join(asset_dir, "feature.png")
             save_image(img_bytes, path)
             asset.feature_image = path
+            image_results["feature"] = True
             logger.info(f"[ADA] 功能介绍图已生成: {path}")
         except Exception as e:
             logger.warning(f"[ADA] 功能介绍图生成失败: {e}")
 
-    # v7: 三图全部生成后，状态改为已确认
+    # v7: 状态改为已确认（即使部分图片生成失败，档案信息是完整的）
     asset.status = AssetStatus.CONFIRMED
-    logger.info(f"[ADA] 物品档案完成: {asset.name}")
-    return asset
+    success_count = sum(1 for v in image_results.values() if v)
+    logger.info(f"[ADA] 物品档案完成: {asset.name}, 图片 {success_count}/3 成功")
+    return asset, image_results
 
 
 # ========== 兼容旧版：一步完成的 create_item_asset ==========
@@ -288,7 +294,7 @@ async def create_item_asset(
         })
 
     # 第 2 步：确认
-    asset = await confirm_item(asset, auto_confirmed)
+    asset, _image_results = await confirm_item(asset, auto_confirmed)
     return asset
 
 

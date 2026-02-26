@@ -36,6 +36,13 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 - 示例："A 22-year-old Chinese woman speaking Mandarin in a soft, upbeat, vlog-style tone. She sounds like a close friend sharing a skincare tip. Slightly breathy, medium-fast pace, casual and warm."
 - 这段描述会作为前缀加到每个视频片段的 Veo prompt 中，确保跨片段声音一致
 
+### 旁白时长控制（关键）
+- 每段视频实际时长 6 秒
+- 每段旁白必须精简到 3~4 秒可自然说完的长度
+- 中文约 30~45 字，英文约 15~25 词
+- 宁可精炼也不要冗长，避免语音说不完被截断
+- 剩余 2 秒留给视觉过渡和动作表演，不需要填满对白
+
 ### Veo 描述词要求
 - veo_description 用于 Veo 视频生成，描述从首帧到尾帧之间的动态过程
 - 包含：镜头运动、人物动作、表情变化、对话内容
@@ -119,6 +126,7 @@ def build_da_script_prompt(
 - segment_id 从 1 到 {segment_count}
 - 至少有 2 个分段标记 needs_product=true（开场展示 + 产品使用场景）
 - 帧链条：分段 N 的 frame_end_prompt 必须和分段 N+1 的 frame_start_prompt 完全一致
+- 每段旁白控制在 3~4 秒（中文 30~45 字），留 2 秒给视觉过渡
 - 人物描述必须严格匹配人物素材的外貌和穿搭
 - 场景描述必须严格匹配场景素材的环境和光线
 - 最后填写 self_check 自检评分，诚实评估自己的输出质量
@@ -160,5 +168,6 @@ def build_da_script_prompt_legacy(
 - segment_id 从 1 到 {segment_count}
 - 至少有 2 个分段标记 needs_product=true（开场展示 + 产品使用场景）
 - 帧链条：分段 N 的 frame_end_prompt 必须和分段 N+1 的 frame_start_prompt 完全一致
+- 每段旁白控制在 3~4 秒（中文 30~45 字），留 2 秒给视觉过渡
 - 最后填写 self_check 自检评分，诚实评估自己的输出质量
 """

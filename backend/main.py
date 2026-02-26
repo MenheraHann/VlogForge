@@ -169,13 +169,16 @@ async def confirm_item_asset(
 
     logger.info(f"[API] 物品确认: {asset_id}, 字段数={len(fields)}")
 
-    updated_asset = await confirm_item(asset, fields)
+    updated_asset, image_results = await confirm_item(asset, fields)
     asset_manager.save_item(updated_asset)
 
+    success_count = sum(1 for v in image_results.values() if v)
     return {
         "status": "ok",
         "asset": updated_asset.model_dump(),
-        "message": "产品档案已完成",
+        "image_results": image_results,
+        "images_generated": success_count,
+        "message": f"产品档案已完成，{success_count}/3 张图片已生成",
     }
 
 

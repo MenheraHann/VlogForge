@@ -580,7 +580,7 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
     return;
   }
 
-  title.textContent = `产品信息确认 - ${asset.name}`;
+  title.textContent = `产品信息确认 — ${asset.name}`;
 
   // 存储用户的回答
   const answers = questions.map(q => ({
@@ -592,6 +592,16 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
   }));
 
   let currentIndex = 0;
+
+  // 生成进度点 HTML
+  function renderDots(index, total) {
+    let dots = '';
+    for (let i = 0; i < total; i++) {
+      const cls = i < index ? 'done' : i === index ? 'active' : '';
+      dots += `<div class="q-dot ${cls}"></div>`;
+    }
+    return dots;
+  }
 
   function renderQuestion(index) {
     const q = questions[index];
@@ -607,54 +617,62 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
     else if (currentAnswer && currentAnswer !== q.option_a && currentAnswer !== q.option_b) selectedOption = "c";
 
     body.innerHTML = `
-      <div class="q-stepper">
-        <div class="q-stepper-bar">
-          <div class="q-stepper-fill" style="width: ${((index + 1) / total) * 100}%"></div>
-        </div>
-        <div class="q-stepper-label">第 ${index + 1} / ${total} 题</div>
-      </div>
-
-      <div class="q-card ${priorityClass}">
-        <div class="q-card-header">
-          <span class="q-priority-badge">${q.priority}</span>
-          ${isOptional ? '<span class="q-optional-badge">可选</span>' : ''}
-        </div>
-        <h3 class="q-card-question">${escapeHtml(q.label)}</h3>
-
-        <div class="q-options">
-          ${q.option_a ? `
-          <div class="q-option ${selectedOption === 'a' ? 'selected' : ''}" data-choice="a">
-            <div class="q-option-label">A</div>
-            <div class="q-option-text">${escapeHtml(q.option_a)}</div>
-          </div>` : ''}
-
-          ${q.option_b ? `
-          <div class="q-option ${selectedOption === 'b' ? 'selected' : ''}" data-choice="b">
-            <div class="q-option-label">B</div>
-            <div class="q-option-text">${escapeHtml(q.option_b)}</div>
-          </div>` : ''}
-
-          <div class="q-option q-option-custom ${selectedOption === 'c' ? 'selected' : ''}" data-choice="c">
-            <div class="q-option-label">C</div>
-            <div class="q-option-text">✏️ 我来填写</div>
+      <div class="q-container">
+        <div class="q-stepper">
+          ${total <= 15 ? `<div class="q-stepper-dots">${renderDots(index, total)}</div>` : ''}
+          <div class="q-stepper-bar">
+            <div class="q-stepper-fill" style="width: ${((index + 1) / total) * 100}%"></div>
+          </div>
+          <div class="q-stepper-meta">
+            <span class="q-stepper-label">${q.priority} 级问题</span>
+            <span class="q-stepper-counter">${index + 1} / ${total}</span>
           </div>
         </div>
 
-        <div class="q-custom-input-wrap" id="q-custom-wrap" style="display:${selectedOption === 'c' ? 'block' : 'none'}">
-          <textarea class="q-custom-input" id="q-custom-input" rows="2"
-            placeholder="输入你的回答...">${selectedOption === 'c' ? escapeHtml(currentAnswer) : ''}</textarea>
-        </div>
-      </div>
+        <div class="q-card ${priorityClass}">
+          <div class="q-card-header">
+            <span class="q-priority-badge">${q.priority}</span>
+            ${isOptional
+              ? '<span class="q-optional-badge">可跳过</span>'
+              : '<span class="q-required-badge">必答</span>'}
+          </div>
+          <h3 class="q-card-question">${escapeHtml(q.label)}</h3>
 
-      <div class="q-nav">
-        <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>← 上一题</button>
-        <div class="q-nav-center">
-          ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">跳过</button>' : ''}
+          <div class="q-options">
+            ${q.option_a ? `
+            <div class="q-option ${selectedOption === 'a' ? 'selected' : ''}" data-choice="a">
+              <div class="q-option-label">A</div>
+              <div class="q-option-text">${escapeHtml(q.option_a)}</div>
+            </div>` : ''}
+
+            ${q.option_b ? `
+            <div class="q-option ${selectedOption === 'b' ? 'selected' : ''}" data-choice="b">
+              <div class="q-option-label">B</div>
+              <div class="q-option-text">${escapeHtml(q.option_b)}</div>
+            </div>` : ''}
+
+            <div class="q-option q-option-custom ${selectedOption === 'c' ? 'selected' : ''}" data-choice="c">
+              <div class="q-option-label">C</div>
+              <div class="q-option-text">我来填写</div>
+            </div>
+          </div>
+
+          <div class="q-custom-input-wrap" id="q-custom-wrap" style="display:${selectedOption === 'c' ? 'block' : 'none'}">
+            <textarea class="q-custom-input" id="q-custom-input" rows="2"
+              placeholder="输入你的回答...">${selectedOption === 'c' ? escapeHtml(currentAnswer) : ''}</textarea>
+          </div>
         </div>
-        ${index < total - 1
-          ? '<button class="q-nav-btn q-nav-next" id="q-next">下一题 →</button>'
-          : '<button class="q-nav-btn q-nav-submit" id="q-submit">确认并创建素材</button>'
-        }
+
+        <div class="q-nav">
+          <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>&#8592; 上一题</button>
+          <div class="q-nav-center">
+            ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">跳过</button>' : ''}
+          </div>
+          ${index < total - 1
+            ? '<button class="q-nav-btn q-nav-next" id="q-next">下一题 &#8594;</button>'
+            : '<button class="q-nav-btn q-nav-submit" id="q-submit">提交并生成素材</button>'
+          }
+        </div>
       </div>
     `;
 
@@ -678,7 +696,6 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
           customWrap.style.display = "block";
           const input = $("#q-custom-input");
           input.focus();
-          // 如果之前选了 A/B，清空自定义输入
           if (answers[index].source === "ai") input.value = "";
           answers[index].source = "user";
         }
@@ -758,29 +775,117 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       }
     }
 
-    // 显示提交状态
+    // 显示加载状态（带步骤提示）
     body.innerHTML = `
-      <div style="text-align:center;padding:3rem 1rem;">
+      <div class="q-loading-screen">
         <div class="q-submit-spinner"></div>
-        <p style="color:var(--text-secondary);margin-top:1rem;">正在生成产品档案和图片...</p>
+        <div class="q-loading-title">正在生成产品档案</div>
+        <div class="q-loading-desc">AI 正在整合你的回答并生成产品素材图...</div>
+        <div class="q-loading-steps">
+          <div class="q-loading-step active" id="ql-step-1">
+            <span class="q-loading-step-icon">&#9679;</span>
+            <span>整合产品信息，优化文案</span>
+          </div>
+          <div class="q-loading-step" id="ql-step-2">
+            <span class="q-loading-step-icon">&#9675;</span>
+            <span>生成缩略图（产品白底主图）</span>
+          </div>
+          <div class="q-loading-step" id="ql-step-3">
+            <span class="q-loading-step-icon">&#9675;</span>
+            <span>生成三视图（正/侧/背）</span>
+          </div>
+          <div class="q-loading-step" id="ql-step-4">
+            <span class="q-loading-step-icon">&#9675;</span>
+            <span>生成功能介绍图</span>
+          </div>
+        </div>
       </div>
     `;
+
+    // 模拟步骤进度动画（实际后端是串行生成，这里做视觉反馈）
+    let stepTimer = null;
+    let currentStep = 1;
+    function advanceLoadingStep() {
+      stepTimer = setInterval(() => {
+        currentStep++;
+        if (currentStep > 4) { clearInterval(stepTimer); return; }
+        const prev = $(`#ql-step-${currentStep - 1}`);
+        const curr = $(`#ql-step-${currentStep}`);
+        if (prev) { prev.classList.remove("active"); prev.classList.add("done"); prev.querySelector(".q-loading-step-icon").innerHTML = "&#10003;"; }
+        if (curr) { curr.classList.add("active"); curr.querySelector(".q-loading-step-icon").innerHTML = "&#9679;"; }
+      }, 6000);
+    }
+    advanceLoadingStep();
 
     try {
       const formData = new FormData();
       formData.append("confirmed_fields", JSON.stringify(confirmed));
 
       const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
+      clearInterval(stepTimer);
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
 
-      showToast("产品档案创建完成", "success");
-      modal.style.display = "none";
+      const data = await res.json();
+      const updatedAsset = data.asset;
+
+      // 显示完成画面（含生成的图片）
+      renderDoneScreen(updatedAsset);
       refreshAssets();
     } catch (err) {
+      clearInterval(stepTimer);
       showToast(`确认失败: ${err.message}`, "error");
-      // 恢复到最后一题
       renderQuestion(currentIndex);
     }
+  }
+
+  function renderDoneScreen(updatedAsset) {
+    // 构建图片展示
+    const imageFields = [
+      { field: "thumbnail_image", label: "缩略图" },
+      { field: "three_view_image", label: "三视图" },
+      { field: "feature_image", label: "功能介绍图" },
+    ];
+
+    let imagesHtml = '';
+    let imageCount = 0;
+    for (const { field, label } of imageFields) {
+      const url = getAssetImageUrl(updatedAsset, field);
+      if (url) {
+        imageCount++;
+        imagesHtml += `
+          <div class="q-done-image-card">
+            <img src="${url}" alt="${escapeHtml(label)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <div class="q-done-image-placeholder" style="display:none;">加载失败</div>
+            <div class="q-done-image-label">${escapeHtml(label)}</div>
+          </div>`;
+      } else {
+        imagesHtml += `
+          <div class="q-done-image-card">
+            <div class="q-done-image-placeholder">未生成</div>
+            <div class="q-done-image-label">${escapeHtml(label)}</div>
+          </div>`;
+      }
+    }
+
+    const imageNote = imageCount === 3
+      ? '3 张产品素材图已生成'
+      : imageCount > 0
+        ? `${imageCount}/3 张图片已生成，部分图片生成失败`
+        : '产品图片生成失败，可稍后在详情页中查看';
+
+    body.innerHTML = `
+      <div class="q-done-screen">
+        <div class="q-done-icon">&#10003;</div>
+        <div class="q-done-title">产品档案创建完成</div>
+        <div class="q-done-desc">${escapeHtml(imageNote)}</div>
+        <div class="q-done-images">${imagesHtml}</div>
+        <button class="q-done-btn" id="q-done-close">完成</button>
+      </div>
+    `;
+
+    $("#q-done-close").addEventListener("click", () => {
+      modal.style.display = "none";
+    });
   }
 
   // 渲染第一题
