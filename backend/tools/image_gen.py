@@ -1,9 +1,9 @@
 """
 图片生成工具
-封装 Gemini 原生图片生成能力（Nano Banana）
+封装 Gemini 原生图片生成能力
 支持：文生图（text2img）+ 图生图（img2img）+ 交错输出
 
-模型：gemini-2.0-flash-exp（支持 response_modalities=["IMAGE", "TEXT"]）
+模型：gemini-2.0-flash-preview-image-generation（支持 response_modalities=["IMAGE", "TEXT"]）
 用途：ADA 生成素材图 / VA 链式图生图
 """
 
@@ -25,6 +25,8 @@ def _get_client():
 
 def _extract_image_from_response(response) -> bytes:
     """从 Gemini 响应中提取第一张图片"""
+    if not response.candidates:
+        raise RuntimeError("Gemini 响应无 candidates（可能被安全过滤拦截）")
     for part in response.candidates[0].content.parts:
         if hasattr(part, "inline_data") and part.inline_data:
             if part.inline_data.mime_type.startswith("image/"):
@@ -34,6 +36,8 @@ def _extract_image_from_response(response) -> bytes:
 
 def _extract_text_from_response(response) -> str:
     """从 Gemini 响应中提取文本"""
+    if not response.candidates:
+        return ""
     texts = []
     for part in response.candidates[0].content.parts:
         if hasattr(part, "text") and part.text:
@@ -43,6 +47,8 @@ def _extract_text_from_response(response) -> str:
 
 def _extract_all_images_from_response(response) -> list[bytes]:
     """从 Gemini 响应中提取所有图片"""
+    if not response.candidates:
+        return []
     images = []
     for part in response.candidates[0].content.parts:
         if hasattr(part, "inline_data") and part.inline_data:

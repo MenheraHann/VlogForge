@@ -71,7 +71,7 @@ class QuestionnaireField(BaseModel):
 
 
 class ItemAsset(BaseModel):
-    """物品素材档案（v7：三图体系 + 卡片状态）"""
+    """物品素材档案（v9：两图 + 使用说明 + 卡片状态）"""
     id: str = Field(..., description="素材 ID，如 item_001")
     name: str = Field(..., description="物品名称")
     category: str = Field(..., description="物品类别，如面部护肤")
@@ -103,15 +103,16 @@ class ItemAsset(BaseModel):
 
     original_images: list[str] = Field(default_factory=list, description="用户上传的原始图片路径")
 
-    # v7: 三图体系（替代旧 instruction_image）
-    thumbnail_image: Optional[str] = Field(None, description="缩略图路径（UI 素材卡片展示）")
-    three_view_image: Optional[str] = Field(None, description="三视图路径（正/侧/背，供 DA/VA/VGA）")
-    feature_image: Optional[str] = Field(None, description="功能介绍图路径（使用方式，供 DA/VA/VGA）")
+    # v9: 两图体系（img2img 参考原图）
+    thumbnail_image: Optional[str] = Field(None, description="缩略图路径（白底电商风，UI 素材卡片展示）")
+    three_view_image: Optional[str] = Field(None, description="三视图路径（纯产品画面，正/侧/背，供 DA/VA/VGA）")
 
     # 兼容旧字段
-    instruction_image: Optional[str] = Field(None, description="[已废弃] 旧产品说明图，迁移到 thumbnail_image")
+    feature_image: Optional[str] = Field(None, description="[已废弃] 功能介绍图，已替换为 usage_guide 文字")
+    instruction_image: Optional[str] = Field(None, description="[已废弃] 旧产品说明图")
 
     full_description: str = Field("", description="ADA 生成的完整产品描述")
+    usage_guide: str = Field("", description="产品使用说明（逐步操作描述，供 DA/VA/VGA 正确编排使用动作）")
 
 
 class ModelAsset(BaseModel):

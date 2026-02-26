@@ -178,7 +178,7 @@ async def confirm_item_asset(
         "asset": updated_asset.model_dump(),
         "image_results": image_results,
         "images_generated": success_count,
-        "message": f"产品档案已完成，{success_count}/3 张图片已生成",
+        "message": f"产品档案已完成，{success_count}/2 张图片已生成",
     }
 
 

@@ -18,6 +18,7 @@ from backend.models import (
 )
 from backend.tools.image_gen import (
     text_to_image,
+    image_to_image,
     save_image,
 )
 from backend.prompts.ada_prompts import (
@@ -25,7 +26,6 @@ from backend.prompts.ada_prompts import (
     ADA_ITEM_CONFIRM_SYSTEM_PROMPT,
     ADA_ITEM_THUMBNAIL_PROMPT,
     ADA_ITEM_THREE_VIEW_PROMPT,
-    ADA_ITEM_FEATURE_PROMPT,
     ADA_MODEL_SYSTEM_PROMPT,
     ADA_MODEL_IMAGE_PROMPT,
     ADA_MODEL_AVATAR_PROMPT,
@@ -207,21 +207,32 @@ async def confirm_item(
     asset.usage = data.get("usage", "")
     asset.selling_point = data.get("selling_point", "")
     asset.full_description = data.get("full_description", asset.full_description)
+    asset.usage_guide = data.get("usage_guide", "")
     asset.questionnaire_status = QuestionnaireStatus.COMPLETED
 
-    # v7: 生成三张产品图（缩略图 + 三视图 + 功能介绍图）
-    image_results = {"thumbnail": False, "three_view": False, "feature": False}
+    logger.info(f"[ADA] usage_guide 已生成: {asset.usage_guide[:80]}...")
+
+    # v9: 生成两张产品图（img2img，以用户原始产品图为参考）
+    image_results = {"thumbnail": False, "three_view": False}
 
     if asset.size_category != "large":
         asset_dir = os.path.join(ASSETS_DIR, asset.id)
         os.makedirs(asset_dir, exist_ok=True)
 
-        # ① 缩略图（UI 展示）
+        # 读取用户上传的原始产品图片作为 img2img 输入
+        ref_images = _load_original_images(asset)
+        if not ref_images:
+            logger.warning("[ADA] 无原始产品图，降级为 text2img")
+
+        # ① 缩略图（白底电商风，UI 展示）
         try:
             prompt = ADA_ITEM_THUMBNAIL_PROMPT.format(
                 name=asset.name, full_description=asset.full_description,
             )
-            img_bytes = await text_to_image(prompt)
+            if ref_images:
+                img_bytes = await image_to_image(ref_images, prompt)
+            else:
+                img_bytes = await text_to_image(prompt)
             path = os.path.join(asset_dir, "thumbnail.png")
             save_image(img_bytes, path)
             asset.thumbnail_image = path
@@ -230,12 +241,15 @@ async def confirm_item(
         except Exception as e:
             logger.warning(f"[ADA] 缩略图生成失败: {e}")
 
-        # ② 三视图（DA/VA/VGA 参考）
+        # ② 三视图（纯产品画面，正/侧/背三角度，DA/VA/VGA 参考）
         try:
             prompt = ADA_ITEM_THREE_VIEW_PROMPT.format(
                 name=asset.name, full_description=asset.full_description,
             )
-            img_bytes = await text_to_image(prompt)
+            if ref_images:
+                img_bytes = await image_to_image(ref_images, prompt)
+            else:
+                img_bytes = await text_to_image(prompt)
             path = os.path.join(asset_dir, "three_view.png")
             save_image(img_bytes, path)
             asset.three_view_image = path
@@ -244,26 +258,27 @@ async def confirm_item(
         except Exception as e:
             logger.warning(f"[ADA] 三视图生成失败: {e}")
 
-        # ③ 功能介绍图（DA/VA/VGA 参考）
-        try:
-            prompt = ADA_ITEM_FEATURE_PROMPT.format(
-                name=asset.name, full_description=asset.full_description,
-                selling_point=asset.selling_point, usage=asset.usage,
-            )
-            img_bytes = await text_to_image(prompt)
-            path = os.path.join(asset_dir, "feature.png")
-            save_image(img_bytes, path)
-            asset.feature_image = path
-            image_results["feature"] = True
-            logger.info(f"[ADA] 功能介绍图已生成: {path}")
-        except Exception as e:
-            logger.warning(f"[ADA] 功能介绍图生成失败: {e}")
-
-    # v7: 状态改为已确认（即使部分图片生成失败，档案信息是完整的）
+    # v9: 状态改为已确认（即使部分图片生成失败，档案信息是完整的）
     asset.status = AssetStatus.CONFIRMED
     success_count = sum(1 for v in image_results.values() if v)
-    logger.info(f"[ADA] 物品档案完成: {asset.name}, 图片 {success_count}/3 成功")
+    logger.info(f"[ADA] 物品档案完成: {asset.name}, 图片 {success_count}/2 成功")
     return asset, image_results
+
+
+def _load_original_images(asset: ItemAsset) -> list[bytes]:
+    """
+    读取 asset 中保存的原始产品图片，用于 img2img 参考。
+    返回图片 bytes 列表，读取失败的跳过。
+    """
+    images = []
+    for path in (asset.original_images or []):
+        if path and os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    images.append(f.read())
+            except Exception as e:
+                logger.warning(f"[ADA] 读取原始图片失败 ({path}): {e}")
+    return images
 
 
 # ========== 兼容旧版：一步完成的 create_item_asset ==========
