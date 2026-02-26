@@ -215,26 +215,32 @@ async def generate_storyboard(
     else:
         still_failed_indices = []
 
-    # ---- 兜底：对重试仍失败的帧，降级用 text_to_image（不传素材图） ----
+    # ---- 兜底：对重试仍失败的帧，用简化 prompt 再试 img2img（保留参考图） ----
     if still_failed_indices:
         logger.warning(
-            f"[VA] {len(still_failed_indices)} 帧重试仍失败，降级 text_to_image 兜底: "
+            f"[VA] {len(still_failed_indices)} 帧重试仍失败，降级简化 prompt 兜底: "
             f"帧号={[i + 1 for i in still_failed_indices]}"
         )
         for idx in still_failed_indices:
             spec = frame_specs[idx]
             frame_num = spec["frame_num"]
-            enhanced_prompt = _build_frame_prompt(spec["prompt"], style_guide)
+            # 简化 prompt，减少复杂度但保留参考图
+            simplified_prompt = spec["prompt"]
             try:
-                # 纯文字生成，不传素材图
-                fallback_bytes = await text_to_image(
-                    prompt=enhanced_prompt,
+                # img2img 兜底，始终携带人物参考图
+                fallback_images = [person_image]
+                if product_image and spec.get("needs_product"):
+                    fallback_images.append(product_image)
+
+                fallback_bytes = await image_to_image(
+                    input_images=fallback_images,
+                    prompt=simplified_prompt,
                     system_instruction=VA_FRAME_INSTRUCTION,
                 )
                 path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
                 save_image(fallback_bytes, path)
                 ordered_paths[idx] = path
-                logger.info(f"[VA] 帧 {frame_num} text_to_image 兜底成功")
+                logger.info(f"[VA] 帧 {frame_num} 简化 prompt img2img 兜底成功")
 
                 # 更新进度
                 async with done_lock:

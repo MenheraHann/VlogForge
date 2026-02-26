@@ -107,12 +107,14 @@ async def _generate_model_looks(
             existing.reference_images = asset.reference_images
             existing.look_options = asset.look_options
             existing.full_description = asset.full_description
-            # 造型图就绪 → pending，等待用户在前端选择方案
+            # v15: 自动将 look_options[0] 设为 portrait_image，状态设为 PENDING（待确认）
+            if asset.look_options:
+                existing.portrait_image = asset.look_options[0]
             existing.status = AssetStatus.PENDING
             asset_manager.save_model(existing)
             logger.info(
-                f"[Model] {model_id} 造型方案生成完成，"
-                f"共 {len(look_paths)} 个方案"
+                f"[Model] {model_id} 造型生成完成，portrait_image 已自动设置，"
+                f"等待用户确认/重新生成/调整"
             )
         else:
             logger.error(f"[Model] {model_id} 占位模型已被删除，生成结果丢弃")
@@ -290,27 +292,184 @@ async def create_model(
 
 
 @app.post("/api/assets/model/{asset_id}/select")
-async def select_model_look(asset_id: str, look_index: int = Form(...)):
-    """选择人物方案 → 设为 portrait_image 并确认（v10：一图多用）"""
+async def select_model_look(asset_id: str):
+    """
+    v15: 确认人物形象（原 select 简化版）。
+    不再需要 look_index 参数，直接将当前 portrait_image 确认为最终形象。
+    兼容旧前端：如果传了 look_index 也不会报错（Form 参数变为可选）。
+    """
     model = asset_manager.get_model(asset_id)
     if not model:
         raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
 
-    # look_index 对应 look_a.png, look_b.png, ...
-    portrait_path = os.path.join("assets", asset_id, f"look_{chr(97 + look_index)}.png")
-    logger.info(f"[API] 人物方案已选: {asset_id} → {portrait_path}")
+    # v15: portrait_image 已在生成完成时自动设置，直接确认
+    if not model.portrait_image:
+        raise HTTPException(status_code=400, detail="尚未生成形象图，无法确认")
 
-    # v10: 选中的方案图直接设为 portrait_image（一图多用），标记 confirmed
-    model.portrait_image = portrait_path
     model.status = AssetStatus.CONFIRMED
     asset_manager.save_model(model)
-    asset_manager.update_model_portrait(asset_id, portrait_path)
+    logger.info(f"[API] 人物形象已确认: {asset_id} → {model.portrait_image}")
 
     return {
         "status": "ok",
-        "portrait_image": portrait_path,
+        "portrait_image": model.portrait_image,
         "asset_status": model.status.value,
+        "asset": model.model_dump(),
     }
+
+
+# ========== 人物：重新生成 / 调整意见（v15 新增） ==========
+
+async def _regenerate_model_task(
+    model_id: str,
+    description: str,
+    reference_images: Optional[list[bytes]],
+    asset_manager: AssetManager,
+):
+    """
+    后台异步重新生成人物造型图。
+    用已保存的 full_description（或追加了用户反馈的版本）重新生成 1 张 look 图，
+    生成完后替换旧的 look_options 和 portrait_image，状态恢复为 PENDING。
+    """
+    try:
+        logger.info(f"[Model] {model_id} 重新生成开始...")
+        asset, look_paths = await create_model_asset(
+            asset_id=model_id,
+            description=description,
+            images=reference_images,
+            num_looks=1,
+        )
+
+        existing = asset_manager.get_model(model_id)
+        if existing:
+            # 更新文本档案（可能因 description 变化而有微调）
+            existing.name = asset.name
+            existing.appearance = asset.appearance
+            existing.personality = asset.personality
+            existing.outfits = asset.outfits
+            existing.scene_context = asset.scene_context
+            existing.look_options = asset.look_options
+            existing.full_description = description  # 保留用于下次重新生成
+            # 自动将新生成的图设为 portrait_image
+            if asset.look_options:
+                existing.portrait_image = asset.look_options[0]
+            existing.status = AssetStatus.PENDING
+            asset_manager.save_model(existing)
+            logger.info(f"[Model] {model_id} 重新生成完成，等待用户确认")
+        else:
+            logger.error(f"[Model] {model_id} 模型已被删除，重新生成结果丢弃")
+
+    except Exception as e:
+        logger.error(f"[Model] {model_id} 重新生成失败: {e}", exc_info=True)
+        existing = asset_manager.get_model(model_id)
+        if existing:
+            existing.status = AssetStatus.FAILED
+            asset_manager.save_model(existing)
+
+
+@app.post("/api/assets/model/{asset_id}/regenerate")
+async def regenerate_model_look(asset_id: str):
+    """
+    v15: 重新生成人物形象。
+    用 model 已保存的 full_description 重新调用 create_model_asset(num_looks=1)，
+    生成新图替换旧的 look_options 和 portrait_image。
+    异步模式：先设 GENERATING，后台生成，前端轮询。
+    """
+    model = asset_manager.get_model(asset_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
+
+    if not model.full_description:
+        raise HTTPException(status_code=400, detail="缺少 full_description，无法重新生成")
+
+    # 设为 GENERATING，前端显示 spinner
+    model.status = AssetStatus.GENERATING
+    asset_manager.save_model(model)
+
+    # 读取参考图（如果有的话）
+    ref_images = _load_model_reference_images(model)
+
+    # 后台异步重新生成
+    asyncio.create_task(
+        _regenerate_model_task(
+            model_id=asset_id,
+            description=model.full_description,
+            reference_images=ref_images if ref_images else None,
+            asset_manager=asset_manager,
+        )
+    )
+
+    logger.info(f"[API] 人物重新生成已启动: {asset_id}")
+    return {
+        "status": "ok",
+        "asset_id": asset_id,
+        "asset": model.model_dump(),
+        "status_detail": "generating",
+        "message": "正在重新生成人物形象，请稍候",
+    }
+
+
+@app.post("/api/assets/model/{asset_id}/adjust")
+async def adjust_model_look(
+    asset_id: str,
+    feedback: str = Form(..., description="用户的调整意见"),
+):
+    """
+    v15: 根据用户反馈调整人物形象。
+    将 feedback 追加到 model 的 full_description 后面，
+    用合并后的描述重新生成 1 张 look 图。
+    异步模式：先设 GENERATING，后台生成，前端轮询。
+    """
+    model = asset_manager.get_model(asset_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
+
+    if not model.full_description:
+        raise HTTPException(status_code=400, detail="缺少 full_description，无法调整")
+
+    # 将用户反馈追加到描述中
+    merged_description = f"{model.full_description}\n\n【用户调整意见】{feedback}"
+    logger.info(f"[API] 人物调整: {asset_id}, feedback={feedback[:50]}...")
+
+    # 设为 GENERATING，前端显示 spinner
+    model.status = AssetStatus.GENERATING
+    # 立即更新 full_description（保存合并后的版本，后续重新生成也会包含反馈）
+    model.full_description = merged_description
+    asset_manager.save_model(model)
+
+    # 读取参考图（如果有的话）
+    ref_images = _load_model_reference_images(model)
+
+    # 后台异步重新生成（用合并后的描述）
+    asyncio.create_task(
+        _regenerate_model_task(
+            model_id=asset_id,
+            description=merged_description,
+            reference_images=ref_images if ref_images else None,
+            asset_manager=asset_manager,
+        )
+    )
+
+    return {
+        "status": "ok",
+        "asset_id": asset_id,
+        "asset": model.model_dump(),
+        "status_detail": "generating",
+        "message": "正在根据您的意见调整人物形象，请稍候",
+    }
+
+
+def _load_model_reference_images(model: ModelAsset) -> list[bytes]:
+    """读取人物素材的参考图片，用于重新生成时传入"""
+    images = []
+    for path in (model.reference_images or []):
+        if path and os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    images.append(f.read())
+            except Exception as e:
+                logger.warning(f"[Model] 读取参考图失败 ({path}): {e}")
+    return images
 
 
 @app.get("/api/assets")

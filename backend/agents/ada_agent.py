@@ -399,10 +399,11 @@ async def create_model_asset(
     asset_id: str,
     description: str,
     images: Optional[list[bytes]] = None,
-    num_looks: int = 3,
+    num_looks: int = 1,
 ) -> tuple[ModelAsset, list[str]]:
     """
-    创建人物素材（v10：含场景），生成多套「人在场景中的半身近景」方案供用户选择。
+    创建人物素材（v10：含场景），生成「人在场景中的半身近景」方案图。
+    v15：默认只生成 1 张，用户可确认/重新生成/调整意见。
 
     返回:
         (ModelAsset, look_paths): 人设档案 + 方案图路径列表

@@ -258,8 +258,8 @@ function createMiniCard(type, asset) {
       e.stopPropagation();
       if (type === "items" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
         openQuestionnaireModal(asset);
-      } else if (type === "models" && asset.look_options && asset.look_options.length > 0) {
-        openSelectModal("model", asset, asset.look_options);
+      } else if (type === "models" && asset.status === "pending") {
+        openModelReviewModal(asset);
       } else {
         showToast("该素材暂不支持编辑", "warning");
       }
@@ -570,8 +570,9 @@ function openCreateModal(type) {
         await refreshAssets();
         showToast(`${data.asset.name} 创建成功`, "success");
 
-        if (data.look_options) {
-          openSelectModal("model", data.asset, data.look_options);
+        // v15: 后端自动设置 portrait_image，pending 状态时用户通过审核弹窗确认
+        if (data.asset && data.asset.status === "pending") {
+          openModelReviewModal(data.asset);
         }
       } catch (err) {
         showToast(`创建失败: ${err.message}`, "error");
@@ -860,6 +861,167 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
 $("#questionnaire-close").addEventListener("click", () => { $("#questionnaire-modal").style.display = "none"; });
 $("#questionnaire-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) $("#questionnaire-modal").style.display = "none"; });
 
+// ========== 人物造型审核弹窗（v15） ==========
+
+/**
+ * 打开人物造型审核弹窗（单图审核模式）
+ * - 展示 portrait_image 大图
+ * - 确认 / 重新生成 / 输入调整意见
+ */
+function openModelReviewModal(asset) {
+  // 移除已有弹窗（如果存在）
+  let overlay = $(".model-review-overlay");
+  if (overlay) overlay.remove();
+
+  // 获取图片 URL
+  const imgPath = asset.portrait_image;
+  const imgUrl = imgPath ? `/assets/${asset.id}/${imgPath.split("/").pop()}` : "";
+
+  // 创建弹窗 DOM
+  overlay = document.createElement("div");
+  overlay.className = "modal-overlay model-review-overlay";
+  overlay.innerHTML = `
+    <div class="modal model-review-modal">
+      <div class="modal-header">
+        <h2>人物造型审核 - ${escapeHtml(asset.name)}</h2>
+        <button class="modal-close model-review-close">&times;</button>
+      </div>
+      <div class="model-review-image">
+        ${imgUrl
+          ? `<img src="${imgUrl}" alt="${escapeHtml(asset.name)} 造型图" />`
+          : `<div class="model-review-placeholder">暂无造型图</div>`
+        }
+      </div>
+      <div class="model-review-actions">
+        <button class="btn-submit model-review-confirm">&#10003; 确认</button>
+        <button class="btn-submit model-review-regenerate" style="background:rgba(255,255,255,0.08);color:var(--text-primary);">&#8635; 重新生成</button>
+      </div>
+      <div class="model-review-feedback">
+        <textarea class="model-review-textarea" placeholder="输入调整意见，例如：头发再长一点..." rows="3"></textarea>
+        <button class="btn-submit model-review-submit">提交</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // 缓存 DOM 引用
+  const confirmBtn = overlay.querySelector(".model-review-confirm");
+  const regenBtn = overlay.querySelector(".model-review-regenerate");
+  const textarea = overlay.querySelector(".model-review-textarea");
+  const submitBtn = overlay.querySelector(".model-review-submit");
+  const closeBtn = overlay.querySelector(".model-review-close");
+
+  // --- 关闭弹窗 ---
+  function closeReview() {
+    overlay.style.opacity = "0";
+    setTimeout(() => overlay.remove(), 200);
+  }
+  closeBtn.addEventListener("click", closeReview);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeReview(); });
+
+  // --- 确认按钮 ---
+  confirmBtn.addEventListener("click", async () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "确认中...";
+    try {
+      const res = await fetch(`/api/assets/model/${asset.id}/select`, { method: "POST" });
+      if (!res.ok) throw new Error("确认失败");
+      showToast("人物造型已确认", "success");
+      closeReview();
+      await refreshAssets();
+    } catch (err) {
+      showToast(`确认失败: ${err.message}`, "error");
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = "&#10003; 确认";
+    }
+  });
+
+  // --- 重新生成按钮 ---
+  regenBtn.addEventListener("click", async () => {
+    regenBtn.disabled = true;
+    regenBtn.innerHTML = '<span class="spinner-inline"></span> 重新生成中...';
+    try {
+      const res = await fetch(`/api/assets/model/${asset.id}/regenerate`, { method: "POST" });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "重新生成失败"); }
+      showToast("正在重新生成造型，请稍候...", "info");
+      closeReview();
+      await refreshAssets();
+      // 启动轮询，generating → pending 后自动弹出审核弹窗
+      startModelReviewPoll(asset.id);
+    } catch (err) {
+      showToast(`重新生成失败: ${err.message}`, "error");
+      regenBtn.disabled = false;
+      regenBtn.innerHTML = "&#8635; 重新生成";
+    }
+  });
+
+  // --- 调整意见：textarea 有文字时显示提交按钮 ---
+  textarea.addEventListener("input", () => {
+    submitBtn.classList.toggle("visible", textarea.value.trim().length > 0);
+  });
+
+  // --- 提交调整意见 ---
+  submitBtn.addEventListener("click", async () => {
+    const feedback = textarea.value.trim();
+    if (!feedback) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "提交中...";
+    try {
+      const fd = new FormData();
+      fd.append("feedback", feedback);
+      const res = await fetch(`/api/assets/model/${asset.id}/adjust`, { method: "POST", body: fd });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "提交失败"); }
+      showToast("正在根据意见调整造型，请稍候...", "info");
+      closeReview();
+      await refreshAssets();
+      // 启动轮询，generating → pending 后自动弹出审核弹窗
+      startModelReviewPoll(asset.id);
+    } catch (err) {
+      showToast(`提交失败: ${err.message}`, "error");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "提交";
+    }
+  });
+}
+
+/**
+ * 轮询等待人物从 generating 变回 pending，然后自动弹出审核弹窗
+ */
+function startModelReviewPoll(assetId) {
+  // 同时确保通用 generating 轮询也在运行
+  startGeneratingPollIfNeeded();
+
+  const pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch("/api/assets");
+      if (!res.ok) return;
+      const data = await res.json();
+      const model = (data.models || []).find(m => m.id === assetId);
+      if (!model) {
+        // 素材已删除，停止轮询
+        clearInterval(pollInterval);
+        return;
+      }
+      if (model.status === "pending") {
+        clearInterval(pollInterval);
+        // 刷新列表 UI
+        assets.items = data.items || [];
+        assets.models = data.models || [];
+        renderColumnList("items", assets.items, "#col-items");
+        renderColumnList("models", assets.models, "#col-models");
+        // 自动弹出审核弹窗
+        openModelReviewModal(model);
+      } else if (model.status === "failed") {
+        clearInterval(pollInterval);
+        showToast("人物造型生成失败，请重试", "error");
+        await refreshAssets();
+      }
+    } catch (err) {
+      console.error("[ModelReviewPoll] 轮询出错:", err);
+    }
+  }, 5000);
+}
+
 // ========== 选择方案模态框 ==========
 
 function openSelectModal(assetType, asset, options) {
@@ -1059,17 +1221,13 @@ async function handleSlotUpload(slotType, files) {
       if (!res.ok) throw new Error("创建失败");
       const data = await res.json();
 
-      // 异步模式：后端立即返回 generating 占位，无 look_options
-      // 同步模式：后端返回完整 asset + look_options
-      if (data.look_options && data.look_options.length > 0) {
-        const sf = new FormData(); sf.append("look_index", 0);
-        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
-        data.asset.portrait_image = data.look_options[0];
-      }
-
+      // v15: 后端自动设置 portrait_image，不再前端自动 select
       await refreshAssets();
       if (data.asset) {
-        bindSlot(slotType, data.asset);
+        // generating 状态不绑定槽位，等用户确认后再绑定
+        if (data.asset.status === "confirmed") {
+          bindSlot(slotType, data.asset);
+        }
         const statusMsg = data.status_detail === "generating" ? "创建中" : "已创建";
         showToast(`${data.asset.name} ${statusMsg}`, "success");
       }
@@ -1130,11 +1288,10 @@ $("#btn-quickstart").addEventListener("click", async () => {
       }
     }
 
-    // 处理人物：打开造型选择
-    if (data.assets.model && data.assets.model.look_options) {
-      // 问卷关闭后自动弹出造型选择（用 setTimeout 避免同时弹出多个模态框）
+    // 处理人物：问卷关闭后弹出审核弹窗
+    if (data.assets.model && data.assets.model.asset) {
       const modelData = data.assets.model;
-      window._pendingModelSelect = { asset: modelData.asset, options: modelData.look_options };
+      window._pendingModelReview = modelData.asset;
     }
 
     // 监听问卷模态框关闭 → 弹出人物造型选择
@@ -1150,16 +1307,20 @@ $("#btn-quickstart").addEventListener("click", async () => {
 });
 
 function setupQuickstartChain() {
-  // 监听问卷模态框关闭，弹出人物造型选择
+  // 监听问卷模态框关闭，弹出人物审核弹窗
   const qModal = $("#questionnaire-modal");
   const observer = new MutationObserver(() => {
     if (qModal.style.display === "none" || qModal.style.display === "") {
       observer.disconnect();
-      // 弹出人物造型选择
-      if (window._pendingModelSelect) {
-        const { asset, options } = window._pendingModelSelect;
-        window._pendingModelSelect = null;
-        setTimeout(() => openSelectModal("model", asset, options), 300);
+      // 弹出人物审核弹窗
+      if (window._pendingModelReview) {
+        const asset = window._pendingModelReview;
+        window._pendingModelReview = null;
+        // pending 状态：直接打开审核弹窗
+        // generating 状态：等轮询结束后再由用户手动点击编辑
+        if (asset.status === "pending") {
+          setTimeout(() => openModelReviewModal(asset), 300);
+        }
       }
     }
   });
@@ -1490,19 +1651,18 @@ $("#btn-generate").addEventListener("click", async () => {
   const extra = $("#gen-prompt").value.trim();
 
   try {
-    // 如果人物槽位为空，先自动创建
+    // 如果人物槽位为空，先自动创建并确认
     if (!slotAssets.model) {
       showToast("正在自动创建人物...", "info");
       const fd = new FormData();
       fd.append("description", extra || "适合vlog带货的亲和女生，客厅拍摄");
       const res = await fetch("/api/assets/model", { method: "POST", body: fd });
       const data = await res.json();
-      if (data.look_options && data.look_options.length > 0) {
-        const sf = new FormData(); sf.append("look_index", 0);
-        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
+      // v15: 后端自动设置 portrait_image，直接调 select 确认
+      if (data.asset && data.asset.portrait_image) {
+        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST" });
       }
       slotAssets.model = data.asset;
-      slotAssets.model.portrait_image = data.look_options?.[0] || null;
     }
 
     // 提交生成
