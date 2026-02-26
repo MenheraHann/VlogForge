@@ -1,9 +1,11 @@
 /**
- * VlogForge 前端交互逻辑 (v11)
+ * VlogForge 前端交互逻辑 (v12)
  * 统一主页：素材库两列（物品+人物） + 生成区拖拽槽位
  * 智能问卷：物品创建走 analyze → 问卷确认 → confirm
  * 素材详情：点击卡片展开详情面板
- * v11: 生成中占位卡片（骨架 shimmer + 进度文字）
+ * v12: 删除前端假占位卡片，改为基于后端 status 渲染素材卡片
+ *      generating 状态显示骨架动画，pending/confirmed 显示缩略图
+ *      generating 状态自动轮询（每5秒）直到全部完成
  */
 
 // ========== 工具 ==========
@@ -45,8 +47,14 @@ let currentScript = null;
 // 生成区槽位绑定的素材
 let slotAssets = { item: null, model: null };
 
-// v11: 生成中的占位卡片追踪 { tempId: { type, name, element, message } }
-const pendingCards = new Map();
+// v12: generating 状态轮询定时器（后端驱动状态，无需前端占位卡片）
+let generatingPollTimer = null;
+
+// ========== 渲染队列状态 ==========
+let queuePollTimer = null;        // 队列轮询定时器
+let queueCollapsed = false;       // 队列面板是否折叠
+let queueJobs = [];               // 缓存当前任务列表
+let queueApiAvailable = null;     // 标记 /api/jobs 接口是否可用（null=未知, true/false）
 
 // ========== 导航 ==========
 
@@ -74,22 +82,20 @@ async function refreshAssets() {
 
     renderColumnList("items", assets.items, "#col-items");
     renderColumnList("models", assets.models, "#col-models");
+
+    // v12: 检查是否需要启动/停止 generating 轮询
+    startGeneratingPollIfNeeded();
   } catch (err) {
     console.error("[Assets] 加载失败:", err);
   }
 }
 
+// v12: 渲染素材列表，所有卡片（含 generating 状态）均由后端数据驱动
 function renderColumnList(type, list, containerSel) {
   const container = $(containerSel);
-
-  // v11: 保留生成中的占位卡片
-  const pendingEls = Array.from(container.querySelectorAll(".asset-mini-card.generating"));
   container.innerHTML = "";
 
-  // 重新插入占位卡片
-  pendingEls.forEach((el) => container.appendChild(el));
-
-  if (list.length === 0 && pendingEls.length === 0) {
+  if (list.length === 0) {
     container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">暂无素材</div>`;
     return;
   }
@@ -100,102 +106,30 @@ function renderColumnList(type, list, containerSel) {
   });
 }
 
-// ========== v11: 生成中占位卡片 ==========
+// ========== v12: generating 状态轮询 ==========
 
 /**
- * 在素材列中插入一个生成中占位卡片
- * @param {string} type - "items" 或 "models"
- * @param {string} name - 素材名称（如产品名、"人物素材"）
- * @param {string} message - 初始进度提示文字
- * @returns {string} tempId - 用于后续更新/移除的临时ID
+ * 检查是否有 generating 状态的素材，如果有则启动轮询
+ * 每 5 秒刷新一次素材列表，直到没有 generating 状态的素材为止
  */
-function addPendingCard(type, name, message) {
-  const tempId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const containerSel = type === "items" ? "#col-items" : "#col-models";
-  const container = $(containerSel);
-
-  const card = document.createElement("div");
-  card.className = "asset-mini-card generating";
-  card.dataset.pendingId = tempId;
-  card.innerHTML = `
-    <div class="asset-generating-bar"><div class="asset-generating-bar-fill"></div></div>
-    <div class="asset-mini-card-inner">
-      <div class="asset-mini-thumb-skeleton"></div>
-      <div class="asset-mini-info">
-        <div class="asset-mini-name">${escapeHtml(name)}</div>
-        <div class="asset-mini-meta" style="color:#3b82f6;">${escapeHtml(message)}</div>
-      </div>
-    </div>
-    <div class="asset-generating-progress">
-      <span class="gen-spinner"></span>
-      <span class="gen-progress-text">${escapeHtml(message)}</span>
-    </div>
-  `;
-
-  // 移除"暂无素材"提示
-  const emptyHint = container.querySelector("div[style]");
-  if (emptyHint && emptyHint.textContent.includes("暂无素材")) emptyHint.remove();
-
-  container.prepend(card);
-
-  pendingCards.set(tempId, { type, name, element: card, message });
-  console.log(`[PendingCard] 新增: ${tempId} (${name}) → ${type}`);
-  return tempId;
-}
-
-/**
- * 更新占位卡片的进度文字
- */
-function updatePendingCard(tempId, message) {
-  const info = pendingCards.get(tempId);
-  if (!info) return;
-  const textEl = info.element.querySelector(".gen-progress-text");
-  if (textEl) textEl.textContent = message;
-  const metaEl = info.element.querySelector(".asset-mini-meta");
-  if (metaEl) metaEl.textContent = message;
-  info.message = message;
-}
-
-/**
- * 移除占位卡片（生成完成后调用）
- * 立即移除，不用延迟——防止与 refreshAssets 竞争导致空白
- */
-function removePendingCard(tempId) {
-  const info = pendingCards.get(tempId);
-  if (!info) return;
-  console.log(`[PendingCard] 移除成功: ${tempId} (${info.name})`);
-  info.element.remove();
-  pendingCards.delete(tempId);
-}
-
-/**
- * 标记占位卡片为失败状态（不自动移除，用户手动关闭）
- */
-function failPendingCard(tempId, errorMsg) {
-  const info = pendingCards.get(tempId);
-  if (!info) return;
-  console.error(`[PendingCard] 生成失败: ${tempId} (${info.name}) - ${errorMsg}`);
-  info.element.classList.remove("generating");
-  info.element.style.borderColor = "rgba(239, 68, 68, 0.3)";
-  info.element.style.pointerEvents = "auto";  // 恢复交互
-  const bar = info.element.querySelector(".asset-generating-bar");
-  if (bar) bar.remove();
-  const progressEl = info.element.querySelector(".asset-generating-progress");
-  if (progressEl) {
-    progressEl.innerHTML = `
-      <span style="color:var(--error);flex:1;">生成失败: ${escapeHtml(errorMsg)}</span>
-      <button class="btn-sm btn-danger pending-dismiss" style="pointer-events:auto;flex-shrink:0;">关闭</button>
-    `;
-    const dismissBtn = progressEl.querySelector(".pending-dismiss");
-    if (dismissBtn) {
-      dismissBtn.addEventListener("click", () => {
-        info.element.remove();
-        pendingCards.delete(tempId);
-      });
-    }
+function startGeneratingPollIfNeeded() {
+  const hasGenerating = [...assets.items, ...assets.models].some(a => a.status === "generating");
+  if (hasGenerating && !generatingPollTimer) {
+    console.log("[Poll] 检测到 generating 状态素材，启动轮询");
+    generatingPollTimer = setInterval(async () => {
+      await refreshAssets();
+      const stillGenerating = [...assets.items, ...assets.models].some(a => a.status === "generating");
+      if (!stillGenerating) {
+        console.log("[Poll] 所有素材已完成生成，停止轮询");
+        clearInterval(generatingPollTimer);
+        generatingPollTimer = null;
+      }
+    }, 5000);
+  } else if (!hasGenerating && generatingPollTimer) {
+    // 没有 generating 素材但定时器还在运行，清理之
+    clearInterval(generatingPollTimer);
+    generatingPollTimer = null;
   }
-  const metaEl = info.element.querySelector(".asset-mini-meta");
-  if (metaEl) { metaEl.textContent = "生成失败"; metaEl.style.color = "var(--error)"; }
 }
 
 function getAssetThumbUrl(asset) {
@@ -216,12 +150,35 @@ function getAssetImageUrl(asset, field) {
   return `/assets/${asset.id}/${filename}`;
 }
 
+// v12: 根据 asset.status 渲染不同 UI（generating / pending / confirmed）
 function createMiniCard(type, asset) {
   const card = document.createElement("div");
-  card.className = "asset-mini-card";
-
   const slotType = type === "items" ? "item" : "model";
+  const isGenerating = asset.status === "generating";
   const isConfirmed = asset.status === "confirmed";
+
+  // generating 状态：骨架卡片 + spinner，复用现有 CSS .generating 样式
+  if (isGenerating) {
+    card.className = "asset-mini-card generating";
+    card.innerHTML = `
+      <div class="asset-generating-bar"><div class="asset-generating-bar-fill"></div></div>
+      <div class="asset-mini-card-inner">
+        <div class="asset-mini-thumb-skeleton"></div>
+        <div class="asset-mini-info">
+          <div class="asset-mini-name">${escapeHtml(asset.name || "素材")}</div>
+          <div class="asset-mini-meta" style="color:#3b82f6;">制作中...</div>
+        </div>
+      </div>
+      <div class="asset-generating-progress">
+        <span class="gen-spinner"></span>
+        <span class="gen-progress-text">制作中...</span>
+      </div>
+    `;
+    return card;
+  }
+
+  // pending / confirmed 状态：正常渲染缩略图 + 操作按钮
+  card.className = "asset-mini-card";
 
   // v7: 只有已确认的素材可拖拽
   card.draggable = isConfirmed;
@@ -249,10 +206,13 @@ function createMiniCard(type, asset) {
   if (type === "items") meta = asset.selling_point || asset.category || "";
   else if (type === "models") meta = asset.scene_context || asset.personality || "";
 
-  // v7: 状态标签（待确认/已确认）
-  const badge = isConfirmed
-    ? `<span class="asset-mini-badge success">已确认</span>`
-    : `<span class="asset-mini-badge warning">待确认</span>`;
+  // v12: 状态标签（generating 已提前 return，这里只有 pending / confirmed）
+  let badge = "";
+  if (isConfirmed) {
+    badge = `<span class="asset-mini-badge success">已确认</span>`;
+  } else {
+    badge = `<span class="asset-mini-badge warning">待确认</span>`;
+  }
 
   // v7: 按钮根据状态不同
   let actionBtns = "";
@@ -592,37 +552,30 @@ function openCreateModal(type) {
       // 物品走智能问卷流程
       await handleItemCreate(desc, createFiles, submitBtn, labels[type]);
     } else {
-      // v11: 人物 → 立即关闭模态框，插入占位卡片，后台生成
+      // v12: 人物 → 关闭模态框，发送请求，通过 refreshAssets 渲染 generating 卡片
       const formData = new FormData();
       formData.append("description", desc);
       createFiles.forEach((f) => formData.append("images", f));
 
       closeCreateModal();
-      const modelName = desc.length > 10 ? desc.slice(0, 10) + "..." : desc || "人物素材";
-      const pendingId = addPendingCard("models", modelName, "正在设计人物形象...");
-
-      // 模拟步骤进度
-      const t1 = setTimeout(() => updatePendingCard(pendingId, "正在生成方案图片..."), 6000);
-      const t2 = setTimeout(() => updatePendingCard(pendingId, "即将完成..."), 18000);
+      showToast("人物素材创建中，请稍候...", "info");
 
       try {
         const res = await fetch("/api/assets/model", { method: "POST", body: formData });
-        clearTimeout(t1); clearTimeout(t2);
         if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "创建失败"); }
         const data = await res.json();
 
         console.log(`[ModelCreate] 成功: ${data.asset.name}`);
+        // 刷新列表，后端已保存 generating/pending 状态的素材
         await refreshAssets();
-        removePendingCard(pendingId);
         showToast(`${data.asset.name} 创建成功`, "success");
 
         if (data.look_options) {
           openSelectModal("model", data.asset, data.look_options);
         }
       } catch (err) {
-        clearTimeout(t1); clearTimeout(t2);
-        failPendingCard(pendingId, err.message);
         showToast(`创建失败: ${err.message}`, "error");
+        await refreshAssets();
       }
     }
   });
@@ -874,37 +827,28 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       }
     }
 
-    // v11: 立即关闭问卷模态框，在素材列插入占位卡片
+    // v12: 关闭问卷模态框，发送确认请求，通过 refreshAssets 渲染 generating 卡片
     modal.style.display = "none";
-    const pendingId = addPendingCard("items", asset.name || "物品素材", "正在分析产品信息...");
+    showToast("物品素材确认中，请稍候...", "info");
 
-    // 模拟步骤进度（后台串行生成）
-    const progressSteps = [
-      { delay: 5000, msg: "正在生成产品图片..." },
-      { delay: 12000, msg: "正在生成三视图..." },
-      { delay: 20000, msg: "即将完成..." },
-    ];
-    const stepTimers = progressSteps.map(({ delay, msg }) =>
-      setTimeout(() => updatePendingCard(pendingId, msg), delay)
-    );
+    // 立即刷新一次，显示后端刚创建的 generating 状态卡片
+    await refreshAssets();
 
     try {
       const formData = new FormData();
       formData.append("confirmed_fields", JSON.stringify(confirmed));
 
       const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
-      stepTimers.forEach(clearTimeout);
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
 
       const data = await res.json();
       console.log(`[ItemConfirm] 成功: ${data.asset.name}`);
-      await refreshAssets();  // 先刷新渲染真实卡片
-      removePendingCard(pendingId);  // 再移除占位卡片
+      // 刷新列表获取 confirmed 状态
+      await refreshAssets();
       showToast(`${data.asset.name || "物品"} 档案创建完成`, "success");
     } catch (err) {
-      stepTimers.forEach(clearTimeout);
-      failPendingCard(pendingId, err.message);
       showToast(`确认失败: ${err.message}`, "error");
+      await refreshAssets();
     }
   }
 
@@ -1107,14 +1051,11 @@ async function handleSlotUpload(slotType, files) {
       showToast(`分析失败: ${err.message}`, "error");
     }
   } else {
-    // v11: 人物 → 立即插入占位卡片，后台生成
-    const pendingId = addPendingCard("models", "人物素材", "正在设计人物形象...");
-    const t1 = setTimeout(() => updatePendingCard(pendingId, "正在生成方案图片..."), 6000);
-    const t2 = setTimeout(() => updatePendingCard(pendingId, "即将完成..."), 18000);
+    // v12: 人物 → 发送请求，通过 refreshAssets 渲染后端状态卡片
+    showToast("人物素材创建中，请稍候...", "info");
 
     try {
       const res = await fetch("/api/assets/model", { method: "POST", body: formData });
-      clearTimeout(t1); clearTimeout(t2);
       if (!res.ok) throw new Error("创建失败");
       const data = await res.json();
 
@@ -1126,13 +1067,11 @@ async function handleSlotUpload(slotType, files) {
       }
 
       await refreshAssets();
-      removePendingCard(pendingId);
       bindSlot(slotType, data.asset);
       showToast(`${data.asset.name} 已创建`, "success");
     } catch (err) {
-      clearTimeout(t1); clearTimeout(t2);
-      failPendingCard(pendingId, err.message);
       showToast(`创建失败: ${err.message}`, "error");
+      await refreshAssets();
     }
   }
 }
@@ -1155,19 +1094,7 @@ $("#btn-quickstart").addEventListener("click", async () => {
   btn.disabled = true;
   btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> AI 拆解中...';
 
-  // v11: 立即插入两个占位卡片
-  const shortDesc = sentence.length > 10 ? sentence.slice(0, 10) + "..." : sentence;
-  const itemPendingId = addPendingCard("items", shortDesc, "AI 正在拆解需求...");
-  const modelPendingId = addPendingCard("models", shortDesc, "AI 正在拆解需求...");
-
-  const t1 = setTimeout(() => {
-    updatePendingCard(itemPendingId, "正在分析产品信息...");
-    updatePendingCard(modelPendingId, "正在设计人物形象...");
-  }, 5000);
-  const t2 = setTimeout(() => {
-    updatePendingCard(modelPendingId, "正在生成方案图片...");
-  }, 15000);
-
+  // v12: 通过 refreshAssets 渲染后端 generating 状态卡片，无需前端占位
   try {
     // 调用快速创建 API（拆解 + 创建两类素材）
     const formData = new FormData();
@@ -1180,14 +1107,11 @@ $("#btn-quickstart").addEventListener("click", async () => {
     }
 
     const res = await fetch("/api/quickstart/create", { method: "POST", body: formData });
-    clearTimeout(t1); clearTimeout(t2);
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "快速创建失败"); }
     const data = await res.json();
 
-    // 先刷新渲染真实卡片，再移除占位卡片
+    // 刷新列表，后端已保存 generating/pending 状态的素材
     await refreshAssets();
-    removePendingCard(itemPendingId);
-    removePendingCard(modelPendingId);
     showToast("两类素材已创建，请依次确认", "success");
 
     // 处理物品：打开问卷确认
@@ -1211,10 +1135,8 @@ $("#btn-quickstart").addEventListener("click", async () => {
     setupQuickstartChain();
 
   } catch (err) {
-    clearTimeout(t1); clearTimeout(t2);
-    failPendingCard(itemPendingId, err.message);
-    failPendingCard(modelPendingId, err.message);
     showToast(`快速创建失败: ${err.message}`, "error");
+    await refreshAssets();
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<span class="btn-quickstart-icon">&#9889;</span> 一句话快速创建素材';
@@ -1236,6 +1158,311 @@ function setupQuickstartChain() {
     }
   });
   observer.observe(qModal, { attributes: true, attributeFilter: ["style"] });
+}
+
+// ========== 渲染队列面板 ==========
+
+/**
+ * 阶段中文映射表
+ * 后端返回的 status 字段对应的中文显示名
+ */
+const STAGE_LABELS = {
+  queued: "排队中",
+  script: "生成脚本",
+  images: "生成分镜图",
+  videos: "生成视频片段",
+  stitching: "拼接视频",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
+/**
+ * 判断任务是否处于「渲染中」状态（包括各个阶段）
+ */
+function isJobRunning(status) {
+  return ["script", "images", "videos", "stitching"].includes(status);
+}
+
+/**
+ * 获取所有任务列表
+ * 优雅降级：如果后端还没实现 /api/jobs，标记为不可用并跳过
+ */
+async function fetchJobQueue() {
+  // 已确认接口不可用，直接跳过
+  if (queueApiAvailable === false) return;
+
+  try {
+    const resp = await fetch("/api/jobs");
+    if (!resp.ok) {
+      // 404 说明后端还没实现该接口，标记不可用
+      if (resp.status === 404) {
+        queueApiAvailable = false;
+        console.warn("[Queue] /api/jobs 接口不可用，队列面板已禁用");
+        stopQueuePoll();
+        return;
+      }
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    queueApiAvailable = true;
+    const jobs = await resp.json();
+    queueJobs = Array.isArray(jobs) ? jobs : (jobs.jobs || []);
+    renderQueuePanel(queueJobs);
+
+    // 如果没有活跃任务（排队中或渲染中），停止轮询
+    const hasActive = queueJobs.some(j => j.status === "queued" || isJobRunning(j.status));
+    if (!hasActive) {
+      stopQueuePoll();
+    }
+  } catch (err) {
+    console.error("[Queue] 获取任务列表失败:", err);
+  }
+}
+
+/**
+ * 渲染队列面板
+ * 根据任务列表更新面板内容和显示状态
+ */
+function renderQueuePanel(jobs) {
+  const panel = $("#render-queue-panel");
+  const countEl = $("#queue-count");
+  const list = $("#queue-list");
+
+  // 没有任何任务时隐藏面板
+  if (!jobs || jobs.length === 0) {
+    panel.style.display = "none";
+    return;
+  }
+
+  // 显示面板
+  panel.style.display = "block";
+
+  // 更新计数（仅统计活跃任务数量：排队 + 渲染中）
+  const activeCount = jobs.filter(j => j.status === "queued" || isJobRunning(j.status)).length;
+  countEl.textContent = activeCount > 0 ? activeCount : jobs.length;
+
+  // 按时间倒序排列（最新的在上面），活跃任务优先
+  const sorted = [...jobs].sort((a, b) => {
+    // 活跃任务优先
+    const aActive = a.status === "queued" || isJobRunning(a.status) ? 1 : 0;
+    const bActive = b.status === "queued" || isJobRunning(b.status) ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    // 同类按创建时间倒序
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+
+  // 清空并重新渲染
+  list.innerHTML = "";
+  sorted.forEach(job => {
+    const card = createJobCard(job);
+    list.appendChild(card);
+  });
+}
+
+/**
+ * 创建单个任务卡片
+ * 根据任务状态显示不同内容
+ */
+function createJobCard(job) {
+  const card = document.createElement("div");
+  const status = job.status || "queued";
+  const running = isJobRunning(status);
+
+  // 状态分类 CSS class
+  let statusClass = "status-queued";
+  if (running) statusClass = "status-running";
+  else if (status === "completed") statusClass = "status-completed";
+  else if (status === "failed") statusClass = "status-failed";
+  else if (status === "cancelled") statusClass = "status-cancelled";
+
+  card.className = `job-card ${statusClass}`;
+
+  // 任务名称（优先用 name 字段，回退到 job_id 前8位）
+  const name = job.name || `任务 ${(job.job_id || "").substring(0, 8)}`;
+
+  // 状态标签
+  const badgeLabel = STAGE_LABELS[status] || status;
+  let badgeClass = "queued";
+  if (running) badgeClass = "running";
+  else if (status === "completed") badgeClass = "completed";
+  else if (status === "failed") badgeClass = "failed";
+  else if (status === "cancelled") badgeClass = "cancelled";
+
+  // 消息/进度文字
+  let messageHtml = "";
+  if (status === "queued") {
+    messageHtml = `<div class="job-card-message">等待前面的任务完成...</div>`;
+  } else if (running) {
+    const pct = Math.round((job.progress || 0) * 100);
+    messageHtml = `
+      <div class="job-card-message">
+        <span class="job-stage-label">${escapeHtml(STAGE_LABELS[status])}</span>
+        ${job.message ? ` — ${escapeHtml(job.message)}` : ""}
+      </div>
+      <div class="job-progress-bar">
+        <div class="job-progress-fill" style="width: ${pct}%"></div>
+      </div>
+    `;
+  } else if (status === "completed") {
+    messageHtml = `<div class="job-card-message" style="color:var(--success);">&#10003; 视频生成完成</div>`;
+  } else if (status === "failed") {
+    const reason = job.message || "未知错误";
+    messageHtml = `<div class="job-card-message" style="color:var(--error);">&#10007; ${escapeHtml(reason)}</div>`;
+  } else if (status === "cancelled") {
+    messageHtml = `<div class="job-card-message">已取消</div>`;
+  }
+
+  // 操作按钮
+  let actionsHtml = "";
+  if (status === "queued" || running) {
+    // 排队中 / 渲染中：可取消
+    actionsHtml = `<button class="job-btn job-btn-cancel" data-cancel="${job.job_id}">取消</button>`;
+  } else if (status === "completed") {
+    // 已完成：预览（跳到进度详情页查看结果） + 下载
+    actionsHtml = `
+      <button class="job-btn job-btn-preview" data-preview="${job.job_id}">预览</button>
+      ${job.final_video_url ? `<a class="job-btn job-btn-download" href="${job.final_video_url}" download>下载</a>` : ""}
+    `;
+  }
+  // failed / cancelled 不显示操作按钮
+
+  // 时间显示
+  let timeStr = "";
+  if (job.created_at) {
+    try {
+      const d = new Date(job.created_at);
+      timeStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    } catch {
+      timeStr = "";
+    }
+  }
+
+  card.innerHTML = `
+    <div class="job-card-top">
+      <div class="job-card-name">${escapeHtml(name)}</div>
+      <span class="job-status-badge ${badgeClass}">${escapeHtml(badgeLabel)}</span>
+    </div>
+    ${messageHtml}
+    <div class="job-card-bottom">
+      <span class="job-card-time">${escapeHtml(timeStr)}</span>
+      <div class="job-card-actions">${actionsHtml}</div>
+    </div>
+  `;
+
+  // 绑定取消按钮事件
+  const cancelBtn = card.querySelector("[data-cancel]");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      cancelJob(cancelBtn.dataset.cancel);
+    });
+  }
+
+  // 绑定预览按钮事件（跳转到进度/结果视图）
+  const previewBtn = card.querySelector("[data-preview]");
+  if (previewBtn) {
+    previewBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      viewJobResult(previewBtn.dataset.preview);
+    });
+  }
+
+  // 点击渲染中的卡片，也可以跳到进度视图查看详情
+  if (running) {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      viewJobProgress(job.job_id);
+    });
+  }
+
+  return card;
+}
+
+/**
+ * 取消任务
+ */
+async function cancelJob(jobId) {
+  if (!confirm("确定要取消这个任务吗？")) return;
+  try {
+    const resp = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+    if (!resp.ok) throw new Error(`取消失败: HTTP ${resp.status}`);
+    showToast("任务已取消", "info");
+    // 立即刷新队列
+    await fetchJobQueue();
+  } catch (err) {
+    showToast(`取消失败: ${err.message}`, "error");
+  }
+}
+
+/**
+ * 查看渲染中任务的详细进度
+ * 复用现有的进度视图（view-progress）
+ */
+function viewJobProgress(jobId) {
+  currentJobId = jobId;
+  localStorage.setItem("vlogforge_job_id", jobId);
+  resetProgressUI();
+  showView("progress");
+  startSSE(jobId);
+}
+
+/**
+ * 查看已完成任务的结果
+ * 先查询状态，如果有 final_video_url 则展示结果页
+ */
+async function viewJobResult(jobId) {
+  try {
+    const resp = await fetch(`/api/status/${jobId}`);
+    if (!resp.ok) throw new Error("查询失败");
+    const data = await resp.json();
+    if (data.status === "completed" && data.final_video_url) {
+      currentJobId = jobId;
+      showResult(data);
+    } else {
+      showToast("视频文件尚未就绪", "warning");
+    }
+  } catch (err) {
+    showToast(`查询失败: ${err.message}`, "error");
+  }
+}
+
+/**
+ * 启动队列轮询（3秒刷新一次）
+ * 仅当有活跃任务时运行
+ */
+function startQueuePoll() {
+  if (queuePollTimer) return;
+  console.log("[Queue] 启动队列轮询");
+  queuePollTimer = setInterval(fetchJobQueue, 3000);
+}
+
+/**
+ * 停止队列轮询
+ */
+function stopQueuePoll() {
+  if (queuePollTimer) {
+    console.log("[Queue] 停止队列轮询");
+    clearInterval(queuePollTimer);
+    queuePollTimer = null;
+  }
+}
+
+/**
+ * 初始化队列面板交互（折叠/展开）
+ */
+function initQueuePanel() {
+  const header = $(".queue-header");
+  const toggleBtn = $("#queue-toggle");
+  const list = $("#queue-list");
+
+  if (header) {
+    header.addEventListener("click", () => {
+      queueCollapsed = !queueCollapsed;
+      list.classList.toggle("collapsed", queueCollapsed);
+      toggleBtn.classList.toggle("collapsed", queueCollapsed);
+    });
+  }
 }
 
 // ========== 生成按钮 ==========
@@ -1287,6 +1514,12 @@ $("#btn-generate").addEventListener("click", async () => {
 
     currentJobId = genData.job_id;
     localStorage.setItem('vlogforge_job_id', currentJobId);
+
+    // 刷新队列面板并启动轮询，让用户看到新任务已加入
+    await fetchJobQueue();
+    startQueuePoll();
+
+    // 同时跳转到进度视图查看详细进度
     resetProgressUI();
     showView("progress");
     startSSE(currentJobId);
@@ -1336,6 +1569,8 @@ function startSSE(jobId) {
       eventSource.close();
       eventSource = null;
       localStorage.removeItem('vlogforge_job_id');
+      // 刷新队列面板，反映最新状态
+      fetchJobQueue();
       if (data.status === "completed" && data.final_video_url) showResult(data);
       else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
     }
@@ -1352,6 +1587,8 @@ function startPolling(jobId) {
       if (data.status === "completed" || data.status === "failed") {
         clearInterval(interval);
         localStorage.removeItem('vlogforge_job_id');
+        // 刷新队列面板，反映最新状态
+        fetchJobQueue();
         if (data.status === "completed" && data.final_video_url) showResult(data);
         else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
       }
@@ -1490,6 +1727,7 @@ $("#btn-back").addEventListener("click", () => {
   if (eventSource) { eventSource.close(); eventSource = null; }
   showView("home");
   refreshAssets();
+  fetchJobQueue(); // 返回首页时刷新队列
 });
 
 $("#btn-new-task").addEventListener("click", () => {
@@ -1501,6 +1739,7 @@ $("#btn-new-task").addEventListener("click", () => {
   clearSlot("model");
   showView("home");
   refreshAssets();
+  fetchJobQueue(); // 返回首页时刷新队列
 });
 
 // ========== 初始化 ==========
@@ -1549,7 +1788,22 @@ async function restoreJobIfNeeded() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  // 初始化素材库
   refreshAssets();
+
+  // 初始化渲染队列面板交互
+  initQueuePanel();
+
+  // 尝试加载队列（优雅降级：后端未实现时自动跳过）
+  await fetchJobQueue();
+
+  // 如果队列中有活跃任务，启动轮询
+  const hasActive = queueJobs.some(j => j.status === "queued" || isJobRunning(j.status));
+  if (hasActive) {
+    startQueuePoll();
+  }
+
+  // 恢复上次进行中的单任务进度视图
   restoreJobIfNeeded();
 });

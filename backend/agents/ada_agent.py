@@ -4,6 +4,7 @@ ADA Agent - 素材设计师（Asset Designer Agent）
 v10 架构：场景融入人物，人物生成一张 portrait_image（人在场景中的半身近景）
 """
 
+import asyncio
 import json
 import os
 import logging
@@ -77,8 +78,6 @@ async def _text_analysis(
             )
     else:
         contents = user_prompt
-
-    import asyncio
 
     delay = 5
     for attempt in range(max_retries + 1):
@@ -230,7 +229,8 @@ async def confirm_item(
 
     logger.info(f"[ADA] usage_guide 已生成: {asset.usage_guide[:80]}...")
 
-    # v9: 生成两张产品图（img2img，以用户原始产品图为参考）
+    # v13: 生成两张产品图（img2img，以用户原始产品图为参考）
+    #   改进：两图间隔 2 秒防限流 + 失败图片自动重试 + img2img 失败降级 text2img
     image_results = {"thumbnail": False, "three_view": False}
 
     if asset.size_category != "large":
@@ -241,6 +241,8 @@ async def confirm_item(
         ref_images = _load_original_images(asset)
         if not ref_images:
             logger.warning("[ADA] 无原始产品图，降级为 text2img")
+
+        # ===== 第一轮生成 =====
 
         # ① 缩略图（白底电商风，UI 展示）
         try:
@@ -257,7 +259,10 @@ async def confirm_item(
             image_results["thumbnail"] = True
             logger.info(f"[ADA] 缩略图已生成: {path}")
         except Exception as e:
-            logger.warning(f"[ADA] 缩略图生成失败: {e}")
+            logger.warning(f"[ADA] 缩略图首次生成失败: {e}")
+
+        # 间隔 2 秒，降低连续请求触发 429 限流的风险
+        await asyncio.sleep(2)
 
         # ② 三视图（纯产品画面，正/侧/背三角度，DA/VA/VGA 参考）
         try:
@@ -274,12 +279,69 @@ async def confirm_item(
             image_results["three_view"] = True
             logger.info(f"[ADA] 三视图已生成: {path}")
         except Exception as e:
-            logger.warning(f"[ADA] 三视图生成失败: {e}")
+            logger.warning(f"[ADA] 三视图首次生成失败: {e}")
 
-    # v9: 状态改为已确认（即使部分图片生成失败，档案信息是完整的）
+        # ===== 第二轮：对失败的图片重试一次（含 5 秒冷却 + img2img→text2img 降级） =====
+        failed_images = [k for k, v in image_results.items() if not v]
+        if failed_images:
+            logger.info(f"[ADA] 图片重试: {failed_images}，等待 5 秒限流冷却...")
+            await asyncio.sleep(5)
+
+            for img_type in failed_images:
+                try:
+                    if img_type == "thumbnail":
+                        prompt = ADA_ITEM_THUMBNAIL_PROMPT.format(
+                            name=asset.name, full_description=asset.full_description,
+                        )
+                        # 优先 img2img，失败则降级 text2img
+                        try:
+                            if ref_images:
+                                img_bytes = await image_to_image(ref_images, prompt)
+                            else:
+                                img_bytes = await text_to_image(prompt)
+                        except Exception:
+                            logger.info("[ADA] 缩略图 img2img 重试失败，降级 text2img")
+                            img_bytes = await text_to_image(prompt)
+                        path = os.path.join(asset_dir, "thumbnail.png")
+                        save_image(img_bytes, path)
+                        asset.thumbnail_image = path
+                        image_results["thumbnail"] = True
+                        logger.info(f"[ADA] 缩略图重试成功: {path}")
+
+                    elif img_type == "three_view":
+                        prompt = ADA_ITEM_THREE_VIEW_PROMPT.format(
+                            name=asset.name, full_description=asset.full_description,
+                        )
+                        # 优先 img2img，失败则降级 text2img
+                        try:
+                            if ref_images:
+                                img_bytes = await image_to_image(ref_images, prompt)
+                            else:
+                                img_bytes = await text_to_image(prompt)
+                        except Exception:
+                            logger.info("[ADA] 三视图 img2img 重试失败，降级 text2img")
+                            img_bytes = await text_to_image(prompt)
+                        path = os.path.join(asset_dir, "three_view.png")
+                        save_image(img_bytes, path)
+                        asset.three_view_image = path
+                        image_results["three_view"] = True
+                        logger.info(f"[ADA] 三视图重试成功: {path}")
+
+                    # 重试成功后等 2 秒再处理下一个（如果还有的话）
+                    await asyncio.sleep(2)
+                except Exception as e:
+                    logger.error(f"[ADA] {img_type} 重试仍失败: {e}")
+
+    # 状态改为已确认（文字档案是完整的，图片缺失不影响档案状态）
     asset.status = AssetStatus.CONFIRMED
     success_count = sum(1 for v in image_results.values() if v)
     logger.info(f"[ADA] 物品档案完成: {asset.name}, 图片 {success_count}/2 成功")
+    if success_count < 2:
+        missing = [k for k, v in image_results.items() if not v]
+        logger.warning(
+            f"[ADA] 物品 {asset.name} 有 {2 - success_count} 张图片生成失败，"
+            f"缺失: {missing}（档案已确认，图片可后续重新生成）"
+        )
     return asset, image_results
 
 

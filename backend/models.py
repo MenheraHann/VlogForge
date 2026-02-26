@@ -26,14 +26,16 @@ class Duration(str, Enum):
 
 
 class JobStatus(str, Enum):
-    """任务状态（v4：已移除 QA 环节）"""
-    PENDING = "pending"             # 等待开始
+    """任务状态（v4：已移除 QA 环节，v14：新增队列/取消状态）"""
+    QUEUED = "queued"               # 排队中，等待前面的任务完成
+    PENDING = "pending"             # 等待开始（已出队，即将执行）
     SCRIPT_GENERATING = "script"    # DA 正在生成脚本
     IMAGES_GENERATING = "images"    # VA 正在生成分镜图
     VIDEOS_GENERATING = "videos"    # VGA 正在生成视频片段
     STITCHING = "stitching"         # FFmpeg 拼接视频中
     COMPLETED = "completed"         # 完成
     FAILED = "failed"               # 失败
+    CANCELLED = "cancelled"         # 用户手动取消
 
 
 class AssetType(str, Enum):
@@ -43,9 +45,11 @@ class AssetType(str, Enum):
 
 
 class AssetStatus(str, Enum):
-    """素材卡片状态（v7）"""
-    PENDING = "pending"       # 待确认（问卷未完成/图片未生成）
-    CONFIRMED = "confirmed"   # 已确认（信息完整 + 图片就绪）
+    """素材卡片状态（v13：新增 generating 制作中状态，v14：新增 failed 失败状态）"""
+    GENERATING = "generating"  # 制作中（图片正在生成，前端刷新可恢复占位卡片）
+    PENDING = "pending"        # 待确认（问卷未完成/图片未生成）
+    CONFIRMED = "confirmed"    # 已确认（信息完整 + 图片就绪）
+    FAILED = "failed"          # 生成失败（后台异步任务出错）
 
 
 # ========== 素材模型 ==========
@@ -196,8 +200,8 @@ class ScriptOutput(BaseModel):
 class JobResponse(BaseModel):
     """任务创建响应"""
     job_id: str
-    status: JobStatus = JobStatus.PENDING
-    message: str = "任务已创建"
+    status: JobStatus = JobStatus.QUEUED
+    message: str = "任务已加入队列"
 
 
 class ProgressResponse(BaseModel):

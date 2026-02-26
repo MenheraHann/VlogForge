@@ -58,6 +58,13 @@ job_manager = JobManager()
 asset_manager = AssetManager()
 
 
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时注入流水线执行函数到 JobManager，避免循环导入"""
+    job_manager.set_pipeline_runner(run_pipeline)
+    logger.info("[Startup] 流水线执行函数已注入 JobManager")
+
+
 # ========== 健康检查 ==========
 
 @app.get("/health")
@@ -65,6 +72,57 @@ async def health_check():
     """健康检查"""
     stats = asset_manager.get_stats()
     return {"status": "ok", "service": "VlogForge", "assets": stats}
+
+
+# ========== 后台异步任务 ==========
+
+async def _generate_model_looks(
+    model_id: str,
+    description: str,
+    reference_images: Optional[list[bytes]],
+    asset_manager: AssetManager,
+):
+    """
+    后台异步生成人物造型方案图。
+    调用 create_model_asset 生成完整人设 + 方案图，
+    完成后将结果合并到已保存的占位 ModelAsset 上。
+    失败时标记 status=FAILED，不会崩溃服务。
+    """
+    try:
+        logger.info(f"[Model] {model_id} 后台生成开始...")
+        asset, look_paths = await create_model_asset(
+            asset_id=model_id,
+            description=description,
+            images=reference_images,
+        )
+
+        # 用生成结果更新已保存的占位 model
+        existing = asset_manager.get_model(model_id)
+        if existing:
+            existing.name = asset.name
+            existing.appearance = asset.appearance
+            existing.personality = asset.personality
+            existing.outfits = asset.outfits
+            existing.scene_context = asset.scene_context
+            existing.reference_images = asset.reference_images
+            existing.look_options = asset.look_options
+            existing.full_description = asset.full_description
+            # 状态仍为 generating（等待用户选择造型方案）
+            existing.status = AssetStatus.GENERATING
+            asset_manager.save_model(existing)
+            logger.info(
+                f"[Model] {model_id} 造型方案生成完成，"
+                f"共 {len(look_paths)} 个方案"
+            )
+        else:
+            logger.error(f"[Model] {model_id} 占位模型已被删除，生成结果丢弃")
+
+    except Exception as e:
+        logger.error(f"[Model] {model_id} 后台生成失败: {e}", exc_info=True)
+        existing = asset_manager.get_model(model_id)
+        if existing:
+            existing.status = AssetStatus.FAILED
+            asset_manager.save_model(existing)
 
 
 # ========== 素材 API ==========
@@ -135,11 +193,13 @@ async def analyze_item_asset(
             "asset": asset.model_dump(),
         }
 
-    # 暂存到素材库（pending 状态）
+    # 暂存到素材库（generating 状态，前端刷新可恢复占位卡片）
+    asset.status = AssetStatus.GENERATING
     asset_manager.save_item(asset)
 
     return {
         "status": "ok",
+        "asset_id": asset.id,
         "asset": asset.model_dump(),
         "questionnaire": [f.model_dump() for f in asset.questionnaire_fields],
         "selling_points": asset.selling_points,
@@ -185,27 +245,46 @@ async def create_model(
     description: str = Form(..., description="人物描述"),
     images: Optional[list[UploadFile]] = File(None, description="参考图"),
 ):
-    """创建人物素材（返回多套造型供选择）"""
+    """
+    创建人物素材（异步非阻塞）。
+    立即返回 generating 状态的占位卡片，后台异步生成造型方案图。
+    前端通过轮询 /api/assets 检测生成完成（look_options 非空）。
+    """
     asset_id = asset_manager.generate_id(AssetType.MODEL)
-    logger.info(f"[API] 创建人物素材: {asset_id}")
+    logger.info(f"[API] 创建人物素材(异步): {asset_id}, desc={description[:50]}")
 
+    # 读取上传图片（必须在端点内完成，离开端点后 UploadFile 不可用）
     image_bytes_list = []
     if images:
         for img in images:
             image_bytes_list.append(await img.read())
 
-    asset, look_paths = await create_model_asset(
-        asset_id=asset_id,
-        description=description,
-        images=image_bytes_list if image_bytes_list else None,
+    # 1. 立即创建占位 ModelAsset（status=generating），保存到素材库
+    model = ModelAsset(
+        id=asset_id,
+        name=description[:20] or "新人物",
+        status=AssetStatus.GENERATING,
+        appearance="生成中...",  # 占位值，后台生成完成后会更新
+        full_description=description,
+    )
+    asset_manager.save_model(model)
+
+    # 2. 后台异步生成造型方案图（不阻塞 API 返回）
+    asyncio.create_task(
+        _generate_model_looks(
+            model_id=asset_id,
+            description=description,
+            reference_images=image_bytes_list if image_bytes_list else None,
+            asset_manager=asset_manager,
+        )
     )
 
-    asset_manager.save_model(asset)
+    # 3. 立即返回，前端可立即显示 generating 占位卡片
     return {
         "status": "ok",
-        "asset": asset.model_dump(),
-        "look_options": look_paths,
-        "message": "请选择一个造型方案",
+        "asset_id": asset_id,
+        "status_detail": "generating",
+        "message": "人物正在创建中，请稍候",
     }
 
 
@@ -360,6 +439,8 @@ async def quickstart_create_all(
         images=image_bytes_list if image_bytes_list else None,
     )
     if item_asset.size_category != "large":
+        # quickstart 路径也设为 generating 状态，保持前端刷新可恢复
+        item_asset.status = AssetStatus.GENERATING
         asset_manager.save_item(item_asset)
         result["item"] = {
             "asset": item_asset.model_dump(),
@@ -369,23 +450,38 @@ async def quickstart_create_all(
     else:
         result["item"] = {"status": "rejected", "reason": "大型物品不支持"}
 
-    # 第 3 步：创建人物素材（返回造型方案供选择，v10 含场景信息）
+    # 第 3 步：创建人物素材（异步非阻塞，立即返回占位卡片）
     model_id = asset_manager.generate_id(AssetType.MODEL)
-    model_asset, look_paths = await create_model_asset(
-        asset_id=model_id,
-        description=parsed["model_description"],
+    model_desc = parsed["model_description"]
+    model_placeholder = ModelAsset(
+        id=model_id,
+        name=model_desc[:20] or "新人物",
+        status=AssetStatus.GENERATING,
+        appearance="生成中...",
+        full_description=model_desc,
     )
-    asset_manager.save_model(model_asset)
+    asset_manager.save_model(model_placeholder)
+
+    # 后台异步生成造型方案图（不阻塞 quickstart 返回）
+    asyncio.create_task(
+        _generate_model_looks(
+            model_id=model_id,
+            description=model_desc,
+            reference_images=None,  # quickstart 路径不传人物参考图
+            asset_manager=asset_manager,
+        )
+    )
+
     result["model"] = {
-        "asset": model_asset.model_dump(),
-        "look_options": look_paths,
+        "asset": model_placeholder.model_dump(),
+        "status_detail": "generating",
     }
 
     return {
         "status": "ok",
         "parsed": parsed,
         "assets": result,
-        "message": "两类素材已创建，请确认物品问卷并选择人物方案",
+        "message": "物品问卷已返回，人物正在后台生成中，请先确认物品信息",
     }
 
 
@@ -424,9 +520,10 @@ async def generate_video(
     segment_info = DURATION_SEGMENT_MAP[duration.value]
     aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
 
-    # 创建任务
+    # 创建任务（v14：初始状态为 QUEUED，由 JobManager 调度执行）
     job_data = {
         "job_id": job_id,
+        "task_name": f"{product_type} {duration.value}",
         "product_type": product_type,
         "product_usage": product_usage,
         "platform": platform.value,
@@ -439,11 +536,11 @@ async def generate_video(
     }
     job_manager.create_job(job_id, job_data)
 
-    # 启动 DA Agent 流水线（后台异步执行，不阻塞响应）
-    asyncio.create_task(run_pipeline(job_id, job_manager))
-    logger.info(f"[Job {job_id}] DA 流水线已启动")
+    # v14：加入队列，由 JobManager 串行调度执行
+    job_manager.enqueue_job(job_id)
+    logger.info(f"[Job {job_id}] 已加入渲染队列")
 
-    return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，正在生成脚本...")
+    return JobResponse(job_id=job_id, status=JobStatus.QUEUED, message="任务已加入队列")
 
 
 # ========== 视频生成 API（v2：基于素材库） ==========
@@ -479,9 +576,11 @@ async def generate_video_v2(
     segment_info = DURATION_SEGMENT_MAP[duration.value]
     aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
 
-    # 创建任务（包含素材档案信息，场景信息从 model 中获取）
+    # 创建任务（v14：包含素材档案信息 + 任务名称，初始 QUEUED）
+    task_name = f"{item.name} {duration.value}"
     job_data = {
         "job_id": job_id,
+        "task_name": task_name,
         "mode": "v2_assets",
         "item": item.model_dump(),
         "model": model.model_dump(),
@@ -494,10 +593,42 @@ async def generate_video_v2(
     }
     job_manager.create_job(job_id, job_data)
 
-    asyncio.create_task(run_pipeline(job_id, job_manager))
-    logger.info(f"[Job {job_id}] DA v2 流水线已启动")
+    # v14：加入队列，由 JobManager 串行调度执行
+    job_manager.enqueue_job(job_id)
+    logger.info(f"[Job {job_id}] v2 已加入渲染队列")
 
-    return JobResponse(job_id=job_id, status=JobStatus.PENDING, message="任务已创建，正在生成脚本...")
+    return JobResponse(job_id=job_id, status=JobStatus.QUEUED, message="任务已加入队列")
+
+
+# ========== 队列管理 API（v14 新增） ==========
+
+@app.get("/api/jobs")
+async def list_jobs():
+    """
+    返回所有任务列表，按创建时间降序排列。
+    每个 job 包含：job_id, status, progress, message, task_name, platform, duration, created_at。
+    供前端队列面板渲染。
+    """
+    jobs = job_manager.get_all_jobs()
+    queue_info = job_manager.get_queue_info()
+    return {
+        "status": "ok",
+        "jobs": jobs,
+        "queue": queue_info,
+    }
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """
+    取消指定任务。
+    - 排队中的任务：直接标记 CANCELLED 并从队列移除
+    - 运行中的任务：设置取消信号，流水线在下一个检查点中止
+    """
+    result = job_manager.cancel_job(job_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
 
 
 # ========== 任务查询 API ==========
@@ -513,7 +644,7 @@ async def get_status(job_id: str):
 
 @app.get("/api/stream/{job_id}")
 async def stream_progress(job_id: str):
-    """SSE 实时进度推送"""
+    """SSE 实时进度推送（v14：新增 QUEUED/CANCELLED 终态判断）"""
     job = job_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"任务 {job_id} 不存在")
@@ -523,7 +654,8 @@ async def stream_progress(job_id: str):
             progress = job_manager.get_progress(job_id)
             data = json.dumps(progress.model_dump(), ensure_ascii=False)
             yield f"data: {data}\n\n"
-            if progress.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+            # COMPLETED / FAILED / CANCELLED 都是终态，停止推送
+            if progress.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
                 break
             await asyncio.sleep(2)
 

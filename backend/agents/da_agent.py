@@ -2,10 +2,12 @@
 DA Agent - 创意总监（Director Agent）
 负责：脚本生成 + 自检校验 + 编排 VA/VGA/FFmpeg
 v6 架构：DA 直接生成脚本，VGA 首尾帧并行 + 智能裁切
+v14：新增取消信号检查 + on_job_finished 回调
 
 流水线：DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧并行+智能裁切) → FFmpeg(拼接)
 """
 
+import asyncio
 import json
 import os
 import logging
@@ -287,17 +289,31 @@ async def generate_script(
     )
 
 
-async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
+async def run_pipeline(
+    job_id: str,
+    job_manager: JobManager,
+    cancel_event: asyncio.Event = None,
+) -> None:
     """
     执行完整的视频生成流水线。
-    由 main.py 在后台异步调用，通过 job_manager 更新进度。
+    由 JobManager 调度启动，通过 job_manager 更新进度。
+    v14：支持 cancel_event 取消信号检查，在每个主要阶段间检测取消。
 
     流水线：DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧视频) → FFmpeg(拼接)
+
+    参数:
+        job_id: 任务 ID
+        job_manager: 任务管理器实例
+        cancel_event: 取消信号（asyncio.Event），set() 时表示用户取消
     """
     job = job_manager.get_job(job_id)
     if not job:
         logger.error(f"[DA][Job {job_id}] 任务不存在，无法启动流水线")
         return
+
+    def _is_cancelled() -> bool:
+        """检查取消信号是否已设置"""
+        return cancel_event is not None and cancel_event.is_set()
 
     try:
         # ========== 阶段 1：DA 生成脚本 ==========
@@ -374,6 +390,17 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] 脚本完成：「{script.title}」")
 
+        # ---- 取消检查点 1：DA 脚本生成完成后 ----
+        if _is_cancelled():
+            logger.info(f"[DA][Job {job_id}] 脚本生成后检测到取消信号")
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.CANCELLED,
+                progress=0.0,
+                message="用户取消了任务（脚本生成后）",
+            )
+            return
+
         # ========== 阶段 2：VA 全并行图生图 ==========
         job_manager.update_job(
             job_id,
@@ -423,6 +450,29 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] VA 完成: {len(storyboard_paths)} 帧")
 
+        # ---- 取消检查点 2：VA 分镜生成完成后 ----
+        if _is_cancelled():
+            logger.info(f"[DA][Job {job_id}] 分镜生成后检测到取消信号")
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.CANCELLED,
+                progress=0.0,
+                message="用户取消了任务（分镜生成后）",
+            )
+            return
+
+        # ---- DA 侧帧数校验：VA 返回的帧数必须等于 segment_count + 1 ----
+        expected_frame_count = job["segment_count"] + 1
+        if len(storyboard_paths) != expected_frame_count:
+            error_msg = (
+                f"[DA][Job {job_id}] 分镜帧数不匹配: "
+                f"期望 {expected_frame_count} 帧（{job['segment_count']} 段 + 1），"
+                f"实际 {len(storyboard_paths)} 帧。"
+                f"无法传给 VGA，中止流水线。"
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
         # ========== 阶段 3：VGA 首尾帧并行生成视频片段 ==========
         job_manager.update_job(
             job_id,
@@ -433,7 +483,6 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         logger.info(f"[DA][Job {job_id}] 开始 VGA 首尾帧并行视频生成")
 
         segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
-        total_segments = len(script.segments)
 
         # 增量推送视频片段 URL 到前端
         segment_urls_so_far = []
@@ -471,6 +520,17 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] VGA 完成: {len(segment_paths)} 段")
 
+        # ---- 取消检查点 3：VGA 视频生成完成后 ----
+        if _is_cancelled():
+            logger.info(f"[DA][Job {job_id}] 视频生成后检测到取消信号")
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.CANCELLED,
+                progress=0.0,
+                message="用户取消了任务（视频生成后）",
+            )
+            return
+
         # ========== 阶段 4：FFmpeg 拼接 ==========
         job_manager.update_job(
             job_id,
@@ -503,6 +563,16 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] 流水线完成: {final_path}")
 
+    except asyncio.CancelledError:
+        # asyncio.Task 被 cancel() 时触发
+        logger.info(f"[DA][Job {job_id}] 流水线被 asyncio.CancelledError 中断")
+        job_manager.update_job(
+            job_id,
+            status=JobStatus.CANCELLED,
+            progress=0.0,
+            message="用户取消了任务",
+        )
+
     except Exception as e:
         logger.error(f"[DA][Job {job_id}] 流水线失败: {e}\n{traceback.format_exc()}")
         job_manager.update_job(
@@ -511,6 +581,11 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
             progress=0.0,
             message=f"生成失败：{str(e)}",
         )
+
+    finally:
+        # v14：无论成功/失败/取消，都通知 JobManager 任务结束，触发下一个队列任务
+        job_manager.on_job_finished(job_id)
+        logger.info(f"[DA][Job {job_id}] run_pipeline finally 块执行完毕")
 
 
 def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[bytes]:

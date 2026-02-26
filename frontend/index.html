@@ -127,6 +127,21 @@
           <span class="btn-icon">&#10132;</span>
         </button>
       </div>
+
+      <!-- ========== 渲染队列面板 ========== -->
+      <div id="render-queue-panel" class="render-queue-panel" style="display:none;">
+        <div class="queue-header">
+          <div class="queue-header-left">
+            <h3>&#127916; 渲染队列</h3>
+            <span id="queue-count" class="queue-count">0</span>
+          </div>
+          <button class="queue-toggle" id="queue-toggle" title="折叠/展开">&#9660;</button>
+        </div>
+        <div id="queue-list" class="queue-list">
+          <!-- 动态渲染任务卡片 -->
+        </div>
+      </div>
+
     </div>
   </section>
 

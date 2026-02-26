@@ -168,24 +168,90 @@ async def generate_storyboard(
 
     # 按帧号排序整理结果
     ordered_paths = [""] * total_frames
-    errors = []
+    first_pass_errors = []
 
     for result in results:
         if isinstance(result, Exception):
-            errors.append(str(result))
+            first_pass_errors.append(str(result))
             logger.error(f"[VA] 帧生成失败: {result}")
         else:
             frame_num, path = result
             ordered_paths[frame_num - 1] = path
 
-    # 过滤掉失败的帧
-    final_paths = [p for p in ordered_paths if p]
+    # ---- 失败帧重试（逐帧重试 1 次，复用相同的 img2img 逻辑） ----
+    failed_indices = [i for i, p in enumerate(ordered_paths) if not p]
+    if failed_indices:
+        logger.warning(
+            f"[VA] 首轮有 {len(failed_indices)} 帧失败，开始逐帧重试: "
+            f"帧号={[i + 1 for i in failed_indices]}"
+        )
+        retry_tasks = []
+        for idx in failed_indices:
+            retry_tasks.append(_generate_with_limit(frame_specs[idx]))
+        retry_results = await asyncio.gather(*retry_tasks, return_exceptions=True)
 
-    if errors:
-        logger.warning(f"[VA] {len(errors)}/{total_frames} 帧生成失败: {errors[:3]}")
+        # 将重试成功的帧填回
+        still_failed_indices = []
+        for idx, result in zip(failed_indices, retry_results):
+            if isinstance(result, Exception):
+                logger.warning(f"[VA] 帧 {idx + 1} 重试仍失败: {result}")
+                still_failed_indices.append(idx)
+            else:
+                frame_num, path = result
+                ordered_paths[idx] = path
+                logger.info(f"[VA] 帧 {frame_num} 重试成功")
+    else:
+        still_failed_indices = []
+
+    # ---- 兜底：对重试仍失败的帧，降级用 text_to_image（不传素材图） ----
+    if still_failed_indices:
+        logger.warning(
+            f"[VA] {len(still_failed_indices)} 帧重试仍失败，降级 text_to_image 兜底: "
+            f"帧号={[i + 1 for i in still_failed_indices]}"
+        )
+        for idx in still_failed_indices:
+            spec = frame_specs[idx]
+            frame_num = spec["frame_num"]
+            enhanced_prompt = _build_frame_prompt(spec["prompt"], style_guide)
+            try:
+                # 纯文字生成，不传素材图
+                fallback_bytes = await text_to_image(
+                    prompt=enhanced_prompt,
+                    system_instruction=VA_FRAME_INSTRUCTION,
+                )
+                path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
+                save_image(fallback_bytes, path)
+                ordered_paths[idx] = path
+                logger.info(f"[VA] 帧 {frame_num} text_to_image 兜底成功")
+
+                # 更新进度
+                async with done_lock:
+                    done_count += 1
+                    if on_frame_done:
+                        on_frame_done(done_count - 1, total_frames, path)
+            except Exception as e:
+                logger.error(f"[VA] 帧 {frame_num} text_to_image 兜底也失败: {e}")
+
+    # ---- 最终结果校验 ----
+    final_paths = [p for p in ordered_paths if p]
+    final_failed = [i + 1 for i, p in enumerate(ordered_paths) if not p]
+
+    if final_failed:
+        logger.error(
+            f"[VA] 最终仍有 {len(final_failed)} 帧失败（重试 + 兜底均未成功）: "
+            f"帧号={final_failed}"
+        )
 
     if not final_paths:
-        raise RuntimeError(f"[VA] 所有分镜图生成失败: {errors}")
+        raise RuntimeError(f"[VA] 所有分镜图生成失败（含重试和兜底）: {first_pass_errors}")
+
+    # 数量校验：期望 segments + 1 帧
+    expected_count = len(segments) + 1
+    if len(final_paths) != expected_count:
+        logger.warning(
+            f"[VA] 帧数量不匹配: 期望 {expected_count}, 实际 {len(final_paths)}, "
+            f"缺失帧号={final_failed}"
+        )
 
     logger.info(f"[VA] 分镜图全部完成: {len(final_paths)}/{total_frames} 帧成功")
     return final_paths
