@@ -73,7 +73,7 @@ async def generate_video_segment(
             mime_type="image/png",
         ),
         config=types.GenerateVideosConfig(
-            generate_audio=generate_audio,
+
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
             number_of_videos=1,
@@ -140,7 +140,7 @@ async def generate_video_from_first_frame(
             mime_type="image/png",
         ),
         config=types.GenerateVideosConfig(
-            generate_audio=generate_audio,
+
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
             number_of_videos=1,
@@ -207,7 +207,7 @@ async def extend_video(
         ),
         config=types.GenerateVideosConfig(
             duration_seconds=duration_seconds,
-            generate_audio=generate_audio,
+
             number_of_videos=1,
             person_generation="allow_all",
         ),

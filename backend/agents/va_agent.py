@@ -148,8 +148,13 @@ async def generate_storyboard(
         raw_prompt = spec["prompt"]
         needs_product = spec["needs_product"]
 
-        # 注入 style_guide 到提示词
+        # 注入 style_guide 到提示词，并强调动作差异
         enhanced_prompt = _build_frame_prompt(raw_prompt, style_guide)
+        enhanced_prompt = (
+            f"【关键动作指令 — 必须严格执行】\n{raw_prompt}\n\n"
+            f"请严格按照上述动作指令生成图片，动作和表情必须与指令完全匹配。\n\n"
+            f"{enhanced_prompt}"
+        )
 
         # 构建输入图片列表
         input_images = []

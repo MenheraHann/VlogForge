@@ -434,6 +434,13 @@ async def run_pipeline(
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
 
+        # 保存 DA 脚本到磁盘（方便排查帧 prompt）
+        script_path = os.path.join(ARTIFACTS_DIR, job_id, "script.json")
+        os.makedirs(os.path.dirname(script_path), exist_ok=True)
+        with open(script_path, "w", encoding="utf-8") as f:
+            import json as _json
+            _json.dump(script.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
+
         # 增量推送分镜图 URL 到前端
         storyboard_urls_so_far = []
 
