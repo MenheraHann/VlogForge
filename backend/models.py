@@ -43,6 +43,12 @@ class AssetType(str, Enum):
     SCENE = "scene"     # 场景
 
 
+class AssetStatus(str, Enum):
+    """素材卡片状态（v7）"""
+    PENDING = "pending"       # 待确认（问卷未完成/图片未生成）
+    CONFIRMED = "confirmed"   # 已确认（信息完整 + 图片就绪）
+
+
 # ========== 素材模型 ==========
 
 class QuestionnaireStatus(str, Enum):
@@ -53,21 +59,26 @@ class QuestionnaireStatus(str, Enum):
 
 
 class QuestionnaireField(BaseModel):
-    """问卷中的一个字段"""
+    """问卷中的一个字段（v7：逐题选择式，每题 A/B 候选 + C 用户自填）"""
     key: str = Field(..., description="字段标识，如 selling_point")
-    label: str = Field(..., description="显示标签，如 核心卖点")
-    value: str = Field("", description="当前值（AI 预填或用户填写）")
+    label: str = Field(..., description="显示标签/题目，如「你认为这款洗面奶最大的卖点是什么？」")
+    option_a: str = Field("", description="AI 候选答案 A（口语化营销风格）")
+    option_b: str = Field("", description="AI 候选答案 B（不同角度/侧重，与 A 有实质差异）")
+    value: str = Field("", description="用户最终选择/填写的值（选 A → 填 A 内容，选 B → 填 B 内容，选 C → 用户自填）")
     priority: str = Field("P1", description="优先级: P0/P1/P2")
     source: str = Field("ai", description="来源: ai=AI预填, user=待用户填写")
-    required: bool = Field(True, description="是否必填")
+    required: bool = Field(True, description="是否必填（P2 为可选，可跳过）")
 
 
 class ItemAsset(BaseModel):
-    """物品素材档案（v5：支持智能问卷 + P0/P1/P2 卖点）"""
+    """物品素材档案（v7：三图体系 + 卡片状态）"""
     id: str = Field(..., description="素材 ID，如 item_001")
     name: str = Field(..., description="物品名称")
     category: str = Field(..., description="物品类别，如面部护肤")
     size_category: str = Field("small", description="尺寸分类: small 允许, large 拒绝")
+
+    # v7: 卡片状态
+    status: AssetStatus = Field(AssetStatus.PENDING, description="卡片状态: pending/confirmed")
 
     # v5: 动态产品信息（ADA 问卷收集，字段不固定）
     product_info: dict = Field(default_factory=dict, description="动态产品信息，key 由 ADA 按品类决定")
@@ -91,31 +102,47 @@ class ItemAsset(BaseModel):
     usage: str = Field("", description="使用方式描述")
 
     original_images: list[str] = Field(default_factory=list, description="用户上传的原始图片路径")
-    instruction_image: Optional[str] = Field(None, description="ADA 生成的产品说明图路径")
+
+    # v7: 三图体系（替代旧 instruction_image）
+    thumbnail_image: Optional[str] = Field(None, description="缩略图路径（UI 素材卡片展示）")
+    three_view_image: Optional[str] = Field(None, description="三视图路径（正/侧/背，供 DA/VA/VGA）")
+    feature_image: Optional[str] = Field(None, description="功能介绍图路径（使用方式，供 DA/VA/VGA）")
+
+    # 兼容旧字段
+    instruction_image: Optional[str] = Field(None, description="[已废弃] 旧产品说明图，迁移到 thumbnail_image")
+
     full_description: str = Field("", description="ADA 生成的完整产品描述")
 
 
 class ModelAsset(BaseModel):
-    """人物素材档案"""
+    """人物素材档案（v7：双图体系 + 卡片状态）"""
     id: str = Field(..., description="素材 ID，如 model_001")
     name: str = Field(..., description="人物名称/标签")
+    status: AssetStatus = Field(AssetStatus.PENDING, description="卡片状态: pending/confirmed")
     appearance: str = Field(..., description="外貌描述")
     personality: str = Field("", description="气质/性格描述")
     outfits: str = Field("", description="穿搭描述")
     reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
     selected_look: Optional[str] = Field(None, description="用户选中的造型图路径")
+
+    # v7: 双图体系
+    avatar_image: Optional[str] = Field(None, description="头像/面部特写路径（UI 素材卡片展示）")
+    body_three_view_image: Optional[str] = Field(None, description="上半身三视图路径（正/左/右，供 DA/VA/VGA）")
+
     full_description: str = Field("", description="ADA 生成的完整人设描述")
 
 
 class SceneAsset(BaseModel):
-    """场景素材档案"""
+    """场景素材档案（v7：单图双用 + 卡片状态）"""
     id: str = Field(..., description="素材 ID，如 scene_001")
     name: str = Field(..., description="场景名称")
+    status: AssetStatus = Field(AssetStatus.PENDING, description="卡片状态: pending/confirmed")
     environment: str = Field(..., description="环境描述")
     lighting: str = Field("", description="光线描述")
     mood: str = Field("", description="氛围描述")
     reference_images: list[str] = Field(default_factory=list, description="用户上传的参考图")
-    selected_scene: Optional[str] = Field(None, description="用户选中的场景图路径")
+    # v7: 单图双用（UI 缩略图 + Agent 参考，vlog 镜头固定）
+    selected_scene: Optional[str] = Field(None, description="选中的场景图（同时用于 UI 缩略图 + Agent 参考）")
     full_description: str = Field("", description="ADA 生成的完整场景描述")
 
 

@@ -13,7 +13,7 @@ from google.genai import types
 
 from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR
 from backend.models import (
-    AssetType, ItemAsset, ModelAsset, SceneAsset,
+    AssetType, AssetStatus, ItemAsset, ModelAsset, SceneAsset,
     QuestionnaireStatus, QuestionnaireField,
 )
 from backend.tools.image_gen import (
@@ -23,11 +23,16 @@ from backend.tools.image_gen import (
 from backend.prompts.ada_prompts import (
     ADA_ITEM_ANALYZE_SYSTEM_PROMPT,
     ADA_ITEM_CONFIRM_SYSTEM_PROMPT,
-    ADA_ITEM_IMAGE_PROMPT,
+    ADA_ITEM_THUMBNAIL_PROMPT,
+    ADA_ITEM_THREE_VIEW_PROMPT,
+    ADA_ITEM_FEATURE_PROMPT,
     ADA_MODEL_SYSTEM_PROMPT,
     ADA_MODEL_IMAGE_PROMPT,
+    ADA_MODEL_AVATAR_PROMPT,
+    ADA_MODEL_BODY_THREE_VIEW_PROMPT,
     ADA_SCENE_SYSTEM_PROMPT,
     ADA_SCENE_IMAGE_PROMPT,
+    ADA_QUICKSTART_SYSTEM_PROMPT,
     build_item_analyze_prompt,
     build_item_confirm_prompt,
     get_item_analyze_schema,
@@ -36,6 +41,8 @@ from backend.prompts.ada_prompts import (
     build_scene_analysis_prompt,
     get_model_response_schema,
     get_scene_response_schema,
+    build_quickstart_prompt,
+    get_quickstart_schema,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,12 +135,14 @@ async def analyze_item(
             save_image(img_bytes, path)
             original_paths.append(path)
 
-    # 解析问卷字段
+    # 解析问卷字段（v7：含 option_a / option_b 候选答案）
     questionnaire_fields = []
     for q in data.get("questionnaire", []):
         questionnaire_fields.append(QuestionnaireField(
             key=q["key"],
             label=q["label"],
+            option_a=q.get("option_a", ""),
+            option_b=q.get("option_b", ""),
             value=q.get("value", ""),
             priority=q.get("priority", "P1"),
             source=q.get("source", "ai"),
@@ -200,24 +209,53 @@ async def confirm_item(
     asset.full_description = data.get("full_description", asset.full_description)
     asset.questionnaire_status = QuestionnaireStatus.COMPLETED
 
-    # 生成产品说明图
+    # v7: 生成三张产品图（缩略图 + 三视图 + 功能介绍图）
     if asset.size_category != "large":
-        image_prompt = ADA_ITEM_IMAGE_PROMPT.format(
-            name=asset.name,
-            full_description=asset.full_description,
-            selling_point=asset.selling_point,
-        )
-        try:
-            img_bytes = await text_to_image(image_prompt)
-            asset_dir = os.path.join(ASSETS_DIR, asset.id)
-            os.makedirs(asset_dir, exist_ok=True)
-            instruction_path = os.path.join(asset_dir, "instruction.png")
-            save_image(img_bytes, instruction_path)
-            asset.instruction_image = instruction_path
-            logger.info(f"[ADA] 产品说明图已生成: {instruction_path}")
-        except Exception as e:
-            logger.warning(f"[ADA] 产品说明图生成失败: {e}")
+        asset_dir = os.path.join(ASSETS_DIR, asset.id)
+        os.makedirs(asset_dir, exist_ok=True)
 
+        # ① 缩略图（UI 展示）
+        try:
+            prompt = ADA_ITEM_THUMBNAIL_PROMPT.format(
+                name=asset.name, full_description=asset.full_description,
+            )
+            img_bytes = await text_to_image(prompt)
+            path = os.path.join(asset_dir, "thumbnail.png")
+            save_image(img_bytes, path)
+            asset.thumbnail_image = path
+            logger.info(f"[ADA] 缩略图已生成: {path}")
+        except Exception as e:
+            logger.warning(f"[ADA] 缩略图生成失败: {e}")
+
+        # ② 三视图（DA/VA/VGA 参考）
+        try:
+            prompt = ADA_ITEM_THREE_VIEW_PROMPT.format(
+                name=asset.name, full_description=asset.full_description,
+            )
+            img_bytes = await text_to_image(prompt)
+            path = os.path.join(asset_dir, "three_view.png")
+            save_image(img_bytes, path)
+            asset.three_view_image = path
+            logger.info(f"[ADA] 三视图已生成: {path}")
+        except Exception as e:
+            logger.warning(f"[ADA] 三视图生成失败: {e}")
+
+        # ③ 功能介绍图（DA/VA/VGA 参考）
+        try:
+            prompt = ADA_ITEM_FEATURE_PROMPT.format(
+                name=asset.name, full_description=asset.full_description,
+                selling_point=asset.selling_point, usage=asset.usage,
+            )
+            img_bytes = await text_to_image(prompt)
+            path = os.path.join(asset_dir, "feature.png")
+            save_image(img_bytes, path)
+            asset.feature_image = path
+            logger.info(f"[ADA] 功能介绍图已生成: {path}")
+        except Exception as e:
+            logger.warning(f"[ADA] 功能介绍图生成失败: {e}")
+
+    # v7: 三图全部生成后，状态改为已确认
+    asset.status = AssetStatus.CONFIRMED
     logger.info(f"[ADA] 物品档案完成: {asset.name}")
     return asset
 
@@ -322,6 +360,52 @@ async def create_model_asset(
     return asset, look_paths
 
 
+# ========== 人物：选择造型后生成头像 + 上半身三视图（v7） ==========
+
+async def generate_model_images(asset: ModelAsset) -> ModelAsset:
+    """
+    用户选定造型后，生成头像 + 上半身三视图。
+    调用后将 status 更新为 confirmed。
+    """
+    logger.info(f"[ADA] 人物图片生成: id={asset.id}, look={asset.selected_look}")
+
+    asset_dir = os.path.join(ASSETS_DIR, asset.id)
+    os.makedirs(asset_dir, exist_ok=True)
+
+    # ① 头像（面部特写，UI 展示）
+    try:
+        prompt = ADA_MODEL_AVATAR_PROMPT.format(
+            full_description=asset.full_description,
+            appearance=asset.appearance,
+        )
+        img_bytes = await text_to_image(prompt)
+        path = os.path.join(asset_dir, "avatar.png")
+        save_image(img_bytes, path)
+        asset.avatar_image = path
+        logger.info(f"[ADA] 人物头像已生成: {path}")
+    except Exception as e:
+        logger.warning(f"[ADA] 人物头像生成失败: {e}")
+
+    # ② 上半身三视图（DA/VA/VGA 参考）
+    try:
+        prompt = ADA_MODEL_BODY_THREE_VIEW_PROMPT.format(
+            full_description=asset.full_description,
+            appearance=asset.appearance,
+            outfits=asset.outfits,
+        )
+        img_bytes = await text_to_image(prompt)
+        path = os.path.join(asset_dir, "body_three_view.png")
+        save_image(img_bytes, path)
+        asset.body_three_view_image = path
+        logger.info(f"[ADA] 上半身三视图已生成: {path}")
+    except Exception as e:
+        logger.warning(f"[ADA] 上半身三视图生成失败: {e}")
+
+    asset.status = AssetStatus.CONFIRMED
+    logger.info(f"[ADA] 人物素材已确认: {asset.name}")
+    return asset
+
+
 # ========== 场景素材 ==========
 
 async def create_scene_asset(
@@ -389,3 +473,34 @@ async def create_scene_asset(
     )
 
     return asset, option_paths
+
+
+# ========== 一句话快速开始：拆解一句话为物品+人物+场景描述 ==========
+
+async def quickstart_parse(
+    sentence: str,
+    images: Optional[list[bytes]] = None,
+) -> dict:
+    """
+    解析一句话描述，拆解为物品/人物/场景三类素材描述。
+
+    返回:
+        {"item_description": "...", "model_description": "...", "scene_description": "..."}
+    """
+    logger.info(f"[ADA] 一句话拆解: {sentence[:80]}...")
+
+    user_prompt = build_quickstart_prompt(sentence)
+    data = await _text_analysis(
+        user_prompt=user_prompt,
+        system_prompt=ADA_QUICKSTART_SYSTEM_PROMPT,
+        response_schema=get_quickstart_schema(),
+        input_images=images,
+    )
+
+    logger.info(
+        f"[ADA] 拆解完成: item={data.get('item_description', '')[:30]}, "
+        f"model={data.get('model_description', '')[:30]}, "
+        f"scene={data.get('scene_description', '')[:30]}"
+    )
+
+    return data

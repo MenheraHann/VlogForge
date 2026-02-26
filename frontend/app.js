@@ -94,7 +94,18 @@ function renderColumnList(type, list, containerSel) {
 }
 
 function getAssetThumbUrl(asset) {
-  const imgPath = asset.instruction_image || asset.selected_look || asset.selected_scene;
+  // v7: 优先使用新字段
+  const imgPath =
+    asset.thumbnail_image || asset.avatar_image ||
+    asset.selected_scene || asset.selected_look ||
+    asset.instruction_image;
+  if (!imgPath) return null;
+  const filename = imgPath.split("/").pop();
+  return `/assets/${asset.id}/${filename}`;
+}
+
+function getAssetImageUrl(asset, field) {
+  const imgPath = asset[field];
   if (!imgPath) return null;
   const filename = imgPath.split("/").pop();
   return `/assets/${asset.id}/${filename}`;
@@ -103,16 +114,20 @@ function getAssetThumbUrl(asset) {
 function createMiniCard(type, asset) {
   const card = document.createElement("div");
   card.className = "asset-mini-card";
-  card.draggable = true;
 
-  // 拖拽数据
   const slotType = type === "items" ? "item" : type === "models" ? "model" : "scene";
-  card.addEventListener("dragstart", (e) => {
-    e.dataTransfer.setData("application/vlogforge-asset", JSON.stringify({ type: slotType, id: asset.id }));
-    e.dataTransfer.effectAllowed = "copy";
-    card.classList.add("dragging");
-  });
-  card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  const isConfirmed = asset.status === "confirmed";
+
+  // v7: 只有已确认的素材可拖拽
+  card.draggable = isConfirmed;
+  if (isConfirmed) {
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("application/vlogforge-asset", JSON.stringify({ type: slotType, id: asset.id }));
+      e.dataTransfer.effectAllowed = "copy";
+      card.classList.add("dragging");
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  }
 
   // 缩略图
   const thumbUrl = getAssetThumbUrl(asset);
@@ -130,21 +145,23 @@ function createMiniCard(type, asset) {
   else if (type === "models") meta = asset.personality || "";
   else meta = asset.mood || "";
 
-  // 状态标签
-  let badge = "";
-  if (type === "items") {
-    const qs = asset.questionnaire_status || "completed";
-    badge = qs === "completed"
-      ? `<span class="asset-mini-badge success">已完成</span>`
-      : `<span class="asset-mini-badge warning">待确认</span>`;
-  } else if (type === "models") {
-    badge = asset.selected_look
-      ? `<span class="asset-mini-badge success">已选造型</span>`
-      : `<span class="asset-mini-badge warning">待选造型</span>`;
-  } else if (type === "scenes") {
-    badge = asset.selected_scene
-      ? `<span class="asset-mini-badge success">已选方案</span>`
-      : `<span class="asset-mini-badge warning">待选方案</span>`;
+  // v7: 状态标签（待确认/已确认）
+  const badge = isConfirmed
+    ? `<span class="asset-mini-badge success">已确认</span>`
+    : `<span class="asset-mini-badge warning">待确认</span>`;
+
+  // v7: 按钮根据状态不同
+  let actionBtns = "";
+  if (isConfirmed) {
+    actionBtns = `
+      <button class="btn-sm btn-detail" data-detail="${asset.id}">详情</button>
+      <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
+    `;
+  } else {
+    actionBtns = `
+      <button class="btn-sm btn-edit" data-edit="${asset.id}">编辑</button>
+      <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
+    `;
   }
 
   card.innerHTML = `
@@ -157,16 +174,31 @@ function createMiniCard(type, asset) {
     </div>
     <div class="asset-mini-actions">
       ${badge}
-      <button class="btn-sm btn-detail" data-detail="${asset.id}">详情</button>
-      <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
+      ${actionBtns}
     </div>
   `;
 
-  // 点击详情
-  card.querySelector("[data-detail]").addEventListener("click", (e) => {
-    e.stopPropagation();
-    openDetailModal(type, asset);
-  });
+  // v7: 点击详情（已确认状态）
+  const detailBtn = card.querySelector("[data-detail]");
+  if (detailBtn) {
+    detailBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openDetailModal(type, asset);
+    });
+  }
+
+  // v7: 点击编辑（待确认状态 — 继续问卷）
+  const editBtn = card.querySelector("[data-edit]");
+  if (editBtn) {
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (type === "items" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
+        openQuestionnaireModal(asset);
+      } else {
+        showToast("该素材暂不支持编辑", "warning");
+      }
+    });
+  }
 
   // 点击删除
   card.querySelector("[data-delete]").addEventListener("click", async (e) => {
@@ -176,7 +208,6 @@ function createMiniCard(type, asset) {
       const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("删除失败");
       showToast(`${asset.name} 已删除`, "success");
-      // 如果槽位绑定了这个素材，清空
       if (slotAssets[slotType] && slotAssets[slotType].id === asset.id) clearSlot(slotType);
       refreshAssets();
     } catch (err) {
@@ -189,6 +220,38 @@ function createMiniCard(type, asset) {
 
 // ========== 素材详情模态框 ==========
 
+// v7: tag 标签渲染（将文本拆分成 tag，支持逗号/顿号分隔）
+function textToTags(text) {
+  if (!text) return [];
+  return text.split(/[,，、；;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+function renderTagSection(sectionId, label, text, assetId, fieldKey) {
+  const tags = textToTags(text);
+  const tagsHtml = tags.map(t => `<span class="detail-tag">${escapeHtml(t)}</span>`).join("");
+  return `
+    <div class="detail-tag-section" data-section="${sectionId}">
+      <div class="detail-tag-header">
+        <span class="detail-tag-label">${escapeHtml(label)}</span>
+        <button class="btn-sm btn-tag-edit" data-asset="${assetId}" data-field="${fieldKey}" data-section="${sectionId}">编辑</button>
+      </div>
+      <div class="detail-tag-body">${tagsHtml || '<span class="detail-tag-empty">暂无</span>'}</div>
+    </div>
+  `;
+}
+
+function renderImagesRow(asset, fields) {
+  let html = '<div class="detail-images-row">';
+  for (const { field, label } of fields) {
+    const url = getAssetImageUrl(asset, field);
+    if (url) {
+      html += `<div class="detail-image-item"><img src="${url}" alt="${label}" onerror="this.parentElement.style.display='none'"><div class="detail-image-label">${escapeHtml(label)}</div></div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
 function openDetailModal(type, asset) {
   const modal = $("#detail-modal");
   const title = $("#detail-modal-title");
@@ -200,62 +263,156 @@ function openDetailModal(type, asset) {
   let content = "";
 
   if (type === "items") {
-    const thumbUrl = getAssetThumbUrl(asset);
-    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
+    // v7: 三张产品图
+    content += renderImagesRow(asset, [
+      { field: "thumbnail_image", label: "缩略图" },
+      { field: "three_view_image", label: "三视图" },
+      { field: "feature_image", label: "功能介绍图" },
+    ]);
+
+    // v7: tag 分区展示 + 编辑
+    const pi = asset.product_info || {};
+    for (const [key, value] of Object.entries(pi)) {
+      if (value) content += renderTagSection(`item-${key}`, key, value, asset.id, `product_info.${key}`);
+    }
 
     // 卖点
     const sp = asset.selling_points || {};
-    let spHtml = "";
-    if (sp.P0 && sp.P0.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p0">P0 核心</span>${sp.P0.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
-    if (sp.P1 && sp.P1.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p1">P1 辅助</span>${sp.P1.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
-    if (sp.P2 && sp.P2.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p2">P2 补充</span>${sp.P2.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+    if (sp.P0 && sp.P0.length) content += renderTagSection("sp-p0", "P0 核心卖点", sp.P0.join("、"), asset.id, "selling_points.P0");
+    if (sp.P1 && sp.P1.length) content += renderTagSection("sp-p1", "P1 辅助卖点", sp.P1.join("、"), asset.id, "selling_points.P1");
 
-    // product_info
-    let infoHtml = "";
-    const pi = asset.product_info || {};
-    for (const [k, v] of Object.entries(pi)) {
-      if (v) infoHtml += `<div class="detail-field"><span class="detail-field-label">${escapeHtml(k)}</span><span class="detail-field-value">${escapeHtml(v)}</span></div>`;
-    }
+    content += `<div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
 
-    content = `
-      ${imgHtml}
-      <div class="detail-section">
-        <div class="detail-field"><span class="detail-field-label">类别</span><span class="detail-field-value">${escapeHtml(asset.category)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">核心卖点</span><span class="detail-field-value">${escapeHtml(asset.selling_point)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">使用方式</span><span class="detail-field-value">${escapeHtml(asset.usage)}</span></div>
-      </div>
-      ${spHtml ? `<div class="detail-section"><h4>卖点优先级</h4>${spHtml}</div>` : ""}
-      ${infoHtml ? `<div class="detail-section"><h4>产品信息</h4>${infoHtml}</div>` : ""}
-      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
-    `;
   } else if (type === "models") {
-    const thumbUrl = getAssetThumbUrl(asset);
-    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
-    content = `
-      ${imgHtml}
-      <div class="detail-section">
-        <div class="detail-field"><span class="detail-field-label">外貌</span><span class="detail-field-value">${escapeHtml(asset.appearance)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">气质</span><span class="detail-field-value">${escapeHtml(asset.personality)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">穿搭</span><span class="detail-field-value">${escapeHtml(asset.outfits)}</span></div>
-      </div>
-      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
-    `;
+    // v7: 头像 + 上半身三视图 + 选中造型
+    content += renderImagesRow(asset, [
+      { field: "avatar_image", label: "头像" },
+      { field: "body_three_view_image", label: "上半身三视图" },
+      { field: "selected_look", label: "选中造型" },
+    ]);
+
+    content += renderTagSection("model-appearance", "外貌特征", asset.appearance, asset.id, "appearance");
+    content += renderTagSection("model-personality", "气质风格", asset.personality, asset.id, "personality");
+    content += renderTagSection("model-outfits", "穿搭", asset.outfits, asset.id, "outfits");
+
+    content += `<div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
+
   } else {
-    const thumbUrl = getAssetThumbUrl(asset);
-    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" class="detail-img" onerror="this.style.display='none'">` : "";
-    content = `
-      ${imgHtml}
-      <div class="detail-section">
-        <div class="detail-field"><span class="detail-field-label">环境</span><span class="detail-field-value">${escapeHtml(asset.environment)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">光线</span><span class="detail-field-value">${escapeHtml(asset.lighting)}</span></div>
-        <div class="detail-field"><span class="detail-field-label">氛围</span><span class="detail-field-value">${escapeHtml(asset.mood)}</span></div>
-      </div>
-      <div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>
-    `;
+    // v7: 场景图（大图展示）
+    content += renderImagesRow(asset, [
+      { field: "selected_scene", label: "场景图" },
+    ]);
+
+    content += renderTagSection("scene-environment", "环境", asset.environment, asset.id, "environment");
+    content += renderTagSection("scene-lighting", "光线", asset.lighting, asset.id, "lighting");
+    content += renderTagSection("scene-mood", "氛围", asset.mood, asset.id, "mood");
+
+    content += `<div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
   }
 
   body.innerHTML = content;
   modal.style.display = "flex";
+
+  // v7: 绑定分区编辑按钮
+  body.querySelectorAll(".btn-tag-edit").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const section = btn.closest(".detail-tag-section");
+      const tagBody = section.querySelector(".detail-tag-body");
+      const fieldPath = btn.dataset.field;
+      const assetId = btn.dataset.asset;
+
+      if (btn.textContent === "编辑") {
+        // 进入编辑模式
+        btn.textContent = "确认";
+        btn.classList.add("btn-confirm");
+        const currentTags = [...tagBody.querySelectorAll(".detail-tag")].map(t => t.textContent);
+        tagBody.innerHTML = "";
+        currentTags.forEach(t => {
+          tagBody.appendChild(createEditableTag(t));
+        });
+        // 添加「+」按钮
+        const addBtn = document.createElement("button");
+        addBtn.className = "detail-tag-add";
+        addBtn.textContent = "+";
+        addBtn.addEventListener("click", () => {
+          const newTag = createEditableTag("");
+          tagBody.insertBefore(newTag, addBtn);
+          newTag.querySelector("input").focus();
+        });
+        tagBody.appendChild(addBtn);
+      } else {
+        // 确认保存
+        btn.textContent = "编辑";
+        btn.classList.remove("btn-confirm");
+        const inputs = tagBody.querySelectorAll(".detail-tag-input");
+        const newValues = [...inputs].map(i => i.value.trim()).filter(Boolean);
+        const newText = newValues.join("、");
+
+        // 更新显示
+        tagBody.innerHTML = newValues.length > 0
+          ? newValues.map(v => `<span class="detail-tag">${escapeHtml(v)}</span>`).join("")
+          : '<span class="detail-tag-empty">暂无</span>';
+
+        // 保存到后端
+        saveTagUpdate(assetId, fieldPath, newText);
+      }
+    });
+  });
+}
+
+function createEditableTag(text) {
+  const wrapper = document.createElement("span");
+  wrapper.className = "detail-tag editing";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "detail-tag-input";
+  input.value = text;
+  input.size = Math.max(text.length + 2, 4);
+  input.addEventListener("input", () => { input.size = Math.max(input.value.length + 2, 4); });
+  wrapper.appendChild(input);
+  const delBtn = document.createElement("span");
+  delBtn.className = "detail-tag-del";
+  delBtn.textContent = "×";
+  delBtn.addEventListener("click", () => wrapper.remove());
+  wrapper.appendChild(delBtn);
+  return wrapper;
+}
+
+async function saveTagUpdate(assetId, fieldPath, newValue) {
+  // fieldPath 可以是 "appearance" 或 "product_info.selling_point" 或 "selling_points.P0"
+  let updates = {};
+  if (fieldPath.includes(".")) {
+    const [parent, child] = fieldPath.split(".", 2);
+    // 需要获取当前完整对象再局部更新
+    try {
+      const res = await fetch(`/api/assets/${assetId}`);
+      const data = await res.json();
+      const parentObj = data.asset[parent] || {};
+      if (parent === "selling_points") {
+        parentObj[child] = newValue.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
+      } else {
+        parentObj[child] = newValue;
+      }
+      updates[parent] = parentObj;
+    } catch (err) {
+      showToast(`保存失败: ${err.message}`, "error");
+      return;
+    }
+  } else {
+    updates[fieldPath] = newValue;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("updates", JSON.stringify(updates));
+    const res = await fetch(`/api/assets/${assetId}`, { method: "PUT", body: formData });
+    if (!res.ok) throw new Error("保存失败");
+    showToast("已保存", "success");
+    refreshAssets();
+  } catch (err) {
+    showToast(`保存失败: ${err.message}`, "error");
+  }
 }
 
 $("#detail-modal-close").addEventListener("click", () => { $("#detail-modal").style.display = "none"; });
@@ -409,96 +566,205 @@ function closeCreateModal() { $("#create-modal").style.display = "none"; }
 $("#modal-close").addEventListener("click", closeCreateModal);
 $("#create-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
 
-// ========== 智能问卷模态框 ==========
+// ========== 智能问卷模态框（v7：逐题 A/B/C 选择式） ==========
 
 function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
   const modal = $("#questionnaire-modal");
   const title = $("#questionnaire-title");
   const body = $("#questionnaire-body");
 
-  title.textContent = `产品信息确认 - ${asset.name}`;
-
-  // 卖点展示
-  let spHtml = "";
-  if (sellingPoints) {
-    const sp = sellingPoints;
-    if (sp.P0 && sp.P0.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p0">P0 核心</span>${sp.P0.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
-    if (sp.P1 && sp.P1.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p1">P1 辅助</span>${sp.P1.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
-    if (sp.P2 && sp.P2.length) spHtml += `<div class="sp-group"><span class="sp-label sp-p2">P2 补充</span>${sp.P2.map(s => `<span class="sp-tag">${escapeHtml(s)}</span>`).join("")}</div>`;
+  // 使用传入的问卷，或从 asset 中取
+  const questions = questionnaire || asset.questionnaire_fields || [];
+  if (questions.length === 0) {
+    showToast("没有需要确认的问题", "warning");
+    return;
   }
 
-  // 问卷字段
-  let fieldsHtml = "";
-  (questionnaire || []).forEach((f, i) => {
-    const priorityClass = `priority-${f.priority.toLowerCase()}`;
-    const requiredMark = f.required ? '<span class="required">*</span>' : '<span class="optional">可选</span>';
-    const sourceLabel = f.source === "ai" ? '<span class="ai-badge">AI 预填</span>' : '<span class="user-badge">待填写</span>';
+  title.textContent = `产品信息确认 - ${asset.name}`;
 
-    fieldsHtml += `
-      <div class="q-field ${priorityClass}">
-        <div class="q-field-header">
-          <label>${escapeHtml(f.label)} ${requiredMark}</label>
-          <div class="q-field-tags">
-            <span class="q-priority">${f.priority}</span>
-            ${sourceLabel}
+  // 存储用户的回答
+  const answers = questions.map(q => ({
+    key: q.key,
+    label: q.label,
+    value: q.value || "",
+    priority: q.priority,
+    source: q.value ? "ai" : "user",
+  }));
+
+  let currentIndex = 0;
+
+  function renderQuestion(index) {
+    const q = questions[index];
+    const total = questions.length;
+    const priorityClass = `priority-${q.priority.toLowerCase()}`;
+    const isOptional = !q.required;
+    const currentAnswer = answers[index].value;
+
+    // 判断当前选中的是哪个选项
+    let selectedOption = "";
+    if (currentAnswer === q.option_a && q.option_a) selectedOption = "a";
+    else if (currentAnswer === q.option_b && q.option_b) selectedOption = "b";
+    else if (currentAnswer && currentAnswer !== q.option_a && currentAnswer !== q.option_b) selectedOption = "c";
+
+    body.innerHTML = `
+      <div class="q-stepper">
+        <div class="q-stepper-bar">
+          <div class="q-stepper-fill" style="width: ${((index + 1) / total) * 100}%"></div>
+        </div>
+        <div class="q-stepper-label">第 ${index + 1} / ${total} 题</div>
+      </div>
+
+      <div class="q-card ${priorityClass}">
+        <div class="q-card-header">
+          <span class="q-priority-badge">${q.priority}</span>
+          ${isOptional ? '<span class="q-optional-badge">可选</span>' : ''}
+        </div>
+        <h3 class="q-card-question">${escapeHtml(q.label)}</h3>
+
+        <div class="q-options">
+          ${q.option_a ? `
+          <div class="q-option ${selectedOption === 'a' ? 'selected' : ''}" data-choice="a">
+            <div class="q-option-label">A</div>
+            <div class="q-option-text">${escapeHtml(q.option_a)}</div>
+          </div>` : ''}
+
+          ${q.option_b ? `
+          <div class="q-option ${selectedOption === 'b' ? 'selected' : ''}" data-choice="b">
+            <div class="q-option-label">B</div>
+            <div class="q-option-text">${escapeHtml(q.option_b)}</div>
+          </div>` : ''}
+
+          <div class="q-option q-option-custom ${selectedOption === 'c' ? 'selected' : ''}" data-choice="c">
+            <div class="q-option-label">C</div>
+            <div class="q-option-text">✏️ 我来填写</div>
           </div>
         </div>
-        <input type="text" class="q-input" data-key="${f.key}" data-priority="${f.priority}"
-          data-required="${f.required}" value="${escapeHtml(f.value)}"
-          placeholder="${f.source === 'user' ? '请填写...' : ''}">
+
+        <div class="q-custom-input-wrap" id="q-custom-wrap" style="display:${selectedOption === 'c' ? 'block' : 'none'}">
+          <textarea class="q-custom-input" id="q-custom-input" rows="2"
+            placeholder="输入你的回答...">${selectedOption === 'c' ? escapeHtml(currentAnswer) : ''}</textarea>
+        </div>
+      </div>
+
+      <div class="q-nav">
+        <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>← 上一题</button>
+        <div class="q-nav-center">
+          ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">跳过</button>' : ''}
+        </div>
+        ${index < total - 1
+          ? '<button class="q-nav-btn q-nav-next" id="q-next">下一题 →</button>'
+          : '<button class="q-nav-btn q-nav-submit" id="q-submit">确认并创建素材</button>'
+        }
       </div>
     `;
-  });
 
-  body.innerHTML = `
-    ${spHtml ? `<div class="q-section"><h4>ADA 识别的卖点</h4>${spHtml}</div>` : ""}
-    <div class="q-section">
-      <h4>请确认或修改以下信息</h4>
-      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">AI 预填的内容可直接确认，空白项请补充填写</p>
-      ${fieldsHtml}
-    </div>
-    <button class="btn-submit" id="q-confirm-btn">确认并创建素材</button>
-  `;
+    // 绑定选项点击
+    body.querySelectorAll(".q-option").forEach(opt => {
+      opt.addEventListener("click", () => {
+        body.querySelectorAll(".q-option").forEach(o => o.classList.remove("selected"));
+        opt.classList.add("selected");
+        const choice = opt.dataset.choice;
+        const customWrap = $("#q-custom-wrap");
 
-  // 确认按钮
-  body.querySelector("#q-confirm-btn").addEventListener("click", async () => {
-    const btn = body.querySelector("#q-confirm-btn");
-
-    // 验证必填项
-    const inputs = body.querySelectorAll(".q-input");
-    const confirmed = [];
-    let hasError = false;
-
-    inputs.forEach((input) => {
-      const isRequired = input.dataset.required === "true";
-      const value = input.value.trim();
-      if (isRequired && !value) {
-        input.classList.add("error");
-        hasError = true;
-      } else {
-        input.classList.remove("error");
-      }
-      confirmed.push({
-        key: input.dataset.key,
-        label: input.previousElementSibling ? "" : "",
-        value: value,
-        priority: input.dataset.priority,
+        if (choice === "a") {
+          answers[index].value = q.option_a;
+          answers[index].source = "ai";
+          customWrap.style.display = "none";
+        } else if (choice === "b") {
+          answers[index].value = q.option_b;
+          answers[index].source = "ai";
+          customWrap.style.display = "none";
+        } else {
+          customWrap.style.display = "block";
+          const input = $("#q-custom-input");
+          input.focus();
+          // 如果之前选了 A/B，清空自定义输入
+          if (answers[index].source === "ai") input.value = "";
+          answers[index].source = "user";
+        }
       });
     });
 
-    // 从 DOM 获取 label
-    confirmed.forEach((f, idx) => {
-      const labelEl = inputs[idx].closest(".q-field").querySelector("label");
-      f.label = labelEl ? labelEl.textContent.replace(/[*可选]/g, "").trim() : f.key;
+    // 上一题
+    const prevBtn = $("#q-prev");
+    if (prevBtn) prevBtn.addEventListener("click", () => { saveCurrentAnswer(); currentIndex--; renderQuestion(currentIndex); });
+
+    // 下一题
+    const nextBtn = $("#q-next");
+    if (nextBtn) nextBtn.addEventListener("click", () => {
+      if (!validateCurrent()) return;
+      saveCurrentAnswer();
+      currentIndex++;
+      renderQuestion(currentIndex);
     });
 
-    if (hasError) {
-      showToast("请填写所有必填项", "error");
-      return;
+    // 跳过（P2 可选题）
+    const skipBtn = $("#q-skip");
+    if (skipBtn) skipBtn.addEventListener("click", () => {
+      answers[index].value = "";
+      answers[index].source = "skipped";
+      currentIndex++;
+      if (currentIndex < total) renderQuestion(currentIndex);
+      else submitQuestionnaire();
+    });
+
+    // 最后一题提交
+    const submitBtn = $("#q-submit");
+    if (submitBtn) submitBtn.addEventListener("click", () => {
+      if (!validateCurrent()) return;
+      saveCurrentAnswer();
+      submitQuestionnaire();
+    });
+  }
+
+  function saveCurrentAnswer() {
+    const customInput = $("#q-custom-input");
+    if (customInput && answers[currentIndex].source === "user") {
+      answers[currentIndex].value = customInput.value.trim();
+    }
+  }
+
+  function validateCurrent() {
+    const q = questions[currentIndex];
+    saveCurrentAnswer();
+    if (q.required && !answers[currentIndex].value) {
+      showToast("请选择一个选项或自行填写", "warning");
+      return false;
+    }
+    if (answers[currentIndex].source === "user" && q.required && !answers[currentIndex].value) {
+      showToast("请填写你的回答", "warning");
+      return false;
+    }
+    return true;
+  }
+
+  async function submitQuestionnaire() {
+    const confirmed = answers.filter(a => a.source !== "skipped").map(a => ({
+      key: a.key,
+      label: a.label,
+      value: a.value,
+      priority: a.priority,
+      source: a.source,
+    }));
+
+    // 检查必填项
+    for (const q of questions) {
+      if (q.required) {
+        const ans = confirmed.find(a => a.key === q.key);
+        if (!ans || !ans.value) {
+          showToast(`请回答必填项：${q.label}`, "error");
+          return;
+        }
+      }
     }
 
-    btn.disabled = true;
-    btn.textContent = "确认中...";
+    // 显示提交状态
+    body.innerHTML = `
+      <div style="text-align:center;padding:3rem 1rem;">
+        <div class="q-submit-spinner"></div>
+        <p style="color:var(--text-secondary);margin-top:1rem;">正在生成产品档案和图片...</p>
+      </div>
+    `;
 
     try {
       const formData = new FormData();
@@ -508,15 +774,17 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
 
       showToast("产品档案创建完成", "success");
-      $("#questionnaire-modal").style.display = "none";
+      modal.style.display = "none";
       refreshAssets();
     } catch (err) {
       showToast(`确认失败: ${err.message}`, "error");
-      btn.disabled = false;
-      btn.textContent = "确认并创建素材";
+      // 恢复到最后一题
+      renderQuestion(currentIndex);
     }
-  });
+  }
 
+  // 渲染第一题
+  renderQuestion(0);
   modal.style.display = "flex";
 }
 
@@ -743,6 +1011,103 @@ async function handleSlotUpload(slotType, files) {
 setupSlot("item");
 setupSlot("model");
 setupSlot("scene");
+
+// ========== 一句话快速创建素材 ==========
+
+$("#btn-quickstart").addEventListener("click", async () => {
+  const sentence = $("#gen-prompt").value.trim();
+  if (!sentence) {
+    showToast("请先输入一句话描述", "warning");
+    $("#gen-prompt").focus();
+    return;
+  }
+
+  const btn = $("#btn-quickstart");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> AI 拆解中...';
+
+  try {
+    // 调用快速创建 API（拆解 + 创建三类素材）
+    const formData = new FormData();
+    formData.append("sentence", sentence);
+
+    // 如果物品槽位有临时上传的文件，一并发送
+    const itemSlotInput = document.querySelector("#slot-item-body .slot-file-input");
+    if (itemSlotInput && itemSlotInput.files && itemSlotInput.files.length > 0) {
+      Array.from(itemSlotInput.files).forEach(f => formData.append("images", f));
+    }
+
+    const res = await fetch("/api/quickstart/create", { method: "POST", body: formData });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "快速创建失败"); }
+    const data = await res.json();
+
+    showToast("三类素材已创建，请依次确认", "success");
+    await refreshAssets();
+
+    // 处理物品：打开问卷确认
+    if (data.assets.item && data.assets.item.asset) {
+      const itemAsset = data.assets.item.asset;
+      if (data.assets.item.status !== "rejected") {
+        openQuestionnaireModal(itemAsset, data.assets.item.questionnaire, data.assets.item.selling_points);
+      } else {
+        showToast(`物品被拒绝: ${data.assets.item.reason}`, "error");
+      }
+    }
+
+    // 处理人物：打开造型选择
+    if (data.assets.model && data.assets.model.look_options) {
+      // 问卷关闭后自动弹出造型选择（用 setTimeout 避免同时弹出多个模态框）
+      const modelData = data.assets.model;
+      window._pendingModelSelect = { asset: modelData.asset, options: modelData.look_options };
+    }
+
+    // 处理场景：打开场景选择
+    if (data.assets.scene && data.assets.scene.scene_options) {
+      const sceneData = data.assets.scene;
+      window._pendingSceneSelect = { asset: sceneData.asset, options: sceneData.scene_options };
+    }
+
+    // 监听问卷模态框关闭 → 弹出人物选择 → 再弹出场景选择
+    setupQuickstartChain();
+
+  } catch (err) {
+    showToast(`快速创建失败: ${err.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-quickstart-icon">&#9889;</span> 一句话快速创建素材';
+  }
+});
+
+function setupQuickstartChain() {
+  // 监听问卷模态框关闭，然后依次弹出人物/场景选择
+  const qModal = $("#questionnaire-modal");
+  const observer = new MutationObserver(() => {
+    if (qModal.style.display === "none" || qModal.style.display === "") {
+      observer.disconnect();
+      // 弹出人物造型选择
+      if (window._pendingModelSelect) {
+        const { asset, options } = window._pendingModelSelect;
+        window._pendingModelSelect = null;
+        setTimeout(() => openSelectModal("model", asset, options), 300);
+      }
+    }
+  });
+  observer.observe(qModal, { attributes: true, attributeFilter: ["style"] });
+
+  // 监听选择模态框关闭，弹出场景选择
+  const sModal = $("#select-modal");
+  const sceneObserver = new MutationObserver(() => {
+    if (sModal.style.display === "none" || sModal.style.display === "") {
+      sceneObserver.disconnect();
+      if (window._pendingSceneSelect) {
+        const { asset, options } = window._pendingSceneSelect;
+        window._pendingSceneSelect = null;
+        setTimeout(() => openSelectModal("scene", asset, options), 300);
+      }
+    }
+  });
+  sceneObserver.observe(sModal, { attributes: true, attributeFilter: ["style"] });
+}
 
 // ========== 生成按钮 ==========
 

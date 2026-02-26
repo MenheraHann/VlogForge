@@ -25,12 +25,15 @@ from backend.models import (
 from backend.services.job_manager import JobManager
 from backend.services.asset_manager import AssetManager
 from backend.agents.da_agent import run_pipeline
+from backend.models import AssetStatus
 from backend.agents.ada_agent import (
     analyze_item,
     confirm_item,
     create_item_asset,
     create_model_asset,
     create_scene_asset,
+    generate_model_images,
+    quickstart_parse,
 )
 
 # 日志配置
@@ -207,15 +210,27 @@ async def create_model(
 
 @app.post("/api/assets/model/{asset_id}/select")
 async def select_model_look(asset_id: str, look_index: int = Form(...)):
-    """选择人物造型"""
+    """选择人物造型 → 触发头像 + 上半身三视图生成（v7）"""
     model = asset_manager.get_model(asset_id)
     if not model:
         raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
 
     # look_index 对应 look_a.png, look_b.png, ...
     look_path = os.path.join("assets", asset_id, f"look_{chr(97 + look_index)}.png")
-    asset_manager.update_model_look(asset_id, look_path)
-    return {"status": "ok", "selected_look": look_path}
+    model.selected_look = look_path
+    logger.info(f"[API] 人物造型已选: {asset_id} → {look_path}")
+
+    # v7: 选择造型后自动生成头像 + 上半身三视图
+    updated_model = await generate_model_images(model)
+    asset_manager.save_model(updated_model)
+
+    return {
+        "status": "ok",
+        "selected_look": look_path,
+        "avatar_image": updated_model.avatar_image,
+        "body_three_view_image": updated_model.body_three_view_image,
+        "asset_status": updated_model.status.value,
+    }
 
 
 @app.post("/api/assets/scene")
@@ -249,14 +264,23 @@ async def create_scene(
 
 @app.post("/api/assets/scene/{asset_id}/select")
 async def select_scene_option(asset_id: str, scene_index: int = Form(...)):
-    """选择场景方案"""
+    """选择场景方案 → 直接确认（v7：单图双用）"""
     scene = asset_manager.get_scene(asset_id)
     if not scene:
         raise HTTPException(status_code=404, detail=f"场景素材 {asset_id} 不存在")
 
     scene_path = os.path.join("assets", asset_id, f"scene_{chr(97 + scene_index)}.png")
-    asset_manager.update_scene_selection(asset_id, scene_path)
-    return {"status": "ok", "selected_scene": scene_path}
+    scene.selected_scene = scene_path
+    # v7: 场景选择后直接进入已确认状态（单图双用，不需额外生图）
+    scene.status = AssetStatus.CONFIRMED
+    asset_manager.save_scene(scene)
+    logger.info(f"[API] 场景已选并确认: {asset_id} → {scene_path}")
+
+    return {
+        "status": "ok",
+        "selected_scene": scene_path,
+        "asset_status": scene.status.value,
+    }
 
 
 @app.get("/api/assets")
@@ -279,6 +303,35 @@ async def get_asset(asset_id: str):
     return {"status": "ok", "asset": asset.model_dump()}
 
 
+@app.put("/api/assets/{asset_id}")
+async def update_asset(asset_id: str, updates: str = Form(..., description="更新字段 JSON")):
+    """更新素材详情（v7：详情页分区编辑 tag 后保存）"""
+    asset = asset_manager.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"素材 {asset_id} 不存在")
+
+    try:
+        data = json.loads(updates)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="updates 格式错误，需为 JSON")
+
+    # 按类型更新允许的字段
+    for key, value in data.items():
+        if hasattr(asset, key) and key not in ("id", "status"):
+            setattr(asset, key, value)
+
+    # 重新保存
+    if asset_id.startswith("item_"):
+        asset_manager.save_item(asset)
+    elif asset_id.startswith("model_"):
+        asset_manager.save_model(asset)
+    elif asset_id.startswith("scene_"):
+        asset_manager.save_scene(asset)
+
+    logger.info(f"[API] 素材更新: {asset_id}, 字段={list(data.keys())}")
+    return {"status": "ok", "asset": asset.model_dump()}
+
+
 @app.delete("/api/assets/{asset_id}")
 async def delete_asset(asset_id: str):
     """删除素材"""
@@ -294,6 +347,115 @@ async def delete_asset(asset_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail=f"素材 {asset_id} 不存在")
     return {"status": "ok", "message": f"素材 {asset_id} 已删除"}
+
+
+# ========== 一句话快速开始 API ==========
+
+@app.post("/api/quickstart/parse")
+async def quickstart_parse_api(
+    sentence: str = Form(..., description="一句话描述，如「帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶」"),
+    images: Optional[list[UploadFile]] = File(None, description="产品图片（可选）"),
+):
+    """
+    一句话快速开始（第 1 步）：ADA 拆解一句话为物品/人物/场景三类描述。
+    前端拿到拆解结果后，依次创建三类素材。
+    """
+    logger.info(f"[API] 一句话快速开始: {sentence[:80]}")
+
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    result = await quickstart_parse(
+        sentence=sentence,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    return {
+        "status": "ok",
+        "item_description": result["item_description"],
+        "model_description": result["model_description"],
+        "scene_description": result["scene_description"],
+        "message": "拆解完成，请依次确认三类素材",
+    }
+
+
+@app.post("/api/quickstart/create")
+async def quickstart_create_all(
+    sentence: str = Form(..., description="一句话描述"),
+    images: Optional[list[UploadFile]] = File(None, description="产品图片"),
+):
+    """
+    一句话快速开始（一步到位）：拆解 + 创建三类素材。
+    物品走 analyze 返回问卷（用户仍需确认），人物/场景返回方案供选择。
+    """
+    logger.info(f"[API] 一句话快速创建: {sentence[:80]}")
+
+    image_bytes_list = []
+    if images:
+        for img in images:
+            image_bytes_list.append(await img.read())
+
+    # 第 1 步：拆解
+    parsed = await quickstart_parse(
+        sentence=sentence,
+        images=image_bytes_list if image_bytes_list else None,
+    )
+
+    result = {
+        "item": None,
+        "model": None,
+        "scene": None,
+    }
+
+    # 第 2 步：创建物品素材（走问卷流程，返回待确认状态）
+    item_id = asset_manager.generate_id(AssetType.ITEM)
+    item_asset = await analyze_item(
+        asset_id=item_id,
+        description=parsed["item_description"],
+        images=image_bytes_list if image_bytes_list else None,
+    )
+    if item_asset.size_category != "large":
+        asset_manager.save_item(item_asset)
+        result["item"] = {
+            "asset": item_asset.model_dump(),
+            "questionnaire": [f.model_dump() for f in item_asset.questionnaire_fields],
+            "selling_points": item_asset.selling_points,
+        }
+    else:
+        result["item"] = {"status": "rejected", "reason": "大型物品不支持"}
+
+    # 第 3 步：创建人物素材（返回造型方案供选择）
+    model_id = asset_manager.generate_id(AssetType.MODEL)
+    model_asset, look_paths = await create_model_asset(
+        asset_id=model_id,
+        description=parsed["model_description"],
+    )
+    asset_manager.save_model(model_asset)
+    result["model"] = {
+        "asset": model_asset.model_dump(),
+        "look_options": look_paths,
+    }
+
+    # 第 4 步：创建场景素材（返回场景方案供选择）
+    scene_id = asset_manager.generate_id(AssetType.SCENE)
+    scene_asset, option_paths = await create_scene_asset(
+        asset_id=scene_id,
+        description=parsed["scene_description"],
+    )
+    asset_manager.save_scene(scene_asset)
+    result["scene"] = {
+        "asset": scene_asset.model_dump(),
+        "scene_options": option_paths,
+    }
+
+    return {
+        "status": "ok",
+        "parsed": parsed,
+        "assets": result,
+        "message": "三类素材已创建，请确认物品问卷并选择人物造型和场景方案",
+    }
 
 
 # ========== 视频生成 API（旧版兼容） ==========

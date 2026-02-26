@@ -67,11 +67,17 @@
 
       <!-- 统一生成区 -->
       <div class="gen-area card glass-card">
-        <!-- 一句话描述 -->
+        <!-- 一句话描述 + 快速创建 -->
         <div class="form-group">
-          <label for="gen-prompt">一句话描述（可选）</label>
+          <label for="gen-prompt">一句话描述</label>
           <textarea id="gen-prompt" rows="2"
-            placeholder="如：开场要搞笑一点 / 重点展示使用过程"></textarea>
+            placeholder="如：帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶 / 开场要搞笑一点"></textarea>
+          <div class="quickstart-row">
+            <button class="btn-quickstart" id="btn-quickstart" type="button">
+              <span class="btn-quickstart-icon">&#9889;</span> 一句话快速创建素材
+            </button>
+            <span class="quickstart-hint">AI 自动拆解为物品+人物+场景，一次创建三类素材</span>
+          </div>
         </div>
 
         <!-- 三个拖拽槽位 -->
