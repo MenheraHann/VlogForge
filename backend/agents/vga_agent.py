@@ -35,7 +35,7 @@ async def generate_segments(
     output_dir: str,
     aspect_ratio: str = "9:16",
     voice_anchor: str = "",
-    on_segment_done: Optional[Callable[[int, int], None]] = None,
+    on_segment_done: Optional[Callable[[int, int, str], None]] = None,
 ) -> list[str]:
     """
     首尾帧并行生成所有视频片段 + 智能裁切。
@@ -46,7 +46,7 @@ async def generate_segments(
         output_dir: 视频片段输出目录
         aspect_ratio: 画面比例
         voice_anchor: DA 生成的声音锚定描述，会加到每段 prompt 前面
-        on_segment_done: 每段完成时的回调 (当前索引, 总数)
+        on_segment_done: 每段完成时的回调 (当前索引, 总数, 片段路径)
 
     返回:
         视频片段路径列表（按顺序排列，已裁切）
@@ -124,7 +124,7 @@ async def generate_segments(
                 f"[VGA] 片段 {seg.segment_id}: 完成 ({done_count}/{total})"
             )
             if on_segment_done:
-                on_segment_done(done_count - 1, total)
+                on_segment_done(done_count - 1, total, trimmed_path)
 
         return trimmed_path
 

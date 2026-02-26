@@ -106,10 +106,6 @@ class ItemAsset(BaseModel):
     thumbnail_image: Optional[str] = Field(None, description="缩略图路径（白底电商风，UI 素材卡片展示）")
     three_view_image: Optional[str] = Field(None, description="三视图路径（纯产品画面，正/侧/背，供 DA/VA/VGA）")
 
-    # 兼容旧字段
-    feature_image: Optional[str] = Field(None, description="[已废弃] 功能介绍图，已替换为 usage_guide 文字")
-    instruction_image: Optional[str] = Field(None, description="[已废弃] 旧产品说明图")
-
     full_description: str = Field("", description="ADA 生成的完整产品描述")
     usage_guide: str = Field("", description="产品使用说明（逐步操作描述，供 DA/VA/VGA 正确编排使用动作）")
 
@@ -129,6 +125,9 @@ class ModelAsset(BaseModel):
 
     # v10: 单图体系（人在场景中的半身近景照，一图多用：UI 缩略图 + Agent 参考）
     portrait_image: str = Field("", description="人在场景中的半身近景照路径（一图多用）")
+
+    # 方案图路径列表（供用户选择，选择后设为 portrait_image）
+    look_options: list[str] = Field(default_factory=list, description="方案图路径列表")
 
     full_description: str = Field("", description="ADA 生成的完整人设描述")
 

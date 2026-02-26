@@ -1,21 +1,101 @@
 """
 图片生成工具
-封装 Gemini 原生图片生成能力
+封装 Nano Banana 图片生成能力
 支持：文生图（text2img）+ 图生图（img2img）+ 交错输出
 
-模型：gemini-2.0-flash-preview-image-generation（支持 response_modalities=["IMAGE", "TEXT"]）
+模型：gemini-2.5-flash-image（Nano Banana，支持 response_modalities=["IMAGE", "TEXT"]）
 用途：ADA 生成素材图 / VA 链式图生图
 """
 
 import os
+import asyncio
 import logging
 from typing import Optional
+from functools import wraps
 
 from google.genai import types
+from google.genai.errors import ClientError
 
 from backend.config import get_genai_client, IMAGE_GEN_MODEL
 
 logger = logging.getLogger(__name__)
+
+# ========== 可重试错误的指数退避 ==========
+# 初始等待 5s，最大 60s，最多重试 4 次
+# 覆盖：429 限流 + 响应无图片 + 网络瞬断
+
+_RETRY_INITIAL_DELAY = 5      # 首次重试等待秒数
+_RETRY_MAX_DELAY = 60          # 单次等待上限
+_RETRY_MAX_ATTEMPTS = 4        # 最大重试次数
+
+# 可重试的瞬态错误关键词（消息匹配）
+_RETRYABLE_MESSAGES = [
+    "Gemini 响应中未包含图片",
+    "Gemini 响应无 candidates",
+    "Connection aborted",
+    "RemoteDisconnected",
+    "connection without response",
+    "Read timed out",
+    "Connection reset",
+    "UNAVAILABLE",
+    "ServiceUnavailable",
+]
+
+
+def _is_retryable_error(exc: Exception) -> bool:
+    """判断异常是否为可重试的瞬态错误（429 限流 / 无图片 / 网络断连）"""
+    # google-genai SDK: ClientError(code=429)
+    if isinstance(exc, ClientError) and getattr(exc, "code", None) == 429:
+        return True
+    # Vertex AI / gRPC: google.api_core.exceptions.ResourceExhausted
+    try:
+        from google.api_core.exceptions import ResourceExhausted
+        if isinstance(exc, ResourceExhausted):
+            return True
+    except ImportError:
+        pass
+    # 网络层连接错误（requests / urllib3 / http.client）
+    import requests
+    if isinstance(exc, (ConnectionError, TimeoutError, requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+        return True
+    # 兜底：异常消息关键词匹配
+    msg = str(exc)
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg.upper():
+        return True
+    for retryable_msg in _RETRYABLE_MESSAGES:
+        if retryable_msg in msg:
+            return True
+    return False
+
+
+def _retry_on_transient(func):
+    """
+    装饰器：对可重试的瞬态错误进行指数退避重试。
+    覆盖 429 限流 + Nano Banana 响应无图片。
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        delay = _RETRY_INITIAL_DELAY
+        for attempt in range(_RETRY_MAX_ATTEMPTS + 1):  # 0=首次 + N 次重试
+            try:
+                return await func(*args, **kwargs)
+            except Exception as exc:
+                if not _is_retryable_error(exc):
+                    raise  # 不可重试的错误，直接抛出
+                if attempt >= _RETRY_MAX_ATTEMPTS:
+                    logger.error(
+                        f"[ImageGen] {func.__name__} 已达最大重试次数 "
+                        f"({_RETRY_MAX_ATTEMPTS})，放弃重试: {exc}"
+                    )
+                    raise  # 重试耗尽，抛出原始异常
+                logger.warning(
+                    f"[ImageGen] {func.__name__} 瞬态错误，"
+                    f"第 {attempt + 1}/{_RETRY_MAX_ATTEMPTS} 次重试，"
+                    f"等待 {delay}s... 原因: {exc}"
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, _RETRY_MAX_DELAY)
+    return wrapper
 
 
 def _get_client():
@@ -57,6 +137,7 @@ def _extract_all_images_from_response(response) -> list[bytes]:
     return images
 
 
+@_retry_on_transient
 async def text_to_image(
     prompt: str,
     system_instruction: str = "",
@@ -91,6 +172,7 @@ async def text_to_image(
     return image_data
 
 
+@_retry_on_transient
 async def image_to_image(
     input_images: list[bytes],
     prompt: str,
@@ -135,6 +217,7 @@ async def image_to_image(
     return image_data
 
 
+@_retry_on_transient
 async def generate_with_interleaved_output(
     prompt: str,
     input_images: Optional[list[bytes]] = None,

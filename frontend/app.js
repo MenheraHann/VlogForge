@@ -1,8 +1,9 @@
 /**
- * VlogForge 前端交互逻辑 (v10)
+ * VlogForge 前端交互逻辑 (v11)
  * 统一主页：素材库两列（物品+人物） + 生成区拖拽槽位
  * 智能问卷：物品创建走 analyze → 问卷确认 → confirm
  * 素材详情：点击卡片展开详情面板
+ * v11: 生成中占位卡片（骨架 shimmer + 进度文字）
  */
 
 // ========== 工具 ==========
@@ -44,6 +45,9 @@ let currentScript = null;
 // 生成区槽位绑定的素材
 let slotAssets = { item: null, model: null };
 
+// v11: 生成中的占位卡片追踪 { tempId: { type, name, element, message } }
+const pendingCards = new Map();
+
 // ========== 导航 ==========
 
 function showView(viewId) {
@@ -77,9 +81,15 @@ async function refreshAssets() {
 
 function renderColumnList(type, list, containerSel) {
   const container = $(containerSel);
+
+  // v11: 保留生成中的占位卡片
+  const pendingEls = Array.from(container.querySelectorAll(".asset-mini-card.generating"));
   container.innerHTML = "";
 
-  if (list.length === 0) {
+  // 重新插入占位卡片
+  pendingEls.forEach((el) => container.appendChild(el));
+
+  if (list.length === 0 && pendingEls.length === 0) {
     container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">暂无素材</div>`;
     return;
   }
@@ -88,6 +98,104 @@ function renderColumnList(type, list, containerSel) {
     const card = createMiniCard(type, asset);
     container.appendChild(card);
   });
+}
+
+// ========== v11: 生成中占位卡片 ==========
+
+/**
+ * 在素材列中插入一个生成中占位卡片
+ * @param {string} type - "items" 或 "models"
+ * @param {string} name - 素材名称（如产品名、"人物素材"）
+ * @param {string} message - 初始进度提示文字
+ * @returns {string} tempId - 用于后续更新/移除的临时ID
+ */
+function addPendingCard(type, name, message) {
+  const tempId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const containerSel = type === "items" ? "#col-items" : "#col-models";
+  const container = $(containerSel);
+
+  const card = document.createElement("div");
+  card.className = "asset-mini-card generating";
+  card.dataset.pendingId = tempId;
+  card.innerHTML = `
+    <div class="asset-generating-bar"><div class="asset-generating-bar-fill"></div></div>
+    <div class="asset-mini-card-inner">
+      <div class="asset-mini-thumb-skeleton"></div>
+      <div class="asset-mini-info">
+        <div class="asset-mini-name">${escapeHtml(name)}</div>
+        <div class="asset-mini-meta" style="color:#3b82f6;">${escapeHtml(message)}</div>
+      </div>
+    </div>
+    <div class="asset-generating-progress">
+      <span class="gen-spinner"></span>
+      <span class="gen-progress-text">${escapeHtml(message)}</span>
+    </div>
+  `;
+
+  // 移除"暂无素材"提示
+  const emptyHint = container.querySelector("div[style]");
+  if (emptyHint && emptyHint.textContent.includes("暂无素材")) emptyHint.remove();
+
+  container.prepend(card);
+
+  pendingCards.set(tempId, { type, name, element: card, message });
+  console.log(`[PendingCard] 新增: ${tempId} (${name}) → ${type}`);
+  return tempId;
+}
+
+/**
+ * 更新占位卡片的进度文字
+ */
+function updatePendingCard(tempId, message) {
+  const info = pendingCards.get(tempId);
+  if (!info) return;
+  const textEl = info.element.querySelector(".gen-progress-text");
+  if (textEl) textEl.textContent = message;
+  const metaEl = info.element.querySelector(".asset-mini-meta");
+  if (metaEl) metaEl.textContent = message;
+  info.message = message;
+}
+
+/**
+ * 移除占位卡片（生成完成后调用）
+ * 立即移除，不用延迟——防止与 refreshAssets 竞争导致空白
+ */
+function removePendingCard(tempId) {
+  const info = pendingCards.get(tempId);
+  if (!info) return;
+  console.log(`[PendingCard] 移除成功: ${tempId} (${info.name})`);
+  info.element.remove();
+  pendingCards.delete(tempId);
+}
+
+/**
+ * 标记占位卡片为失败状态（不自动移除，用户手动关闭）
+ */
+function failPendingCard(tempId, errorMsg) {
+  const info = pendingCards.get(tempId);
+  if (!info) return;
+  console.error(`[PendingCard] 生成失败: ${tempId} (${info.name}) - ${errorMsg}`);
+  info.element.classList.remove("generating");
+  info.element.style.borderColor = "rgba(239, 68, 68, 0.3)";
+  info.element.style.pointerEvents = "auto";  // 恢复交互
+  const bar = info.element.querySelector(".asset-generating-bar");
+  if (bar) bar.remove();
+  const progressEl = info.element.querySelector(".asset-generating-progress");
+  if (progressEl) {
+    progressEl.innerHTML = `
+      <span style="color:var(--error);flex:1;">生成失败: ${escapeHtml(errorMsg)}</span>
+      <button class="btn-sm btn-danger pending-dismiss" style="pointer-events:auto;flex-shrink:0;">关闭</button>
+    `;
+    const dismissBtn = progressEl.querySelector(".pending-dismiss");
+    if (dismissBtn) {
+      dismissBtn.addEventListener("click", () => {
+        info.element.remove();
+        pendingCards.delete(tempId);
+      });
+    }
+  }
+  const metaEl = info.element.querySelector(".asset-mini-meta");
+  if (metaEl) { metaEl.textContent = "生成失败"; metaEl.style.color = "var(--error)"; }
 }
 
 function getAssetThumbUrl(asset) {
@@ -183,13 +291,15 @@ function createMiniCard(type, asset) {
     });
   }
 
-  // v7: 点击编辑（待确认状态 — 继续问卷）
+  // v7: 点击编辑（物品 → 问卷，人物 → 方案选择）
   const editBtn = card.querySelector("[data-edit]");
   if (editBtn) {
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (type === "items" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
         openQuestionnaireModal(asset);
+      } else if (type === "models" && asset.look_options && asset.look_options.length > 0) {
+        openSelectModal("model", asset, asset.look_options);
       } else {
         showToast("该素材暂不支持编辑", "warning");
       }
@@ -263,7 +373,6 @@ function openDetailModal(type, asset) {
     content += renderImagesRow(asset, [
       { field: "thumbnail_image", label: "缩略图" },
       { field: "three_view_image", label: "三视图" },
-      { field: "feature_image", label: "功能介绍图" },
     ]);
 
     // v7: tag 分区展示 + 编辑
@@ -483,26 +592,37 @@ function openCreateModal(type) {
       // 物品走智能问卷流程
       await handleItemCreate(desc, createFiles, submitBtn, labels[type]);
     } else {
-      // 人物走原有流程
+      // v11: 人物 → 立即关闭模态框，插入占位卡片，后台生成
       const formData = new FormData();
       formData.append("description", desc);
       createFiles.forEach((f) => formData.append("images", f));
 
+      closeCreateModal();
+      const modelName = desc.length > 10 ? desc.slice(0, 10) + "..." : desc || "人物素材";
+      const pendingId = addPendingCard("models", modelName, "正在设计人物形象...");
+
+      // 模拟步骤进度
+      const t1 = setTimeout(() => updatePendingCard(pendingId, "正在生成方案图片..."), 6000);
+      const t2 = setTimeout(() => updatePendingCard(pendingId, "即将完成..."), 18000);
+
       try {
         const res = await fetch("/api/assets/model", { method: "POST", body: formData });
+        clearTimeout(t1); clearTimeout(t2);
         if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "创建失败"); }
         const data = await res.json();
+
+        console.log(`[ModelCreate] 成功: ${data.asset.name}`);
+        await refreshAssets();
+        removePendingCard(pendingId);
         showToast(`${data.asset.name} 创建成功`, "success");
-        closeCreateModal();
 
         if (data.look_options) {
           openSelectModal("model", data.asset, data.look_options);
         }
-        refreshAssets();
       } catch (err) {
+        clearTimeout(t1); clearTimeout(t2);
+        failPendingCard(pendingId, err.message);
         showToast(`创建失败: ${err.message}`, "error");
-        submitBtn.disabled = false;
-        submitBtn.textContent = `创建${labels[type]}`;
       }
     }
   });
@@ -754,117 +874,38 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       }
     }
 
-    // 显示加载状态（带步骤提示）
-    body.innerHTML = `
-      <div class="q-loading-screen">
-        <div class="q-submit-spinner"></div>
-        <div class="q-loading-title">正在生成产品档案</div>
-        <div class="q-loading-desc">AI 正在整合你的回答并生成产品素材图...</div>
-        <div class="q-loading-steps">
-          <div class="q-loading-step active" id="ql-step-1">
-            <span class="q-loading-step-icon">&#9679;</span>
-            <span>整合产品信息，优化文案</span>
-          </div>
-          <div class="q-loading-step" id="ql-step-2">
-            <span class="q-loading-step-icon">&#9675;</span>
-            <span>生成缩略图（产品白底主图）</span>
-          </div>
-          <div class="q-loading-step" id="ql-step-3">
-            <span class="q-loading-step-icon">&#9675;</span>
-            <span>生成三视图（正/侧/背）</span>
-          </div>
-          <div class="q-loading-step" id="ql-step-4">
-            <span class="q-loading-step-icon">&#9675;</span>
-            <span>生成功能介绍图</span>
-          </div>
-        </div>
-      </div>
-    `;
+    // v11: 立即关闭问卷模态框，在素材列插入占位卡片
+    modal.style.display = "none";
+    const pendingId = addPendingCard("items", asset.name || "物品素材", "正在分析产品信息...");
 
-    // 模拟步骤进度动画（实际后端是串行生成，这里做视觉反馈）
-    let stepTimer = null;
-    let currentStep = 1;
-    function advanceLoadingStep() {
-      stepTimer = setInterval(() => {
-        currentStep++;
-        if (currentStep > 4) { clearInterval(stepTimer); return; }
-        const prev = $(`#ql-step-${currentStep - 1}`);
-        const curr = $(`#ql-step-${currentStep}`);
-        if (prev) { prev.classList.remove("active"); prev.classList.add("done"); prev.querySelector(".q-loading-step-icon").innerHTML = "&#10003;"; }
-        if (curr) { curr.classList.add("active"); curr.querySelector(".q-loading-step-icon").innerHTML = "&#9679;"; }
-      }, 6000);
-    }
-    advanceLoadingStep();
+    // 模拟步骤进度（后台串行生成）
+    const progressSteps = [
+      { delay: 5000, msg: "正在生成产品图片..." },
+      { delay: 12000, msg: "正在生成三视图..." },
+      { delay: 20000, msg: "即将完成..." },
+    ];
+    const stepTimers = progressSteps.map(({ delay, msg }) =>
+      setTimeout(() => updatePendingCard(pendingId, msg), delay)
+    );
 
     try {
       const formData = new FormData();
       formData.append("confirmed_fields", JSON.stringify(confirmed));
 
       const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
-      clearInterval(stepTimer);
+      stepTimers.forEach(clearTimeout);
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
 
       const data = await res.json();
-      const updatedAsset = data.asset;
-
-      // 显示完成画面（含生成的图片）
-      renderDoneScreen(updatedAsset);
-      refreshAssets();
+      console.log(`[ItemConfirm] 成功: ${data.asset.name}`);
+      await refreshAssets();  // 先刷新渲染真实卡片
+      removePendingCard(pendingId);  // 再移除占位卡片
+      showToast(`${data.asset.name || "物品"} 档案创建完成`, "success");
     } catch (err) {
-      clearInterval(stepTimer);
+      stepTimers.forEach(clearTimeout);
+      failPendingCard(pendingId, err.message);
       showToast(`确认失败: ${err.message}`, "error");
-      renderQuestion(currentIndex);
     }
-  }
-
-  function renderDoneScreen(updatedAsset) {
-    // 构建图片展示
-    const imageFields = [
-      { field: "thumbnail_image", label: "缩略图" },
-      { field: "three_view_image", label: "三视图" },
-      { field: "feature_image", label: "功能介绍图" },
-    ];
-
-    let imagesHtml = '';
-    let imageCount = 0;
-    for (const { field, label } of imageFields) {
-      const url = getAssetImageUrl(updatedAsset, field);
-      if (url) {
-        imageCount++;
-        imagesHtml += `
-          <div class="q-done-image-card">
-            <img src="${url}" alt="${escapeHtml(label)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-            <div class="q-done-image-placeholder" style="display:none;">加载失败</div>
-            <div class="q-done-image-label">${escapeHtml(label)}</div>
-          </div>`;
-      } else {
-        imagesHtml += `
-          <div class="q-done-image-card">
-            <div class="q-done-image-placeholder">未生成</div>
-            <div class="q-done-image-label">${escapeHtml(label)}</div>
-          </div>`;
-      }
-    }
-
-    const imageNote = imageCount === 3
-      ? '3 张产品素材图已生成'
-      : imageCount > 0
-        ? `${imageCount}/3 张图片已生成，部分图片生成失败`
-        : '产品图片生成失败，可稍后在详情页中查看';
-
-    body.innerHTML = `
-      <div class="q-done-screen">
-        <div class="q-done-icon">&#10003;</div>
-        <div class="q-done-title">产品档案创建完成</div>
-        <div class="q-done-desc">${escapeHtml(imageNote)}</div>
-        <div class="q-done-images">${imagesHtml}</div>
-        <button class="q-done-btn" id="q-done-close">完成</button>
-      </div>
-    `;
-
-    $("#q-done-close").addEventListener("click", () => {
-      modal.style.display = "none";
-    });
   }
 
   // 渲染第一题
@@ -1047,16 +1088,14 @@ function clearSlot(slotType) {
 }
 
 async function handleSlotUpload(slotType, files) {
-  const apiType = slotType;
-  showToast(`正在创建${slotType === "item" ? "物品" : "人物"}...`, "info");
-
   const formData = new FormData();
   formData.append("description", "请根据图片分析");
   files.forEach((f) => formData.append("images", f));
 
-  try {
-    if (slotType === "item") {
-      // 走问卷流程
+  if (slotType === "item") {
+    // 走问卷流程（analyze 较快，不需要占位卡片）
+    try {
+      showToast("正在分析物品...", "info");
       const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
       if (!res.ok) throw new Error("分析失败");
       const data = await res.json();
@@ -1064,24 +1103,37 @@ async function handleSlotUpload(slotType, files) {
       showToast(`${data.asset.name} 分析完成`, "success");
       openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
       refreshAssets();
-    } else {
-      const res = await fetch(`/api/assets/${apiType}`, { method: "POST", body: formData });
+    } catch (err) {
+      showToast(`分析失败: ${err.message}`, "error");
+    }
+  } else {
+    // v11: 人物 → 立即插入占位卡片，后台生成
+    const pendingId = addPendingCard("models", "人物素材", "正在设计人物形象...");
+    const t1 = setTimeout(() => updatePendingCard(pendingId, "正在生成方案图片..."), 6000);
+    const t2 = setTimeout(() => updatePendingCard(pendingId, "即将完成..."), 18000);
+
+    try {
+      const res = await fetch("/api/assets/model", { method: "POST", body: formData });
+      clearTimeout(t1); clearTimeout(t2);
       if (!res.ok) throw new Error("创建失败");
       const data = await res.json();
 
       // 自动选择第一个方案，设置 portrait_image
-      if (slotType === "model" && data.look_options && data.look_options.length > 0) {
+      if (data.look_options && data.look_options.length > 0) {
         const sf = new FormData(); sf.append("look_index", 0);
         await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST", body: sf });
         data.asset.portrait_image = data.look_options[0];
       }
 
+      await refreshAssets();
+      removePendingCard(pendingId);
       bindSlot(slotType, data.asset);
       showToast(`${data.asset.name} 已创建`, "success");
-      refreshAssets();
+    } catch (err) {
+      clearTimeout(t1); clearTimeout(t2);
+      failPendingCard(pendingId, err.message);
+      showToast(`创建失败: ${err.message}`, "error");
     }
-  } catch (err) {
-    showToast(`创建失败: ${err.message}`, "error");
   }
 }
 
@@ -1103,6 +1155,19 @@ $("#btn-quickstart").addEventListener("click", async () => {
   btn.disabled = true;
   btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> AI 拆解中...';
 
+  // v11: 立即插入两个占位卡片
+  const shortDesc = sentence.length > 10 ? sentence.slice(0, 10) + "..." : sentence;
+  const itemPendingId = addPendingCard("items", shortDesc, "AI 正在拆解需求...");
+  const modelPendingId = addPendingCard("models", shortDesc, "AI 正在拆解需求...");
+
+  const t1 = setTimeout(() => {
+    updatePendingCard(itemPendingId, "正在分析产品信息...");
+    updatePendingCard(modelPendingId, "正在设计人物形象...");
+  }, 5000);
+  const t2 = setTimeout(() => {
+    updatePendingCard(modelPendingId, "正在生成方案图片...");
+  }, 15000);
+
   try {
     // 调用快速创建 API（拆解 + 创建两类素材）
     const formData = new FormData();
@@ -1115,11 +1180,15 @@ $("#btn-quickstart").addEventListener("click", async () => {
     }
 
     const res = await fetch("/api/quickstart/create", { method: "POST", body: formData });
+    clearTimeout(t1); clearTimeout(t2);
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "快速创建失败"); }
     const data = await res.json();
 
-    showToast("两类素材已创建，请依次确认", "success");
+    // 先刷新渲染真实卡片，再移除占位卡片
     await refreshAssets();
+    removePendingCard(itemPendingId);
+    removePendingCard(modelPendingId);
+    showToast("两类素材已创建，请依次确认", "success");
 
     // 处理物品：打开问卷确认
     if (data.assets.item && data.assets.item.asset) {
@@ -1142,6 +1211,9 @@ $("#btn-quickstart").addEventListener("click", async () => {
     setupQuickstartChain();
 
   } catch (err) {
+    clearTimeout(t1); clearTimeout(t2);
+    failPendingCard(itemPendingId, err.message);
+    failPendingCard(modelPendingId, err.message);
     showToast(`快速创建失败: ${err.message}`, "error");
   } finally {
     btn.disabled = false;
@@ -1214,6 +1286,7 @@ $("#btn-generate").addEventListener("click", async () => {
     const genData = await genRes.json();
 
     currentJobId = genData.job_id;
+    localStorage.setItem('vlogforge_job_id', currentJobId);
     resetProgressUI();
     showView("progress");
     startSSE(currentJobId);
@@ -1245,6 +1318,10 @@ function resetProgressUI() {
   $("#segments-list").innerHTML = "";
   $("#storyboard-preview").style.display = "none";
   $("#storyboard-grid").innerHTML = "";
+  const segPreview = $("#segments-preview");
+  if (segPreview) { segPreview.style.display = "none"; }
+  const segGrid = $("#segments-grid");
+  if (segGrid) { segGrid.innerHTML = ""; }
   $$(".pipeline-step").forEach((s) => s.classList.remove("active", "done"));
   $$(".pipeline-line").forEach((l) => l.classList.remove("done"));
 }
@@ -1258,6 +1335,7 @@ function startSSE(jobId) {
     if (data.status === "completed" || data.status === "failed") {
       eventSource.close();
       eventSource = null;
+      localStorage.removeItem('vlogforge_job_id');
       if (data.status === "completed" && data.final_video_url) showResult(data);
       else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
     }
@@ -1273,6 +1351,7 @@ function startPolling(jobId) {
       updateProgress(data);
       if (data.status === "completed" || data.status === "failed") {
         clearInterval(interval);
+        localStorage.removeItem('vlogforge_job_id');
         if (data.status === "completed" && data.final_video_url) showResult(data);
         else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
       }
@@ -1294,6 +1373,7 @@ function updateProgress(data) {
     renderScript(data.script);
   }
   if (data.storyboard_urls && data.storyboard_urls.length > 0) renderStoryboard(data.storyboard_urls);
+  if (data.segment_urls && data.segment_urls.length > 0) renderSegments(data.segment_urls);
 }
 
 function updatePipelineStage(stage) {
@@ -1344,12 +1424,38 @@ function renderScript(script) {
 function renderStoryboard(urls) {
   $("#storyboard-preview").style.display = "block";
   const grid = $("#storyboard-grid");
-  grid.innerHTML = "";
-  urls.forEach((url, i) => {
+  const existingCount = grid.children.length;
+
+  // 仅追加新帧，避免每次清空重绘
+  for (let i = existingCount; i < urls.length; i++) {
     const img = document.createElement("img");
-    img.src = url; img.alt = `帧 ${i + 1}`; img.loading = "lazy";
+    img.src = urls[i];
+    img.alt = `帧 ${i + 1}`;
+    img.loading = "lazy";
     grid.appendChild(img);
-  });
+  }
+}
+
+function renderSegments(urls) {
+  let container = $("#segments-preview");
+  if (!container) return;
+  container.style.display = "block";
+  const grid = $("#segments-grid");
+  if (!grid) return;
+  const existingCount = grid.children.length;
+
+  // 仅追加新片段，增量渲染
+  for (let i = existingCount; i < urls.length; i++) {
+    const video = document.createElement("video");
+    video.src = urls[i];
+    video.muted = true;
+    video.loop = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.style.width = "100%";
+    video.style.borderRadius = "8px";
+    grid.appendChild(video);
+  }
 }
 
 // ========== 结果视图 ==========
@@ -1388,6 +1494,7 @@ $("#btn-back").addEventListener("click", () => {
 
 $("#btn-new-task").addEventListener("click", () => {
   currentJobId = null;
+  localStorage.removeItem('vlogforge_job_id');
   currentScript = null;
   slotAssets = { item: null, model: null };
   clearSlot("item");
@@ -1397,4 +1504,52 @@ $("#btn-new-task").addEventListener("click", () => {
 });
 
 // ========== 初始化 ==========
-document.addEventListener("DOMContentLoaded", () => { refreshAssets(); });
+
+/**
+ * 页面加载时恢复正在进行的视频生成任务
+ * 从 localStorage 读取 job_id，向后端查询状态，按结果恢复对应视图
+ */
+async function restoreJobIfNeeded() {
+  const savedJobId = localStorage.getItem('vlogforge_job_id');
+  if (!savedJobId) return;
+
+  try {
+    const res = await fetch(`/api/status/${savedJobId}`);
+    if (!res.ok) {
+      // 任务不存在或接口异常，清除并回到首页
+      localStorage.removeItem('vlogforge_job_id');
+      return;
+    }
+    const data = await res.json();
+
+    if (data.status === "completed") {
+      // 任务已完成 → 展示结果页
+      localStorage.removeItem('vlogforge_job_id');
+      currentJobId = savedJobId;
+      if (data.final_video_url) {
+        showResult(data);
+      }
+    } else if (data.status === "failed") {
+      // 任务已失败 → 清除，留在首页
+      localStorage.removeItem('vlogforge_job_id');
+      showToast("上次的生成任务已失败", "error");
+    } else {
+      // 任务仍在进行中 → 恢复进度视图并重连 SSE
+      currentJobId = savedJobId;
+      resetProgressUI();
+      showView("progress");
+      updateProgress(data);
+      startSSE(savedJobId);
+      showToast("已恢复进行中的生成任务", "info");
+    }
+  } catch (err) {
+    // 网络错误等，清除存储，不阻塞正常加载
+    localStorage.removeItem('vlogforge_job_id');
+    console.warn("恢复任务失败:", err);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  refreshAssets();
+  restoreJobIfNeeded();
+});

@@ -58,7 +58,7 @@ DA_SCRIPT_SYSTEM_PROMPT = """你是 VlogForge 的创意总监（DA），负责�
 ### 自检评分（self_check）
 - person_match：脚本中人物描述与素材信息的匹配程度（1-5）
 - product_accuracy：产品信息、使用方式、卖点的表达准确度（1-5）
-- scene_consistency：场景描述与人物素材中 scene_context 的一致性（1-5）
+- scene_context_match：场景描述与人物素材中 scene_context 的一致性（1-5）
 - overall_quality：整体脚本质量（创意、自然度、完整性）（1-5）
 - issues：如果有任何问题，写在这里；没有问题留空字符串
 

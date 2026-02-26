@@ -52,15 +52,17 @@ async def _text_analysis(
     system_prompt: str,
     response_schema: dict,
     input_images: Optional[list[bytes]] = None,
+    max_retries: int = 3,
 ) -> dict:
     """
-    调用 Gemini 文本模型进行结构化分析。
+    调用 Gemini 文本模型进行结构化分析（含瞬态错误重试）。
 
     参数:
         user_prompt: 用户提示词
         system_prompt: 系统提示词
         response_schema: JSON Schema
         input_images: 输入图片（可选）
+        max_retries: 瞬态错误最大重试次数
 
     返回:
         解析后的 dict
@@ -76,22 +78,44 @@ async def _text_analysis(
     else:
         contents = user_prompt
 
-    response = await client.aio.models.generate_content(
-        model=TEXT_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=0.7,
-            response_mime_type="application/json",
-            response_schema=response_schema,
-        ),
-    )
+    import asyncio
 
-    raw_text = response.text
-    if not raw_text:
-        raise ValueError("Gemini 返回了空响应")
+    delay = 5
+    for attempt in range(max_retries + 1):
+        try:
+            response = await client.aio.models.generate_content(
+                model=TEXT_MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                ),
+            )
 
-    return json.loads(raw_text)
+            raw_text = response.text
+            if not raw_text:
+                raise ValueError("Gemini 返回了空响应")
+
+            return json.loads(raw_text)
+
+        except (json.JSONDecodeError, ValueError):
+            raise  # 非瞬态错误，直接抛出
+        except Exception as exc:
+            msg = str(exc)
+            is_transient = any(kw in msg for kw in [
+                "429", "RESOURCE_EXHAUSTED", "timed out", "Connection",
+                "RemoteDisconnected", "TransportError", "UNAVAILABLE",
+            ])
+            if not is_transient or attempt >= max_retries:
+                raise
+            logger.warning(
+                f"[ADA] 文本分析瞬态错误，第 {attempt + 1}/{max_retries} 次重试，"
+                f"等待 {delay}s... 原因: {exc}"
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 60)
 
 
 # ========== 物品：第 1 步 — 分析 + 生成问卷 ==========
@@ -343,17 +367,16 @@ async def create_model_asset(
             save_image(img_bytes, path)
             ref_paths.append(path)
 
-    # v10: 生成多套「人在场景中的半身近景」方案图
-    scene_context = data.get("scene_context", "室内家居场景，自然光，明亮温暖的环境")
+    # v10: 生成多套「人在场景中的半身近景」方案图（关键词式提示词）
+    scene_context = data.get("scene_context", "客厅，背景是沙发、夜晚自然光、明亮的环境")
+    base_image_prompt = data.get("image_prompt", "")
+    if not base_image_prompt:
+        # 降级：用关键词拼接
+        base_image_prompt = f"半身近景、{data['appearance']}、面对镜头、{scene_context}、手机拍摄的真实质感"
+    logger.info(f"[ADA] 图片生成提示词: {base_image_prompt[:80]}...")
     look_paths = []
     for i in range(num_looks):
-        image_prompt = ADA_MODEL_IMAGE_PROMPT.format(
-            full_description=data["full_description"],
-            appearance=data["appearance"],
-            outfits=data["outfits"],
-            scene_context=scene_context,
-        )
-        image_prompt += f"\n\n这是方案 {chr(65 + i)}，请在保持人物一致的前提下，提供略有区别的姿态和表情。"
+        image_prompt = ADA_MODEL_IMAGE_PROMPT.format(image_prompt=base_image_prompt)
         try:
             img_bytes = await text_to_image(image_prompt)
             path = os.path.join(asset_dir, f"look_{chr(97 + i)}.png")
@@ -371,7 +394,7 @@ async def create_model_asset(
         outfits=data["outfits"],
         scene_context=scene_context,
         reference_images=ref_paths,
-        selected_look=None,
+        look_options=look_paths,
         full_description=data["full_description"],
     )
 

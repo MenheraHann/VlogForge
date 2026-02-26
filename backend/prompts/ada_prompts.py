@@ -305,51 +305,38 @@ ADA_MODEL_SYSTEM_PROMPT = """你是 VlogForge 的素材设计师（ADA），当�
 
 输出字段：
 1. name：人物标签（简短，如"邻家短发女生"、"清冷御姐"）
-2. appearance：完整的外貌描述（年龄范围、性别、发型发色、脸型五官、肤色、身材）
-3. personality：气质性格（如"亲和活泼"、"知性优雅"、"酷飒干练"）
-4. outfits：穿搭描述（提供 2-3 套适合 vlog 拍摄的穿搭方案）
-5. scene_context：场景信息（拍摄环境、光线、氛围等。例如"客厅，背景是沙发，夜晚自然光，明亮的环境"）
-6. full_description：完整的人设描述（150-250字），适合作为图片生成的详细提示词，**必须包含场景信息**
+2. appearance：外貌关键词（用顿号分隔，如"中国女性、25岁、长发、素颜、杏眼、自然肤色"）
+3. personality：气质性格关键词（如"亲和活泼、邻家感"）
+4. outfits：穿搭关键词（如"白色基础T恤、浅色牛仔裤"）
+5. scene_context：场景关键词（用顿号分隔，如"客厅，背景是沙发、夜晚自然光、明亮的环境"）
+6. image_prompt：**图片生成专用提示词**，严格使用关键词顿号分隔格式，不要写长句
+7. full_description：完整的人设描述（用于其他 Agent 参考）
+
+## 关键：image_prompt 格式
+
+image_prompt 必须严格遵循以下格式，用顿号分隔关键词，不要写完整句子：
+
+格式：`半身近景、{性别民族}、{年龄}岁、{发型}、{妆容/表情}、面对镜头、{场景}，背景是{背景物}、{光线}、{环境氛围}、手机拍摄的真实质感`
+
+示例：
+- "半身近景、中国女性、25岁、长发、素颜、面对镜头、客厅，背景是沙发、夜晚自然光、明亮的环境、手机拍摄的真实质感"
+- "半身近景、中国女性、22岁、短发及肩、淡妆、面对镜头微笑、卧室，背景是白色床头和台灯、晨间自然光、温馨的环境、手机拍摄的真实质感"
+- "半身近景、亚洲女性、28岁、马尾、清爽妆容、面对镜头、书房，背景是书架和绿植、午后自然光、安静明亮的环境、手机拍摄的真实质感"
 
 规则：
-- 人设要适合 vlog 带货场景，亲和力强，符合目标受众审美
-- 描述要具体、可视化，能让图片生成模型准确还原
-- 穿搭要实际、不过于夸张，适合日常 vlog 风格
-- **场景规则（核心）**：
-  - 如果用户描述中包含场景信息（如"在浴室""客厅里"），直接使用
-  - 如果用户没有提供场景描述，**自动补充一个合适的室内家居场景**（优先：客厅、卧室、书房、浴室等）
-  - 场景要符合产品使用场景（如护肤品 → 浴室/卧室，书籍 → 书房/客厅）
-  - 强调 vlog 风格：手机拍摄的真实质感，自然光（非影棚专业灯光），明亮温暖的环境
-  - 场景不宜太大太空旷，要有家居生活感
-
-## Reference
-
-输入示例："20 多岁亚洲女生，短发，邻家感，日常穿搭"
-输出：
-- name="邻家短发女生"
-- appearance="20-25岁亚洲女性，短发及肩..."
-- scene_context="客厅，背景是米色布艺沙发和绿植，夜晚暖色灯光，明亮温馨的环境"
+- 人设要适合 vlog 带货场景，亲和力强
+- **所有描述都用关键词格式**，不要写段落式长文
+- **场景规则**：
+  - 用户描述中有场景信息就直接用，没有就自动补充室内家居场景（客厅、卧室、书房、浴室）
+  - 光线必须是自然光（非影棚专业灯光），环境明亮温暖
+  - 必须有"手机拍摄的真实质感"关键词
+  - 必须有"面对镜头"关键词
 
 ## 输出格式
 严格按照 JSON Schema 输出。
 """
 
-ADA_MODEL_IMAGE_PROMPT = """请根据以下人物设定生成一张「人在场景中的半身近景」照片：
-
-人物描述：{full_description}
-外貌：{appearance}
-穿搭：{outfits}
-场景：{scene_context}
-
-要求：
-- 半身近景（胸部以上），人物面对镜头，表情自然亲和
-- 人物必须处于场景中，背景展示真实的家居环境
-- **手机拍摄的真实质感**，像用手机自拍或他拍的 vlog 画面
-- 自然光为主（非影棚专业灯光），环境明亮温暖
-- 真人写实风格，不要过度美颜/滤镜
-- 这张图同时用于：UI 缩略图、首帧参考、分镜参考（一图多用）
-- 提示词风格参考：半身近景、中国女性、25岁、长发、素颜、面对镜头、客厅，背景是沙发、夜晚自然光、明亮的环境、手机拍摄的真实质感
-"""
+ADA_MODEL_IMAGE_PROMPT = "{image_prompt}"
 
 def build_model_analysis_prompt(model_description: str) -> str:
     """构建人物分析的用户提示词（v10：包含场景信息分析）"""
@@ -365,21 +352,25 @@ def build_model_analysis_prompt(model_description: str) -> str:
 
 
 def get_model_response_schema() -> dict:
-    """人物档案 JSON Schema（v10：含 scene_context）"""
+    """人物档案 JSON Schema（v10：含 scene_context + image_prompt）"""
     return {
         "type": "OBJECT",
         "properties": {
             "name": {"type": "STRING", "description": "人物标签"},
-            "appearance": {"type": "STRING", "description": "外貌描述"},
-            "personality": {"type": "STRING", "description": "气质性格"},
-            "outfits": {"type": "STRING", "description": "穿搭描述"},
+            "appearance": {"type": "STRING", "description": "外貌关键词（顿号分隔）"},
+            "personality": {"type": "STRING", "description": "气质性格关键词"},
+            "outfits": {"type": "STRING", "description": "穿搭关键词"},
             "scene_context": {
                 "type": "STRING",
-                "description": "场景信息：拍摄环境、光线、氛围等（如'客厅，背景是沙发，夜晚自然光，明亮的环境'）",
+                "description": "场景关键词（如'客厅，背景是沙发、夜晚自然光、明亮的环境'）",
             },
-            "full_description": {"type": "STRING", "description": "完整人设描述（必须包含场景信息）"},
+            "image_prompt": {
+                "type": "STRING",
+                "description": "图片生成专用提示词，严格关键词顿号分隔格式（如'半身近景、中国女性、25岁、长发、素颜、面对镜头、客厅，背景是沙发、夜晚自然光、明亮的环境、手机拍摄的真实质感'）",
+            },
+            "full_description": {"type": "STRING", "description": "完整人设描述"},
         },
-        "required": ["name", "appearance", "personality", "outfits", "scene_context", "full_description"],
+        "required": ["name", "appearance", "personality", "outfits", "scene_context", "image_prompt", "full_description"],
     }
 
 

@@ -1021,6 +1021,85 @@ body {
 /* v7: 待确认卡片不可拖拽 */
 .asset-mini-card:not([draggable="true"]) { cursor: default; }
 
+/* ========== v11: 生成中占位卡片 ========== */
+.asset-mini-card.generating {
+  border-color: rgba(59, 130, 246, 0.3);
+  pointer-events: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.asset-mini-badge.generating {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+/* 骨架缩略图（shimmer 呼吸动画） */
+.asset-mini-thumb-skeleton {
+  width: 56px; height: 56px; border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.08) 40%,
+    rgba(255, 255, 255, 0.04) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 生成中进度文字 */
+.asset-generating-progress {
+  font-size: 0.7rem;
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.75rem 0.6rem;
+}
+
+.asset-generating-progress .gen-spinner {
+  width: 12px; height: 12px;
+  border: 1.5px solid rgba(59, 130, 246, 0.2);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* 占位卡片顶部的蓝色进度条 */
+.asset-generating-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: rgba(59, 130, 246, 0.15);
+  overflow: hidden;
+}
+.asset-generating-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  width: 30%;
+  animation: gen-bar-indeterminate 2s ease-in-out infinite;
+}
+@keyframes gen-bar-indeterminate {
+  0% { transform: translateX(-100%); width: 30%; }
+  50% { width: 50%; }
+  100% { transform: translateX(400%); width: 30%; }
+}
+
+/* 从占位过渡到正式卡片的动画 */
+.asset-mini-card.gen-done {
+  animation: gen-card-done 0.5s var(--ease-out);
+}
+@keyframes gen-card-done {
+  0% { background: rgba(59, 130, 246, 0.08); }
+  100% { background: rgba(255, 255, 255, 0.03); }
+}
+
 /* ========== 响应式 ========== */
 @media (max-width: 768px) {
   .asset-columns { grid-template-columns: 1fr; }

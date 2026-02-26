@@ -64,30 +64,20 @@ async def generate_video_segment(
     operation = client.models.generate_videos(
         model=VIDEO_GEN_MODEL,
         prompt=description,
-        reference_images=[
-            types.RawReferenceImage(
-                reference_id=1,
-                reference_type="REFERENCE_TYPE_FIRST_FRAME",
-                image=types.Image(
-                    image_bytes=first_frame,
-                    mime_type="image/png",
-                ),
-            ),
-            types.RawReferenceImage(
-                reference_id=2,
-                reference_type="REFERENCE_TYPE_LAST_FRAME",
-                image=types.Image(
-                    image_bytes=last_frame,
-                    mime_type="image/png",
-                ),
-            ),
-        ],
-        config=types.GenerateVideoConfig(
+        image=types.Image(
+            image_bytes=first_frame,
+            mime_type="image/png",
+        ),
+        config=types.GenerateVideosConfig(
             generate_audio=generate_audio,
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
             number_of_videos=1,
             person_generation="allow_all",
+            last_frame=types.Image(
+                image_bytes=last_frame,
+                mime_type="image/png",
+            ),
         ),
     )
 
@@ -98,7 +88,7 @@ async def generate_video_segment(
             raise TimeoutError(f"[VideoGen] 视频生成超时 ({MAX_WAIT_TIME}s)")
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-        operation = client.operations.get(name=operation.name)
+        operation = client.operations.get(operation)
         logger.info(f"[VideoGen] 轮询中... 已等待 {elapsed}s")
 
     # 下载生成的视频
@@ -143,7 +133,7 @@ async def generate_video_from_first_frame(
             image_bytes=first_frame,
             mime_type="image/png",
         ),
-        config=types.GenerateVideoConfig(
+        config=types.GenerateVideosConfig(
             generate_audio=generate_audio,
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
@@ -158,7 +148,7 @@ async def generate_video_from_first_frame(
             raise TimeoutError(f"[VideoGen] 视频生成超时 ({MAX_WAIT_TIME}s)")
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-        operation = client.operations.get(name=operation.name)
+        operation = client.operations.get(operation)
         logger.info(f"[VideoGen] 轮询中... 已等待 {elapsed}s")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -207,7 +197,7 @@ async def extend_video(
             video_bytes=video_bytes,
             mime_type="video/mp4",
         ),
-        config=types.GenerateVideoConfig(
+        config=types.GenerateVideosConfig(
             duration_seconds=duration_seconds,
             generate_audio=generate_audio,
             number_of_videos=1,
@@ -221,7 +211,7 @@ async def extend_video(
             raise TimeoutError(f"[VideoGen] 视频延长超时 ({MAX_WAIT_TIME}s)")
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-        operation = client.operations.get(name=operation.name)
+        operation = client.operations.get(operation)
         logger.info(f"[VideoGen] 延长轮询中... 已等待 {elapsed}s")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

@@ -59,7 +59,7 @@ def _build_response_schema() -> dict:
                         "type": "STRING",
                         "description": "人物外貌统一描述（年龄、性别、发型、穿着）",
                     },
-                    "scene_description": {
+                    "scene_context": {
                         "type": "STRING",
                         "description": "场景统一描述（基于人物素材中的 scene_context，包含地点、环境、背景元素）",
                     },
@@ -74,7 +74,7 @@ def _build_response_schema() -> dict:
                 },
                 "required": [
                     "person_description",
-                    "scene_description",
+                    "scene_context",
                     "visual_style",
                     "lighting",
                 ],
@@ -136,7 +136,7 @@ def _build_response_schema() -> dict:
                         "type": "INTEGER",
                         "description": "产品准确度 1-5",
                     },
-                    "scene_consistency": {
+                    "scene_context_match": {
                         "type": "INTEGER",
                         "description": "场景与人物素材中场景信息的一致性 1-5",
                     },
@@ -152,7 +152,7 @@ def _build_response_schema() -> dict:
                 "required": [
                     "person_match",
                     "product_accuracy",
-                    "scene_consistency",
+                    "scene_context_match",
                     "overall_quality",
                     "issues",
                 ],
@@ -186,7 +186,7 @@ def _check_self_check(self_check: SelfCheck) -> tuple[bool, str]:
     scores = {
         "person_match（人物匹配度）": self_check.person_match,
         "product_accuracy（产品准确度）": self_check.product_accuracy,
-        "scene_consistency（场景一致性）": self_check.scene_consistency,
+        "scene_context_match（场景一致性）": self_check.scene_context_match,
         "overall_quality（整体质量）": self_check.overall_quality,
     }
 
@@ -374,25 +374,40 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         )
         logger.info(f"[DA][Job {job_id}] 脚本完成：「{script.title}」")
 
-        # ========== 阶段 2：VA 链式图生图 ==========
+        # ========== 阶段 2：VA 全并行图生图 ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.IMAGES_GENERATING,
             progress=0.20,
-            message="VA 正在生成分镜图...",
+            message="VA 正在全并行生成分镜图...",
         )
-        logger.info(f"[DA][Job {job_id}] 开始 VA 链式图生图")
+        logger.info(f"[DA][Job {job_id}] 开始 VA 全并行图生图")
 
         # 从 job 数据中读取素材图片（v10：人物图改为 portrait_image，已包含场景）
         person_image = _load_asset_image(job, "model", "portrait_image")
         product_image = _load_first_product_image(job)
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
+
+        # 增量推送分镜图 URL 到前端
+        storyboard_urls_so_far = []
+
+        def _on_frame_done(frame_idx: int, total: int, frame_path: str):
+            url = f"/artifacts/{job_id}/storyboard/{os.path.basename(frame_path)}"
+            storyboard_urls_so_far.append(url)
+            job_manager.update_job(
+                job_id,
+                progress=0.20 + 0.15 * len(storyboard_urls_so_far) / total,
+                message=f"分镜图生成中 ({len(storyboard_urls_so_far)}/{total})...",
+                storyboard_urls=list(storyboard_urls_so_far),
+            )
+
         storyboard_paths = await va_agent.generate_storyboard(
             script=script,
             output_dir=storyboard_dir,
             person_image=person_image,
             product_image=product_image,
+            on_frame_done=_on_frame_done,
         )
 
         # 转换为 URL 供前端显示
@@ -420,12 +435,19 @@ async def run_pipeline(job_id: str, job_manager: JobManager) -> None:
         segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
         total_segments = len(script.segments)
 
-        def _on_segment_done(i: int, total: int):
-            """VGA 每段完成时更新进度"""
+        # 增量推送视频片段 URL 到前端
+        segment_urls_so_far = []
+
+        def _on_segment_done(i: int, total: int, segment_path: str = ""):
+            """VGA 每段完成时更新进度并增量推送 URL"""
+            if segment_path:
+                url = f"/artifacts/{job_id}/segments/{os.path.basename(segment_path)}"
+                segment_urls_so_far.append(url)
             job_manager.update_job(
                 job_id,
                 progress=0.40 + 0.40 * (i + 1) / total,
                 message=f"视频片段生成中 ({i + 1}/{total})...",
+                segment_urls=list(segment_urls_so_far),
             )
 
         segment_paths = await vga_agent.generate_segments(
