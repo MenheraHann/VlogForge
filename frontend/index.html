@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VlogForge - AI Vlog 带货视频生成器</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=14.6">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -110,14 +110,8 @@
             </div>
           </div>
           <div class="form-group">
-            <label for="gen-duration">视频时长</label>
-            <div class="select-wrapper">
-              <select id="gen-duration">
-                <option value="15s">15 秒</option>
-                <option value="30s" selected>30 秒</option>
-                <option value="60s">60 秒</option>
-              </select>
-            </div>
+            <label for="gen-segments">视频时长 <span id="gen-duration-label" class="duration-label">5 段 · 30s</span></label>
+            <input type="range" id="gen-segments" min="3" max="10" value="5" step="1" class="duration-slider">
           </div>
         </div>
 
@@ -291,6 +285,6 @@
     </div>
   </section>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=14.6"></script>
 </body>
 </html>

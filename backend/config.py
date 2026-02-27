@@ -77,14 +77,14 @@ os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
-# ========== 视频参数映射 ==========
+# ========== 视频参数 ==========
 
-# 视频时长 → 分段数映射（6s/段，裁切后约 5~5.5s/段）
-DURATION_SEGMENT_MAP = {
-    "15s": {"segments": 3, "frames": 4},    # 3×5.5 ≈ 16.5s
-    "30s": {"segments": 6, "frames": 7},    # 6×5.5 ≈ 33s
-    "60s": {"segments": 11, "frames": 12},  # 11×5.5 ≈ 60.5s
-}
+# 每段视频时长（秒）
+SEGMENT_DURATION = 6
+
+# 分段数范围：最少 3 段（18s），最多 10 段（60s）
+MIN_SEGMENTS = 3
+MAX_SEGMENTS = 10
 
 # 平台 → 画面比例映射
 PLATFORM_ASPECT_MAP = {

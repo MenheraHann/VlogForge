@@ -42,7 +42,7 @@ def _check_ffmpeg():
 async def stitch_segments(
     segment_paths: list[str],
     output_path: str,
-    trim_overlap_frames: bool = True,
+    trim_overlap_frames: bool = False,
 ) -> str:
     """
     将多个视频片段拼接为一个完整视频。
@@ -87,7 +87,6 @@ async def stitch_segments(
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
-            "-shortest",
             output_path,
         ]
 

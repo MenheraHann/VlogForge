@@ -16,9 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, DURATION_SEGMENT_MAP, PLATFORM_ASPECT_MAP
+from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, PLATFORM_ASPECT_MAP, MIN_SEGMENTS, MAX_SEGMENTS
 from backend.models import (
-    Platform, Duration, JobStatus, AssetType,
+    Platform, JobStatus, AssetType,
     ItemAsset, ModelAsset,
     JobResponse, ProgressResponse,
 )
@@ -652,7 +652,7 @@ async def generate_video(
     product_type: str = Form(..., description="产品类型"),
     product_usage: str = Form(..., description="产品使用方式描述"),
     platform: Platform = Form(..., description="目标平台"),
-    duration: Duration = Form(..., description="视频时长"),
+    segment_count: int = Form(..., description="视频分段数（3~10）"),
     selling_point: str = Form(..., description="核心卖点"),
     product_images: list[UploadFile] = File(..., description="产品参考图"),
 ):
@@ -660,8 +660,9 @@ async def generate_video(
     创建视频生成任务（旧版接口，直接传产品信息）
     后续将切换到 /api/generate/v2（基于素材库）
     """
+    segment_count = max(MIN_SEGMENTS, min(MAX_SEGMENTS, segment_count))
     job_id = str(uuid.uuid4())[:8]
-    logger.info(f"[Job {job_id}] 收到生成请求: 产品={product_type}, 平台={platform}, 时长={duration}")
+    logger.info(f"[Job {job_id}] 收到生成请求: 产品={product_type}, 平台={platform}, 分段={segment_count}")
 
     # 保存上传的产品图片
     job_dir = os.path.join(ARTIFACTS_DIR, job_id)
@@ -677,21 +678,20 @@ async def generate_video(
         logger.info(f"[Job {job_id}] 产品图片已保存: {path}")
 
     # 计算衍生参数
-    segment_info = DURATION_SEGMENT_MAP[duration.value]
     aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
 
-    # 创建任务（v14：初始状态为 QUEUED，由 JobManager 调度执行）
+    # 创建任务
     job_data = {
         "job_id": job_id,
-        "task_name": f"{product_type} {duration.value}",
+        "task_name": f"{product_type} {segment_count * 6}s",
         "product_type": product_type,
         "product_usage": product_usage,
         "platform": platform.value,
-        "duration": duration.value,
+        "duration": f"{segment_count * 6}s",
         "selling_point": selling_point,
         "product_images": image_paths,
-        "segment_count": segment_info["segments"],
-        "frame_count": segment_info["frames"],
+        "segment_count": segment_count,
+        "frame_count": segment_count + 1,
         "aspect_ratio": aspect_ratio,
     }
     job_manager.create_job(job_id, job_data)
@@ -710,14 +710,15 @@ async def generate_video_v2(
     item_id: str = Form(..., description="物品素材 ID"),
     model_id: str = Form(..., description="人物素材 ID"),
     platform: Platform = Form(..., description="目标平台"),
-    duration: Duration = Form(..., description="视频时长"),
+    segment_count: int = Form(..., description="视频分段数（3~10）"),
     extra_requirements: str = Form("", description="额外要求"),
 ):
     """
     创建视频生成任务（v2：基于素材库选择）
     用户从素材库选择 1 物品 + 1 人物，组合生成视频
-    v10：场景信息已融入人物素材（scene_context + portrait_image）
     """
+    segment_count = max(MIN_SEGMENTS, min(MAX_SEGMENTS, segment_count))
+
     # 验证素材存在
     item = asset_manager.get_item(item_id)
     if not item:
@@ -730,14 +731,13 @@ async def generate_video_v2(
     job_id = str(uuid.uuid4())[:8]
     logger.info(
         f"[Job {job_id}] v2 生成请求: "
-        f"物品={item.name}, 人物={model.name}"
+        f"物品={item.name}, 人物={model.name}, 分段={segment_count}"
     )
 
-    segment_info = DURATION_SEGMENT_MAP[duration.value]
     aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
 
-    # 创建任务（v14：包含素材档案信息 + 任务名称，初始 QUEUED）
-    task_name = f"{item.name} {duration.value}"
+    # 创建任务
+    task_name = f"{item.name} {segment_count * 6}s"
     job_data = {
         "job_id": job_id,
         "task_name": task_name,
@@ -745,10 +745,10 @@ async def generate_video_v2(
         "item": item.model_dump(),
         "model": model.model_dump(),
         "platform": platform.value,
-        "duration": duration.value,
+        "duration": f"{segment_count * 6}s",
         "extra_requirements": extra_requirements,
-        "segment_count": segment_info["segments"],
-        "frame_count": segment_info["frames"],
+        "segment_count": segment_count,
+        "frame_count": segment_count + 1,
         "aspect_ratio": aspect_ratio,
     }
     job_manager.create_job(job_id, job_data)

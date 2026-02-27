@@ -1647,7 +1647,7 @@ $("#btn-generate").addEventListener("click", async () => {
   btn.classList.add("loading");
 
   const platform = $("#gen-platform").value;
-  const duration = $("#gen-duration").value;
+  const segmentCount = $("#gen-segments").value;
   const extra = $("#gen-prompt").value.trim();
 
   try {
@@ -1671,7 +1671,7 @@ $("#btn-generate").addEventListener("click", async () => {
     genForm.append("item_id", slotAssets.item.id);
     genForm.append("model_id", slotAssets.model.id);
     genForm.append("platform", platform);
-    genForm.append("duration", duration);
+    genForm.append("segment_count", segmentCount);
     genForm.append("extra_requirements", extra);
 
     const genRes = await fetch("/api/generate/v2", { method: "POST", body: genForm });
@@ -1999,7 +1999,23 @@ async function restoreJobIfNeeded() {
   }
 }
 
+// 时长滑块联动
+function updateDurationLabel() {
+  const slider = $("#gen-segments");
+  if (!slider) return;
+  const n = parseInt(slider.value);
+  const label = $("#gen-duration-label");
+  if (label) label.textContent = `${n} 段 · ${n * 6}s`;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  // 初始化时长滑块
+  const slider = $("#gen-segments");
+  if (slider) {
+    slider.addEventListener("input", updateDurationLabel);
+    updateDurationLabel();
+  }
+
   // 初始化素材库
   refreshAssets();
 

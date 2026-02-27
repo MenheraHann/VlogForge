@@ -157,6 +157,7 @@ async def text_to_image(
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
+        image_config=types.ImageConfig(aspect_ratio="9:16"),
     )
     if system_instruction:
         config.system_instruction = system_instruction
@@ -202,6 +203,7 @@ async def image_to_image(
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
+        image_config=types.ImageConfig(aspect_ratio="9:16"),
     )
     if system_instruction:
         config.system_instruction = system_instruction
@@ -250,6 +252,7 @@ async def generate_with_interleaved_output(
 
     config = types.GenerateContentConfig(
         response_modalities=["TEXT", "IMAGE"],
+        image_config=types.ImageConfig(aspect_ratio="9:16"),
     )
     if system_instruction:
         config.system_instruction = system_instruction
