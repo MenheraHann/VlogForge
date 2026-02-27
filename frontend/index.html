@@ -257,6 +257,7 @@
       </header>
 
       <div class="result-layout">
+        <!-- 最终视频 -->
         <div class="video-card card glass-card">
           <video id="result-video" controls></video>
           <div class="video-actions">
@@ -268,6 +269,20 @@
             </button>
           </div>
         </div>
+
+        <!-- 分镜图 -->
+        <div id="result-storyboard-section" class="card glass-card" style="display:none">
+          <h3 class="result-section-title">分镜图</h3>
+          <div id="result-storyboard-grid" class="result-storyboard-grid"></div>
+        </div>
+
+        <!-- 分段视频 -->
+        <div id="result-segments-video-section" class="card glass-card" style="display:none">
+          <h3 class="result-section-title">视频片段</h3>
+          <div id="result-segments-video-grid" class="result-segments-video-grid"></div>
+        </div>
+
+        <!-- 脚本信息 -->
         <div class="result-script card glass-card">
           <h3 id="result-title"></h3>
           <div id="result-segments"></div>

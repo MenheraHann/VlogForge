@@ -74,18 +74,25 @@ async def stitch_segments(
     concat_file = _create_concat_file(trimmed_paths)
 
     try:
+        # 重编码拼接：强制统一帧率/编码，解决 Veo VFR 视频拼接后时长异常的问题
         cmd = [
             "ffmpeg", "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", concat_file,
-            "-c", "copy",
+            "-r", "30",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "20",
+            "-c:a", "aac",
+            "-b:a", "128k",
             "-movflags", "+faststart",
+            "-shortest",
             output_path,
         ]
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
         if result.returncode != 0:
             logger.error(f"[FFmpeg] 拼接失败: {result.stderr}")

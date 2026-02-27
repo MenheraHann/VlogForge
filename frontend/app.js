@@ -1864,8 +1864,53 @@ function renderSegments(urls) {
 // ========== 结果视图 ==========
 
 function showResult(data) {
+  // 最终视频
   $("#result-video").src = data.final_video_url;
   $("#btn-download").href = data.final_video_url;
+
+  // 分镜图
+  const storyboardSection = $("#result-storyboard-section");
+  const storyboardGrid = $("#result-storyboard-grid");
+  storyboardGrid.innerHTML = "";
+  if (data.storyboard_urls && data.storyboard_urls.length > 0) {
+    storyboardSection.style.display = "";
+    data.storyboard_urls.forEach((url, i) => {
+      const item = document.createElement("div");
+      item.className = "result-frame-item";
+      item.innerHTML = `
+        <img src="${url}" alt="帧 ${i + 1}" loading="lazy">
+        <a class="result-frame-download" href="${url}" download title="下载">&#11015;</a>
+        <div class="result-frame-label">帧 ${i + 1}</div>
+      `;
+      storyboardGrid.appendChild(item);
+    });
+  } else {
+    storyboardSection.style.display = "none";
+  }
+
+  // 分段视频
+  const segVideoSection = $("#result-segments-video-section");
+  const segVideoGrid = $("#result-segments-video-grid");
+  segVideoGrid.innerHTML = "";
+  if (data.segment_urls && data.segment_urls.length > 0) {
+    segVideoSection.style.display = "";
+    data.segment_urls.forEach((url, i) => {
+      const item = document.createElement("div");
+      item.className = "result-seg-item";
+      item.innerHTML = `
+        <video src="${url}" controls preload="metadata"></video>
+        <div class="result-seg-actions">
+          <span class="result-seg-label">片段 ${i + 1}</span>
+          <a class="result-seg-download" href="${url}" download>下载</a>
+        </div>
+      `;
+      segVideoGrid.appendChild(item);
+    });
+  } else {
+    segVideoSection.style.display = "none";
+  }
+
+  // 脚本信息
   const script = data.script || currentScript;
   if (script) {
     $("#result-title").textContent = `\u300C${script.title}\u300D`;
