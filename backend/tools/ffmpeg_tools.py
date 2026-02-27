@@ -42,7 +42,7 @@ def _check_ffmpeg():
 async def stitch_segments(
     segment_paths: list[str],
     output_path: str,
-    trim_overlap_frames: bool = False,
+    trim_overlap_frames: bool = True,
 ) -> str:
     """
     将多个视频片段拼接为一个完整视频。
@@ -120,9 +120,11 @@ async def _trim_overlaps(segment_paths: list[str]) -> list[str]:
 
         cmd = [
             "ffmpeg", "-y",
-            "-i", path,
             "-ss", "0.04",
-            "-c", "copy",
+            "-i", path,
+            "-r", "30",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-c:a", "aac", "-b:a", "128k",
             trimmed_path,
         ]
 
@@ -288,8 +290,9 @@ async def smart_trim_to_target(
             "ffmpeg", "-y",
             "-i", video_path,
             "-t", f"{trim_time:.3f}",
-            "-c", "copy",
-            "-movflags", "+faststart",
+            "-r", "30",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-c:a", "aac", "-b:a", "128k",
             output_path,
         ]
 

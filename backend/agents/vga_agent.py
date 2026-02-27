@@ -173,6 +173,11 @@ VEO_FIXED_CAMERA_PREFIX = (
     "No transitions, no fades, no dissolves, no wipes, no cuts. "
     "The framing and composition stay exactly the same throughout the entire clip. "
     "Only the person's actions, expressions, and gestures change.\n\n"
+    "IMPORTANT SPEECH INSTRUCTION: "
+    "The person in the video speaks directly to the camera. "
+    "Her lip movements must match the dialogue in the description. "
+    "This is NOT a voiceover or narration — the person is talking on camera like a vlog selfie video. "
+    "Generate natural lip sync that matches the spoken words.\n\n"
 )
 
 
