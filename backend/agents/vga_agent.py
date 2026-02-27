@@ -2,13 +2,12 @@
 VGA Agent - 剪辑师（Video Generation Agent）
 负责：使用 Veo 3.1 首尾帧模式生成视频 + 智能裁切
 
-v6 架构（首尾帧并行 + 智能裁切）：
+v7 架构（Vertex AI 首尾帧并行 + 智能裁切）：
   所有片段 = 首帧图 + 尾帧图 + prompt → generate_video_segment（可并行）
   每段生成后 → smart_trim_to_target（裁掉尾部漂移）
   最后 → FFmpeg 拼接
 
-相比 v5 链式延长：画面控制更精准，支持并行生成（速度 3-4x），
-代价是声音跨段一致性略弱（靠 voice_anchor 兜底）。
+注意：首尾帧模式仅 Vertex AI 支持，Developer API 不支持 last_frame。
 """
 
 import os
@@ -62,7 +61,7 @@ async def generate_segments(
         )
 
     logger.info(
-        f"[VGA] 首尾帧并行模式: {total} 段, 比例={aspect_ratio}, "
+        f"[VGA] Vertex AI 首尾帧并行模式: {total} 段, 比例={aspect_ratio}, "
         f"并发上限={MAX_CONCURRENT}"
     )
 
@@ -95,7 +94,7 @@ async def generate_segments(
             f"尾帧={os.path.basename(last_frame_path)}"
         )
 
-        # ① Veo 首尾帧生成
+        # ① Veo 首尾帧生成（Vertex AI）
         await generate_video_segment(
             first_frame=first_frame,
             last_frame=last_frame,
@@ -103,7 +102,6 @@ async def generate_segments(
             output_path=raw_path,
             aspect_ratio=aspect_ratio,
             duration_seconds=DEFAULT_SEGMENT_DURATION,
-            generate_audio=True,
         )
 
         # ② 智能裁切（对比尾帧图片，截掉漂移部分）

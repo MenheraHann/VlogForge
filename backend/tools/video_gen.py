@@ -2,15 +2,16 @@
 视频生成工具
 封装 Veo 3.1 API 的视频生成能力
 
-两种模式：
-1. 首帧生成（generate_video_from_first_frame）：首段视频，基于首帧图片 + prompt 生成
-2. 视频延长（extend_video）：后续片段，基于上一段视频 + prompt 延长，保持声音连贯
+模式：首尾帧生成 — 基于首帧 + 尾帧 + prompt 生成视频片段
 
-模型：
-- veo-3.1-generate-001：首帧生成
-- veo-3.1-generate-preview：视频延长（preview 版支持延长功能）
+模型：veo-3.1-generate-preview（Vertex AI 模式，支持首尾帧）
 
-用途：VGA 剪辑师用于链式生成连贯视频
+注意：
+- 必须使用 Vertex AI 客户端（Developer API 不支持 last_frame）
+- Vertex AI 直接返回 video_bytes，无需 files.download
+- person_generation 使用 "allow_adult"
+
+用途：VGA 剪辑师用于并行生成视频片段
 """
 
 import os
@@ -19,7 +20,7 @@ import logging
 
 from google.genai import types
 
-from backend.config import get_genai_client, VIDEO_GEN_MODEL, VIDEO_EXTEND_MODEL
+from backend.config import VIDEO_GEN_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +30,17 @@ POLL_INTERVAL = 10
 MAX_WAIT_TIME = 300
 
 
-def _get_client():
-    """获取 Gemini Developer API 客户端（generate_videos 仅 Developer API 支持，不支持 Vertex AI）"""
-    from backend.config import GEMINI_API_KEY
+def _get_vertex_client():
+    """获取 Vertex AI 客户端（视频生成必须用 Vertex AI，Developer API 不支持 last_frame）"""
+    from backend.config import GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION
     from google import genai
-    if not GEMINI_API_KEY:
-        raise RuntimeError("视频生成需要 GEMINI_API_KEY（Vertex AI 不支持 generate_videos）")
-    return genai.Client(api_key=GEMINI_API_KEY)
+    if not GOOGLE_CLOUD_PROJECT:
+        raise RuntimeError("视频生成需要 GOOGLE_CLOUD_PROJECT（首尾帧模式仅 Vertex AI 支持）")
+    return genai.Client(
+        vertexai=True,
+        project=GOOGLE_CLOUD_PROJECT,
+        location=GOOGLE_CLOUD_LOCATION,
+    )
 
 
 async def generate_video_segment(
@@ -45,10 +50,9 @@ async def generate_video_segment(
     output_path: str,
     aspect_ratio: str = "9:16",
     duration_seconds: int = 6,
-    generate_audio: bool = True,
 ) -> str:
     """
-    使用 Veo 3.1 首尾帧功能生成视频片段。
+    使用 Veo 3.1 首尾帧模式生成视频片段（Vertex AI）。
 
     参数:
         first_frame: 首帧图片 bytes
@@ -57,13 +61,12 @@ async def generate_video_segment(
         output_path: 视频输出路径
         aspect_ratio: 画面比例 (9:16 或 16:9)
         duration_seconds: 视频时长（4/6/8），默认 6s
-        generate_audio: 是否生成语音
 
     返回:
         输出视频文件路径
     """
-    client = _get_client()
-    logger.info(f"[VideoGen] 开始生成视频: {description[:60]}...")
+    client = _get_vertex_client()
+    logger.info(f"[VideoGen] 首尾帧模式: {description[:60]}...")
 
     operation = client.models.generate_videos(
         model=VIDEO_GEN_MODEL,
@@ -73,11 +76,10 @@ async def generate_video_segment(
             mime_type="image/png",
         ),
         config=types.GenerateVideosConfig(
-
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
             number_of_videos=1,
-            person_generation="allow_all",
+            person_generation="allow_adult",
             last_frame=types.Image(
                 image_bytes=last_frame,
                 mime_type="image/png",
@@ -95,139 +97,15 @@ async def generate_video_segment(
         operation = client.operations.get(operation)
         logger.info(f"[VideoGen] 轮询中... 已等待 {elapsed}s")
 
-    # 下载生成的视频
+    # Vertex AI 直接返回 video_bytes，无需 files.download
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     for video in operation.result.generated_videos:
-        video_bytes = client.files.download(file=video.video)
+        video_bytes = video.video.video_bytes
+        if not video_bytes:
+            raise RuntimeError("[VideoGen] Vertex AI 未返回 video_bytes")
         with open(output_path, "wb") as f:
             f.write(video_bytes)
-        logger.info(f"[VideoGen] 视频已保存: {output_path}")
+        logger.info(f"[VideoGen] 视频已保存: {output_path} ({len(video_bytes)} bytes)")
         return output_path
 
     raise RuntimeError("[VideoGen] Veo 未返回视频结果")
-
-
-async def generate_video_from_first_frame(
-    first_frame: bytes,
-    description: str,
-    output_path: str,
-    aspect_ratio: str = "9:16",
-    duration_seconds: int = 8,
-    generate_audio: bool = True,
-) -> str:
-    """
-    使用首帧图片生成首段视频（链式延长的起点）。
-
-    参数:
-        first_frame: 首帧图片 bytes
-        description: 视频描述（含声音锚定 + 动作 + 台词）
-        output_path: 视频输出路径
-        aspect_ratio: 画面比例
-        duration_seconds: 视频时长（4/6/8）
-        generate_audio: 是否生成语音
-
-    返回:
-        输出视频文件路径
-    """
-    client = _get_client()
-    logger.info(f"[VideoGen] 首帧模式: {description[:60]}...")
-
-    operation = client.models.generate_videos(
-        model=VIDEO_GEN_MODEL,
-        prompt=description,
-        image=types.Image(
-            image_bytes=first_frame,
-            mime_type="image/png",
-        ),
-        config=types.GenerateVideosConfig(
-
-            aspect_ratio=aspect_ratio,
-            duration_seconds=duration_seconds,
-            number_of_videos=1,
-            person_generation="allow_all",
-        ),
-    )
-
-    elapsed = 0
-    while not operation.done:
-        if elapsed >= MAX_WAIT_TIME:
-            raise TimeoutError(f"[VideoGen] 视频生成超时 ({MAX_WAIT_TIME}s)")
-        await asyncio.sleep(POLL_INTERVAL)
-        elapsed += POLL_INTERVAL
-        operation = client.operations.get(operation)
-        logger.info(f"[VideoGen] 轮询中... 已等待 {elapsed}s")
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    for video in operation.result.generated_videos:
-        video_bytes = client.files.download(file=video.video)
-        with open(output_path, "wb") as f:
-            f.write(video_bytes)
-        logger.info(f"[VideoGen] 视频已保存: {output_path}")
-        return output_path
-
-    raise RuntimeError("[VideoGen] Veo 未返回视频结果")
-
-
-async def extend_video(
-    source_video_path: str,
-    description: str,
-    output_path: str,
-    duration_seconds: int = 8,
-    generate_audio: bool = True,
-) -> str:
-    """
-    基于已有视频延长生成下一段（链式延长核心函数）。
-
-    使用 veo-3.1-generate-preview 模型，从上一段视频末尾继续生成，
-    保持声音、人物、场景的连贯性。
-
-    参数:
-        source_video_path: 上一段视频的文件路径
-        description: 延长部分的描述（含声音锚定 + 动作 + 台词）
-        output_path: 延长后视频的输出路径
-        duration_seconds: 延长时长（4/6/8）
-        generate_audio: 是否生成语音
-
-    返回:
-        输出视频文件路径
-    """
-    client = _get_client()
-    logger.info(f"[VideoGen] 延长模式: {description[:60]}...")
-
-    # 读取上一段视频
-    with open(source_video_path, "rb") as f:
-        video_bytes = f.read()
-
-    operation = client.models.generate_videos(
-        model=VIDEO_EXTEND_MODEL,
-        prompt=description,
-        video=types.Video(
-            video_bytes=video_bytes,
-            mime_type="video/mp4",
-        ),
-        config=types.GenerateVideosConfig(
-            duration_seconds=duration_seconds,
-
-            number_of_videos=1,
-            person_generation="allow_all",
-        ),
-    )
-
-    elapsed = 0
-    while not operation.done:
-        if elapsed >= MAX_WAIT_TIME:
-            raise TimeoutError(f"[VideoGen] 视频延长超时 ({MAX_WAIT_TIME}s)")
-        await asyncio.sleep(POLL_INTERVAL)
-        elapsed += POLL_INTERVAL
-        operation = client.operations.get(operation)
-        logger.info(f"[VideoGen] 延长轮询中... 已等待 {elapsed}s")
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    for video in operation.result.generated_videos:
-        video_bytes = client.files.download(file=video.video)
-        with open(output_path, "wb") as f:
-            f.write(video_bytes)
-        logger.info(f"[VideoGen] 延长视频已保存: {output_path}")
-        return output_path
-
-    raise RuntimeError("[VideoGen] Veo 延长未返回视频结果")
