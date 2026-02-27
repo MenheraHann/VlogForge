@@ -165,13 +165,28 @@ async def generate_segments(
     return final_paths
 
 
+# Veo 固定机位指令（加在每段 prompt 前面，确保不出现镜头运动和转场）
+VEO_FIXED_CAMERA_PREFIX = (
+    "IMPORTANT CAMERA INSTRUCTION: "
+    "Static camera, fixed position, no camera movement at all. "
+    "No panning, no zooming, no dolly, no tracking, no crane shots. "
+    "No transitions, no fades, no dissolves, no wipes, no cuts. "
+    "The framing and composition stay exactly the same throughout the entire clip. "
+    "Only the person's actions, expressions, and gestures change.\n\n"
+)
+
+
 def _build_prompt(veo_description: str, voice_anchor: str) -> str:
     """
-    构建完整的 Veo prompt，将声音锚定描述放在最前面。
+    构建完整的 Veo prompt：固定机位指令 + 声音锚定 + 动作描述。
 
-    声音锚定描述放在 prompt 开头，让 Veo 优先感知声音特征，
-    增加跨片段声音一致性的概率。
+    顺序：
+    1. 固定机位指令（最高优先级，确保无镜头运动/转场）
+    2. 声音锚定描述（跨片段声音一致性）
+    3. veo_description（具体动作和对话）
     """
+    parts = [VEO_FIXED_CAMERA_PREFIX]
     if voice_anchor:
-        return f"{voice_anchor}\n\n{veo_description}"
-    return veo_description
+        parts.append(voice_anchor)
+    parts.append(veo_description)
+    return "\n\n".join(parts)

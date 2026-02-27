@@ -194,12 +194,13 @@ async def image_to_image(
     client = _get_client()
     logger.info(f"[ImageGen] img2img: {len(input_images)} 张输入图, prompt={prompt[:80]}...")
 
-    # 构建多模态输入：文本 + 图片
-    contents = [prompt]
+    # 构建多模态输入：参考图片在前（高优先级）+ 文本指令在后
+    contents = []
     for img_bytes in input_images:
         contents.append(
             types.Part.from_bytes(data=img_bytes, mime_type="image/png")
         )
+    contents.append(prompt)
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
