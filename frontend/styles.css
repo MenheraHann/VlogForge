@@ -1067,6 +1067,44 @@ body {
   font-size: 0.7rem; color: var(--text-muted); text-align: center;
 }
 
+/* ========== 图片预览 Lightbox ========== */
+.lightbox-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lightbox-in 0.2s ease;
+}
+@keyframes lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lightbox-img {
+  max-width: 90vw; max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+.lightbox-close {
+  position: absolute; top: 16px; right: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none; color: #fff;
+  font-size: 1.8rem; width: 40px; height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, 0.3); }
+
+/* 让详情弹窗和卡片中的图片可点击 */
+.detail-image-item img,
+.asset-mini-thumb {
+  cursor: zoom-in;
+}
+
 .detail-tag-section { margin-bottom: 1rem; }
 .detail-tag-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -1150,6 +1188,43 @@ body {
 
 /* v7: 待确认卡片不可拖拽 */
 .asset-mini-card:not([draggable="true"]) { cursor: default; }
+
+/* ========== v16: 生成失败卡片 ========== */
+.asset-mini-card.failed {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+.asset-mini-card.failed .asset-failed-icon {
+  font-size: 1.5rem;
+  color: #ef4444;
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.asset-mini-card.failed .asset-failed-error {
+  color: rgba(239, 68, 68, 0.85);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+.asset-mini-card.failed .asset-mini-actions {
+  gap: 6px;
+}
+.asset-mini-card.failed .btn-retry {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.asset-mini-card.failed .btn-retry:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
 
 /* ========== v11: 生成中占位卡片 ========== */
 .asset-mini-card.generating {

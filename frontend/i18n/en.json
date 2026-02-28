@@ -1,0 +1,273 @@
+{
+  "app": {
+    "title": "VlogForge - AI Vlog Product Video Generator",
+    "name": "VlogForge"
+  },
+
+  "nav": {
+    "items": "Items",
+    "models": "Models"
+  },
+
+  "asset": {
+    "items": "Items",
+    "models": "Models",
+    "itemsIcon": "📦 Items",
+    "modelsIcon": "👤 Models",
+    "addItem": "+ Add Item",
+    "addModel": "+ Add Model",
+    "noAssets": "No assets yet",
+    "confirmed": "Confirmed",
+    "pending": "Pending",
+    "generating": "Generating...",
+    "generatingName": "Asset",
+    "detail": "Details",
+    "delete": "Delete",
+    "edit": "Edit",
+    "editNotSupported": "Editing is not supported for this asset",
+    "confirmDelete": "Delete {name}?",
+    "deleted": "{name} deleted",
+    "deleteFailed": "Delete failed",
+    "deleteFailedWith": "Delete failed: {error}",
+    "notFound": "Asset not found",
+    "loadFailed": "Failed to load assets",
+    "failed": "Generation Failed",
+    "retry": "Regenerate",
+    "genFailed": "Generation failed",
+    "unknownAsset": "Unknown asset",
+    "rateLimited": "API rate limit exceeded, please wait 1-2 minutes and retry",
+    "quotaExhausted": "API quota exhausted, please try again later",
+    "safetyFiltered": "Content blocked by safety filters. This may be due to character age or content combination violating platform rules. Please adjust character settings and retry."
+  },
+
+  "button": {
+    "generate": "Generate Video",
+    "quickstart": "Quick Create from One Sentence",
+    "quickstartProcessing": "AI parsing...",
+    "back": "← Back",
+    "download": "Download Video",
+    "newTask": "Generate More",
+    "clear": "✕ Clear",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "preview": "Preview",
+    "confirmSelect": "Confirm Selection",
+    "submitting": "Submitting...",
+    "confirming": "Confirming...",
+    "creating": "Creating...",
+    "regenerate": "Regenerate",
+    "regenerating": "Regenerating..."
+  },
+
+  "form": {
+    "oneLineDesc": "One-line description",
+    "oneLineDescPlaceholder": "e.g.: Film an Asian girl recommending amino acid cleanser in the bathroom / make the opening funny",
+    "quickstartHint": "AI automatically splits into Item + Model, creating both asset types at once",
+    "targetPlatform": "Target Platform",
+    "videoDuration": "Video Duration",
+    "durationLabel": "{segments} segments · {seconds}s",
+    "description": "Description",
+    "referenceImages": "Reference Images (optional)",
+    "uploadRef": "Click to upload reference images",
+    "itemPlaceholder": "Describe the product, e.g.: An amino acid facial cleanser, gentle formula, suitable for sensitive skin",
+    "modelPlaceholder": "Describe the person, e.g.: Asian woman in her 20s, short hair, filming a vlog in the living room",
+    "analyzeByImage": "Please analyze based on the image",
+    "autoModelDesc": "A friendly girl suitable for vlog product promotion, filmed in the living room"
+  },
+
+  "slot": {
+    "item": "Item",
+    "model": "Model",
+    "itemRequired": "*Required",
+    "modelOptional": "Optional",
+    "dragOrUpload": "Drag asset or click to upload",
+    "typeMismatch": "Type mismatch: requires {type} asset",
+    "typeItem": "item",
+    "typeModel": "model",
+    "selectLookFirst": "Please select a look first",
+    "confirmInfoFirst": "Please complete product info confirmation first"
+  },
+
+  "modal": {
+    "createAsset": "Create Asset",
+    "createItem": "Create Item Asset",
+    "createModel": "Create Model Asset",
+    "createItemBtn": "Create Item",
+    "createModelBtn": "Create Model",
+    "selectPlan": "Select Plan",
+    "assetDetail": "Asset Details",
+    "itemDetail": "Item Details - {name}",
+    "modelDetail": "Model Details - {name}",
+    "productInfoConfirm": "Product Info Confirmation",
+    "productInfoConfirmWith": "Product Info Confirmation — {name}",
+    "modelReview": "Model Look Review - {name}",
+    "selectLook": "Select {label} - {name}",
+    "lookPlan": "Look Plan",
+    "planLabel": "Plan {letter}",
+    "selectHint": "Click to select a {label}:",
+    "noLookImage": "No look image available"
+  },
+
+  "detail": {
+    "thumbnail": "Thumbnail",
+    "threeView": "Three-View",
+    "portrait": "Portrait",
+    "p0SellingPoint": "P0 Core Selling Points",
+    "p1SellingPoint": "P1 Supporting Selling Points",
+    "fullDescription": "Full Description",
+    "language": "Language",
+    "appearance": "Appearance",
+    "personality": "Personality & Style",
+    "outfits": "Outfits",
+    "scene": "Filming Scene",
+    "empty": "N/A",
+    "editBtn": "Edit",
+    "confirmBtn": "Confirm",
+    "saved": "Saved",
+    "saveFailed": "Save failed: {error}"
+  },
+
+  "questionnaire": {
+    "levelQuestion": "{priority} Priority Question",
+    "counter": "{current} / {total}",
+    "canSkip": "Can skip",
+    "required": "Required",
+    "customAnswer": "Write my own answer",
+    "customPlaceholder": "Enter your answer...",
+    "prevQuestion": "Previous",
+    "nextQuestion": "Next",
+    "skip": "Skip",
+    "submitAndCreate": "Submit & Generate Asset",
+    "noQuestions": "No questions to confirm",
+    "selectOrWrite": "Please select an option or write your own",
+    "writeYourAnswer": "Please write your answer",
+    "answerRequired": "Please answer the required question: {label}"
+  },
+
+  "modelReview": {
+    "confirmBtn": "✓ Confirm",
+    "regenerateBtn": "↻ Regenerate",
+    "adjustPlaceholder": "Enter adjustment feedback, e.g.: Make the hair a bit longer...",
+    "submitFeedback": "Submit",
+    "submittingFeedback": "Submitting...",
+    "confirmSuccess": "Model look confirmed",
+    "confirmFailed": "Confirmation failed",
+    "confirmFailedWith": "Confirmation failed: {error}",
+    "regenerateSuccess": "Regenerating look, please wait...",
+    "regenerateFailed": "Regeneration failed",
+    "regenerateFailedWith": "Regeneration failed: {error}",
+    "adjustSuccess": "Adjusting look based on feedback, please wait...",
+    "adjustFailed": "Submission failed",
+    "adjustFailedWith": "Submission failed: {error}",
+    "generationFailed": "Model look generation failed, please retry"
+  },
+
+  "pipeline": {
+    "script": "Script",
+    "images": "Storyboard",
+    "videos": "Videos",
+    "stitching": "Stitching",
+    "preparing": "Preparing..."
+  },
+
+  "toast": {
+    "modelCreating": "Creating model asset, please wait...",
+    "modelCreateSuccess": "{name} created successfully",
+    "modelCreateFailed": "Creation failed: {error}",
+    "itemAnalyzed": "{name} analysis complete, please confirm product info",
+    "itemRejected": "Item rejected: {reason}",
+    "itemAnalyzeFailed": "Analysis failed: {error}",
+    "itemConfirming": "Confirming item asset, please wait...",
+    "itemConfirmSuccess": "{name} profile created",
+    "itemConfirmFailed": "Confirmation failed: {error}",
+    "quickstartFailed": "Quick create failed: {error}",
+    "quickstartCreated": "Both asset types created, please confirm one by one",
+    "quickstartItemRejected": "Item rejected: {reason}",
+    "analyzingItem": "Analyzing item...",
+    "itemAnalyzeComplete": "{name} analysis complete",
+    "autoCreatingModel": "Auto-creating model...",
+    "submittingVideo": "Submitting video generation...",
+    "videoTaskCreated": "Video generation task created",
+    "generateFailed": "Generation failed: {error}",
+    "generationFailed": "Generation failed: {error}",
+    "selectFailed": "Selection failed: {error}",
+    "lookSelected": "{label} selected",
+    "jobCancelled": "Task cancelled",
+    "cancelFailed": "Cancel failed: {error}",
+    "videoNotReady": "Video file not ready yet",
+    "queryFailed": "Query failed: {error}",
+    "lastJobFailed": "Previous generation task has failed",
+    "jobRestored": "Restored in-progress generation task",
+    "inputSentenceFirst": "Please enter a one-line description first",
+    "statusCreating": "Creating",
+    "statusCreated": "Created",
+    "modelSlotCreating": "{name} {status}",
+    "createFailed": "Creation failed: {error}"
+  },
+
+  "status": {
+    "queued": "Queued",
+    "script": "Generating Script",
+    "images": "Generating Storyboard",
+    "videos": "Generating Video Segments",
+    "stitching": "Stitching Video",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+
+  "queue": {
+    "title": "🎬 Render Queue",
+    "toggleTooltip": "Collapse/Expand",
+    "waitingMsg": "Waiting for previous tasks to complete...",
+    "videoComplete": "✓ Video generation complete",
+    "unknownError": "Unknown error",
+    "cancelledMsg": "Cancelled",
+    "cancelBtn": "Cancel",
+    "previewBtn": "Preview",
+    "downloadBtn": "Download",
+    "jobName": "Task {id}",
+    "cancelConfirm": "Are you sure you want to cancel this task?",
+    "cancelFailed": "Cancel failed: HTTP {status}"
+  },
+
+  "result": {
+    "storyboard": "Storyboard",
+    "videoSegments": "Video Segments",
+    "downloadVideo": "Download Video",
+    "continueGenerate": "Generate More",
+    "frame": "Frame {index}",
+    "segment": "Segment {index}",
+    "segmentNumber": "Segment {id}",
+    "productPlacement": "Product Placement",
+    "download": "Download"
+  },
+
+  "create": {
+    "createItem": "Create Item",
+    "createModel": "Create Model"
+  },
+
+  "platform": {
+    "douyin": "Douyin (9:16 Vertical)",
+    "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
+    "youtube": "YouTube (16:9 Horizontal)"
+  },
+
+  "section": {
+    "generateVideo": "Generate Video"
+  },
+
+  "script": {
+    "person": "Person",
+    "scene": "Scene",
+    "style": "Style",
+    "lighting": "Lighting"
+  },
+
+  "storyboard": {
+    "title": "Storyboard",
+    "videoSegments": "Video Segment Preview"
+  }
+}

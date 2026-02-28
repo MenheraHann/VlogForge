@@ -1,10 +1,10 @@
 """
-DA Agent - 创意总监（Director Agent）
-负责：脚本生成 + 自检校验 + 编排 VA/VGA/FFmpeg
-v6 架构：DA 直接生成脚本，VGA 首尾帧并行 + 智能裁切
-v14：新增取消信号检查 + on_job_finished 回调
+DA Agent - Creative Director (Director Agent)
+Responsibilities: Script generation + self-check validation + orchestrating VA/VGA/FFmpeg
+v6 architecture: DA directly generates scripts, VGA start/end frame parallel generation + smart cropping
+v14: Added cancel signal checking + on_job_finished callback
 
-流水线：DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧并行+智能裁切) → FFmpeg(拼接)
+Pipeline: DA(script+self-check) -> VA(chained img2img) -> VGA(start/end frame parallel+smart crop) -> FFmpeg(stitching)
 """
 
 import asyncio
@@ -26,52 +26,54 @@ from backend.prompts.da_prompts import (
     build_da_script_prompt,
     build_da_script_prompt_legacy,
 )
+from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
+from backend.utils.age_guard import enforce_minimum_age
 
 logger = logging.getLogger(__name__)
 
-# DA 使用的模型（从 config 统一管理）
+# DA model (managed centrally via config)
 DA_MODEL = TEXT_MODEL
 
 
 def _get_client():
-    """获取 Gemini 客户端（文本生成用 us-central1）"""
+    """Get Gemini client (us-central1 for text generation)"""
     return get_genai_client(location="us-central1")
 
 
 def _build_response_schema() -> dict:
     """
-    构建 ScriptOutput + SelfCheck 的 JSON Schema，供 Gemini JSON 模式使用。
-    手动构建，因为 Gemini 的 response_schema 对格式有特定要求。
+    Build the JSON Schema for ScriptOutput + SelfCheck, used by Gemini's JSON mode.
+    Manually constructed because Gemini's response_schema has specific format requirements.
     """
     return {
         "type": "OBJECT",
         "properties": {
             "title": {
                 "type": "STRING",
-                "description": "视频标题，吸引点击，口语化",
+                "description": "Video title, click-worthy, conversational tone",
             },
             "voice_anchor": {
                 "type": "STRING",
-                "description": "声音锚定描述（全英文），详细描述人物声音特征：性别、年龄、语言、语调、语速、说话风格。用于所有视频片段保持声音一致。",
+                "description": "Voice anchor description (entirely in English), detailed voice characteristics: gender, age, language, tone, speaking pace, speaking style. Used to maintain consistent voice across all video segments.",
             },
             "style_guide": {
                 "type": "OBJECT",
                 "properties": {
                     "person_description": {
                         "type": "STRING",
-                        "description": "人物外貌统一描述（年龄、性别、发型、穿着）",
+                        "description": "Unified model/talent appearance description (age, gender, hairstyle, outfit)",
                     },
                     "scene_context": {
                         "type": "STRING",
-                        "description": "场景统一描述（基于人物素材中的 scene_context，包含地点、环境、背景元素）",
+                        "description": "Unified scene description (based on scene_context from model/talent assets, including location, environment, background elements)",
                     },
                     "visual_style": {
                         "type": "STRING",
-                        "description": "整体视觉风格（写实/清新/复古等 + 色调）",
+                        "description": "Overall visual style (realistic/fresh/vintage etc. + color palette)",
                     },
                     "lighting": {
                         "type": "STRING",
-                        "description": "光线描述（自然光/暖光/柔光等）",
+                        "description": "Lighting description (natural light/warm light/soft light etc.)",
                     },
                 },
                 "required": [
@@ -88,31 +90,31 @@ def _build_response_schema() -> dict:
                     "properties": {
                         "segment_id": {
                             "type": "INTEGER",
-                            "description": "分段序号，从 1 开始",
+                            "description": "Segment sequence number, starting from 1",
                         },
                         "narration": {
                             "type": "STRING",
-                            "description": "旁白台词",
+                            "description": "Dialogue lines — MUST be written in the character's spoken language (determined by the 'language' field from person material). If language is English, write English dialogue; if Mandarin Chinese, write Chinese dialogue; if Japanese, write Japanese dialogue. Do NOT default to Chinese.",
                         },
                         "action_description": {
                             "type": "STRING",
-                            "description": "动作描述",
+                            "description": "Action description",
                         },
                         "frame_start_prompt": {
                             "type": "STRING",
-                            "description": "首帧图片生成提示词（自包含，包含人物/场景/动作/光线）",
+                            "description": "Start frame image generation prompt (self-contained, includes person/scene/action/lighting)",
                         },
                         "frame_end_prompt": {
                             "type": "STRING",
-                            "description": "尾帧图片生成提示词（自包含，下一段的首帧必须与此完全相同）",
+                            "description": "End frame image generation prompt (self-contained, next segment's start frame must be exactly identical to this)",
                         },
                         "needs_product": {
                             "type": "BOOLEAN",
-                            "description": "该分段是否需要植入产品",
+                            "description": "Whether this segment needs product placement",
                         },
                         "veo_description": {
                             "type": "STRING",
-                            "description": "Veo 视频生成描述词（动作过程 + 台词 + 镜头运动）",
+                            "description": "Veo video generation description: written in English, with spoken dialogue portions in the character's language (wrapped in quotes). Include opening state, micro-actions, emotional direction, and anti-pattern negatives.",
                         },
                     },
                     "required": [
@@ -128,27 +130,27 @@ def _build_response_schema() -> dict:
             },
             "self_check": {
                 "type": "OBJECT",
-                "description": "DA 自检评分",
+                "description": "DA self-check score",
                 "properties": {
                     "person_match": {
                         "type": "INTEGER",
-                        "description": "人物匹配度 1-5",
+                        "description": "Person match score 1-5",
                     },
                     "product_accuracy": {
                         "type": "INTEGER",
-                        "description": "产品准确度 1-5",
+                        "description": "Product accuracy score 1-5",
                     },
                     "scene_context_match": {
                         "type": "INTEGER",
-                        "description": "场景与人物素材中场景信息的一致性 1-5",
+                        "description": "Scene consistency with model/talent asset scene info 1-5",
                     },
                     "overall_quality": {
                         "type": "INTEGER",
-                        "description": "整体质量 1-5",
+                        "description": "Overall quality score 1-5",
                     },
                     "issues": {
                         "type": "STRING",
-                        "description": "发现的问题，没有问题留空字符串",
+                        "description": "Issues found; leave as empty string if no issues",
                     },
                 },
                 "required": [
@@ -166,21 +168,21 @@ def _build_response_schema() -> dict:
 
 def _validate_frame_chain(script: ScriptOutput) -> list[str]:
     """
-    验证帧链条连贯性：分段 N 的 frame_end_prompt 必须等于分段 N+1 的 frame_start_prompt。
-    同时验证关键帧唯一性：N+1 个关键帧不能有重复。
-    返回问题列表，空列表表示全部通过。
+    Validate frame chain continuity: Segment N's frame_end_prompt must equal Segment N+1's frame_start_prompt.
+    Also validate key frame uniqueness: N+1 key frames must have no duplicates.
+    Returns a list of issues; an empty list means all checks passed.
     """
     issues = []
-    # 1. 帧链条连贯性
+    # 1. Frame chain continuity
     for i in range(len(script.segments) - 1):
         current = script.segments[i]
         next_seg = script.segments[i + 1]
         if current.frame_end_prompt != next_seg.frame_start_prompt:
             issues.append(
-                f"帧链断裂：分段 {current.segment_id} 尾帧 != 分段 {next_seg.segment_id} 首帧"
+                f"Frame chain break: Segment {current.segment_id} end frame != Segment {next_seg.segment_id} start frame"
             )
 
-    # 2. 关键帧唯一性（首段首帧 + 各段尾帧 = N+1 帧）
+    # 2. Key frame uniqueness (first segment's start frame + each segment's end frame = N+1 frames)
     keyframes = [script.segments[0].frame_start_prompt]
     for seg in script.segments:
         keyframes.append(seg.frame_end_prompt)
@@ -188,7 +190,7 @@ def _validate_frame_chain(script: ScriptOutput) -> list[str]:
     for i, prompt in enumerate(keyframes):
         if prompt in seen:
             issues.append(
-                f"关键帧重复：帧 {i + 1} 与帧 {seen[prompt] + 1} 的提示词完全相同"
+                f"Key frame duplicate: Frame {i + 1} has identical prompt to Frame {seen[prompt] + 1}"
             )
         else:
             seen[prompt] = i
@@ -198,14 +200,14 @@ def _validate_frame_chain(script: ScriptOutput) -> list[str]:
 
 def _check_self_check(self_check: SelfCheck) -> tuple[bool, str]:
     """
-    检查 self_check 分数是否达标。
-    返回 (是否通过, 反馈信息)。
+    Check whether self_check scores meet the threshold.
+    Returns (passed, feedback_message).
     """
     scores = {
-        "person_match（人物匹配度）": self_check.person_match,
-        "product_accuracy（产品准确度）": self_check.product_accuracy,
-        "scene_context_match（场景一致性）": self_check.scene_context_match,
-        "overall_quality（整体质量）": self_check.overall_quality,
+        "person_match (person match)": self_check.person_match,
+        "product_accuracy (product accuracy)": self_check.product_accuracy,
+        "scene_context_match (scene consistency)": self_check.scene_context_match,
+        "overall_quality (overall quality)": self_check.overall_quality,
     }
 
     low_items = [k for k, v in scores.items() if v < SELF_CHECK_THRESHOLD]
@@ -215,12 +217,12 @@ def _check_self_check(self_check: SelfCheck) -> tuple[bool, str]:
 
     feedback_parts = []
     for item in low_items:
-        feedback_parts.append(f"- {item} 评分为 {scores[item]}，低于阈值 {SELF_CHECK_THRESHOLD}")
+        feedback_parts.append(f"- {item} scored {scores[item]}, below threshold {SELF_CHECK_THRESHOLD}")
 
     if self_check.issues:
-        feedback_parts.append(f"- 自检发现的问题：{self_check.issues}")
+        feedback_parts.append(f"- Issues found in self-check: {self_check.issues}")
 
-    feedback = "以下指标不达标，请针对性改进：\n" + "\n".join(feedback_parts)
+    feedback = "The following metrics are below threshold. Please improve accordingly:\n" + "\n".join(feedback_parts)
     return False, feedback
 
 
@@ -231,22 +233,22 @@ async def generate_script(
     retry_feedback: str = "",
 ) -> ScriptOutput:
     """
-    调用 Gemini 生成 vlog 带货脚本（DA 直接生成，原 TA 逻辑合入）。
+    Call Gemini to generate a vlog product promotion script (DA direct generation, former TA logic merged in).
 
-    参数:
-        user_prompt: 完整的用户提示词（由 build_da_script_prompt 或 legacy 版本构建）
-        segment_count: 期望的分段数量
-        max_retries: JSON 解析失败时的最大重试次数
-        retry_feedback: self_check 不达标时的重跑反馈
+    Args:
+        user_prompt: Complete user prompt (built by build_da_script_prompt or legacy version)
+        segment_count: Expected number of segments
+        max_retries: Max retry count on JSON parse failure
+        retry_feedback: Feedback from self_check failure for re-generation
     """
     client = _get_client()
 
-    # 如果有重跑反馈，附加到用户提示词
+    # If retry feedback exists, append it to the user prompt
     prompt = user_prompt
     if retry_feedback:
-        prompt += f"\n\n【重跑反馈】\n{retry_feedback}\n请针对以上问题改进脚本。"
+        prompt += f"\n\n[Retry Feedback]\n{retry_feedback}\nPlease improve the script based on the issues above."
 
-    logger.info(f"[DA] 开始生成脚本: 分段数={segment_count}")
+    logger.info(f"[DA] Starting script generation: segment_count={segment_count}")
 
     last_error = None
 
@@ -265,45 +267,45 @@ async def generate_script(
 
             raw_text = response.text
             if not raw_text:
-                raise ValueError("Gemini 返回了空响应")
+                raise ValueError("Gemini returned an empty response")
 
-            logger.info(f"[DA] 第 {attempt} 次调用成功，解析 JSON 中...")
+            logger.info(f"[DA] Attempt {attempt} succeeded, parsing JSON...")
 
             raw_data = json.loads(raw_text)
             script = ScriptOutput(**raw_data)
 
-            # 验证分段数量
+            # Validate segment count
             if len(script.segments) != segment_count:
                 logger.warning(
-                    f"[DA] 分段数不匹配: 期望 {segment_count}, 实际 {len(script.segments)}"
+                    f"[DA] Segment count mismatch: expected {segment_count}, got {len(script.segments)}"
                 )
 
-            # 验证帧链条 + 帧唯一性（硬校验，不通过则重试）
+            # Validate frame chain + frame uniqueness (hard validation, retry on failure)
             chain_issues = _validate_frame_chain(script)
             if chain_issues:
                 for issue in chain_issues:
                     logger.warning(f"[DA] {issue}")
                 raise ValueError(
-                    f"[DA] 脚本帧验证不通过（{len(chain_issues)} 个问题），触发重试"
+                    f"[DA] Script frame validation failed ({len(chain_issues)} issue(s)), triggering retry"
                 )
 
             logger.info(
-                f"[DA] 脚本生成完成: 标题=「{script.title}」, "
-                f"分段数={len(script.segments)}, "
-                f"自检={script.self_check.overall_quality}/5"
+                f"[DA] Script generation complete: title=\"{script.title}\", "
+                f"segments={len(script.segments)}, "
+                f"self_check={script.self_check.overall_quality}/5"
             )
 
             return script
 
         except json.JSONDecodeError as e:
             last_error = e
-            logger.error(f"[DA] 第 {attempt} 次调用: JSON 解析失败 - {e}")
+            logger.error(f"[DA] Attempt {attempt}: JSON parse failed - {e}")
         except Exception as e:
             last_error = e
-            logger.error(f"[DA] 第 {attempt} 次调用失败: {type(e).__name__} - {e}")
+            logger.error(f"[DA] Attempt {attempt} failed: {type(e).__name__} - {e}")
 
     raise RuntimeError(
-        f"[DA] 脚本生成失败（已重试 {max_retries} 次）: {last_error}"
+        f"[DA] Script generation failed (retried {max_retries} times): {last_error}"
     )
 
 
@@ -313,47 +315,51 @@ async def run_pipeline(
     cancel_event: asyncio.Event = None,
 ) -> None:
     """
-    执行完整的视频生成流水线。
-    由 JobManager 调度启动，通过 job_manager 更新进度。
-    v14：支持 cancel_event 取消信号检查，在每个主要阶段间检测取消。
+    Execute the full video generation pipeline.
+    Launched by JobManager, updates progress via job_manager.
+    v14: Supports cancel_event signal checking between each major stage.
 
-    流水线：DA(脚本+自检) → VA(链式图生图) → VGA(首尾帧视频) → FFmpeg(拼接)
+    Pipeline: DA(script+self-check) -> VA(chained img2img) -> VGA(start/end frame video) -> FFmpeg(stitching)
 
-    参数:
-        job_id: 任务 ID
-        job_manager: 任务管理器实例
-        cancel_event: 取消信号（asyncio.Event），set() 时表示用户取消
+    Args:
+        job_id: Job ID
+        job_manager: JobManager instance
+        cancel_event: Cancel signal (asyncio.Event), set() indicates user cancellation
     """
     job = job_manager.get_job(job_id)
     if not job:
-        logger.error(f"[DA][Job {job_id}] 任务不存在，无法启动流水线")
+        logger.error(f"[DA][Job {job_id}] Job not found, cannot start pipeline")
         return
 
     def _is_cancelled() -> bool:
-        """检查取消信号是否已设置"""
+        """Check whether the cancel signal has been set"""
         return cancel_event is not None and cancel_event.is_set()
 
     try:
-        # ========== 阶段 1：DA 生成脚本 ==========
+        # ========== Stage 1: DA script generation ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.SCRIPT_GENERATING,
             progress=0.05,
-            message="DA 正在生成脚本...",
+            message="DA is generating the script...",
         )
 
-        # 构建用户提示词（根据任务模式选择）
+        # Build user prompt (select based on job mode)
         if job.get("mode") == "v2_assets":
-            # v2 模式：基于素材档案（v10：场景从人物素材获取）
+            # v2 mode: based on asset profiles (v10: scene sourced from model/talent assets)
             item = job["item"]
             model = job["model"]
             scene_context = model.get("scene_context", "")
+            # v17: 从人物素材中获取 ADA 判定的语言（供 DA 生成 voice_anchor 时使用）
+            model_language = model.get("language", "")
+            # v18: 年龄保护 — 确保人物描述中的年龄不低于 18 岁
+            safe_appearance = enforce_minimum_age(model["appearance"])
             user_prompt = build_da_script_prompt(
                 item_name=item["name"],
                 item_usage=item["usage"],
                 item_selling_point=item["selling_point"],
                 item_description=item["full_description"],
-                model_appearance=model["appearance"],
+                model_appearance=safe_appearance,
                 model_personality=model["personality"],
                 model_outfits=model["outfits"],
                 scene_context=scene_context,
@@ -362,9 +368,10 @@ async def run_pipeline(
                 segment_count=job["segment_count"],
                 aspect_ratio=job["aspect_ratio"],
                 extra_requirements=job.get("extra_requirements", ""),
+                model_language=model_language,
             )
         else:
-            # 旧版模式：直接传产品信息
+            # Legacy mode: pass product info directly
             user_prompt = build_da_script_prompt_legacy(
                 product_type=job["product_type"],
                 product_usage=job["product_usage"],
@@ -380,14 +387,14 @@ async def run_pipeline(
             segment_count=job["segment_count"],
         )
 
-        # ---- self_check 校验（D6 决策）----
+        # ---- self_check validation (D6 decision) ----
         passed, feedback = _check_self_check(script.self_check)
         if not passed:
-            logger.warning(f"[DA][Job {job_id}] 自检不达标，带反馈重跑一次")
+            logger.warning(f"[DA][Job {job_id}] Self-check below threshold, re-running with feedback")
             job_manager.update_job(
                 job_id,
                 progress=0.08,
-                message="脚本自检不达标，正在改进...",
+                message="Script self-check below threshold, improving...",
             )
             script = await generate_script(
                 user_prompt=user_prompt,
@@ -395,53 +402,53 @@ async def run_pipeline(
                 retry_feedback=feedback,
             )
             logger.info(
-                f"[DA][Job {job_id}] 重跑完成，自检={script.self_check.overall_quality}/5"
+                f"[DA][Job {job_id}] Re-run complete, self_check={script.self_check.overall_quality}/5"
             )
 
-        # 保存脚本到 job
+        # Save script to job
         job_manager.update_job(
             job_id,
             status=JobStatus.SCRIPT_GENERATING,
             progress=0.15,
-            message=f"脚本生成完成：「{script.title}」，共 {len(script.segments)} 段",
+            message=f"Script generated: \"{script.title}\", {len(script.segments)} segments",
             script=script,
         )
-        logger.info(f"[DA][Job {job_id}] 脚本完成：「{script.title}」")
+        logger.info(f"[DA][Job {job_id}] Script complete: \"{script.title}\"")
 
-        # ---- 取消检查点 1：DA 脚本生成完成后 ----
+        # ---- Cancel checkpoint 1: After DA script generation ----
         if _is_cancelled():
-            logger.info(f"[DA][Job {job_id}] 脚本生成后检测到取消信号")
+            logger.info(f"[DA][Job {job_id}] Cancel signal detected after script generation")
             job_manager.update_job(
                 job_id,
                 status=JobStatus.CANCELLED,
                 progress=0.0,
-                message="用户取消了任务（脚本生成后）",
+                message="User cancelled the job (after script generation)",
             )
             return
 
-        # ========== 阶段 2：VA 全并行图生图 ==========
+        # ========== Stage 2: VA fully parallel img2img ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.IMAGES_GENERATING,
             progress=0.20,
-            message="VA 正在全并行生成分镜图...",
+            message="VA is generating storyboard frames in parallel...",
         )
-        logger.info(f"[DA][Job {job_id}] 开始 VA 全并行图生图")
+        logger.info(f"[DA][Job {job_id}] Starting VA fully parallel img2img")
 
-        # 从 job 数据中读取素材图片（v10：人物图改为 portrait_image，已包含场景）
+        # Load asset images from job data (v10: person image changed to portrait_image, includes scene)
         person_image = _load_asset_image(job, "model", "portrait_image")
         product_image = _load_first_product_image(job)
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
 
-        # 保存 DA 脚本到磁盘（方便排查帧 prompt）
+        # Save DA script to disk (for debugging frame prompts)
         script_path = os.path.join(ARTIFACTS_DIR, job_id, "script.json")
         os.makedirs(os.path.dirname(script_path), exist_ok=True)
         with open(script_path, "w", encoding="utf-8") as f:
             import json as _json
             _json.dump(script.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
 
-        # 增量推送分镜图 URL 到前端
+        # Incrementally push storyboard URLs to frontend
         storyboard_urls_so_far = []
 
         def _on_frame_done(frame_idx: int, total: int, frame_path: str):
@@ -450,7 +457,7 @@ async def run_pipeline(
             job_manager.update_job(
                 job_id,
                 progress=0.20 + 0.15 * len(storyboard_urls_so_far) / total,
-                message=f"分镜图生成中 ({len(storyboard_urls_so_far)}/{total})...",
+                message=f"Generating storyboard ({len(storyboard_urls_so_far)}/{total})...",
                 storyboard_urls=list(storyboard_urls_so_far),
             )
 
@@ -462,7 +469,7 @@ async def run_pipeline(
             on_frame_done=_on_frame_done,
         )
 
-        # 转换为 URL 供前端显示
+        # Convert to URLs for frontend display
         storyboard_urls = [
             f"/artifacts/{job_id}/storyboard/{os.path.basename(p)}"
             for p in storyboard_paths
@@ -470,57 +477,59 @@ async def run_pipeline(
         job_manager.update_job(
             job_id,
             progress=0.35,
-            message=f"分镜图生成完成: {len(storyboard_paths)} 帧",
+            message=f"Storyboard complete: {len(storyboard_paths)} frames",
             storyboard_urls=storyboard_urls,
         )
-        logger.info(f"[DA][Job {job_id}] VA 完成: {len(storyboard_paths)} 帧")
+        logger.info(f"[DA][Job {job_id}] VA complete: {len(storyboard_paths)} frames")
 
-        # ---- 取消检查点 2：VA 分镜生成完成后 ----
+        # ---- Cancel checkpoint 2: After VA storyboard generation ----
         if _is_cancelled():
-            logger.info(f"[DA][Job {job_id}] 分镜生成后检测到取消信号")
+            logger.info(f"[DA][Job {job_id}] Cancel signal detected after storyboard generation")
             job_manager.update_job(
                 job_id,
                 status=JobStatus.CANCELLED,
                 progress=0.0,
-                message="用户取消了任务（分镜生成后）",
+                message="User cancelled the job (after storyboard generation)",
             )
             return
 
-        # ---- DA 侧帧数校验：VA 返回的帧数必须等于 segment_count + 1 ----
+        # ---- DA-side frame count validation: VA must return exactly segment_count + 1 frames ----
         expected_frame_count = job["segment_count"] + 1
         if len(storyboard_paths) != expected_frame_count:
+            # 检查是否是安全过滤器导致的帧缺失（VA 日志中会记录安全过滤错误）
+            missing_count = expected_frame_count - len(storyboard_paths)
             error_msg = (
-                f"[DA][Job {job_id}] 分镜帧数不匹配: "
-                f"期望 {expected_frame_count} 帧（{job['segment_count']} 段 + 1），"
-                f"实际 {len(storyboard_paths)} 帧。"
-                f"无法传给 VGA，中止流水线。"
+                f"{SAFETY_FILTER_ERROR_TAG} 分镜图帧数不匹配: "
+                f"期望 {expected_frame_count} 帧 ({job['segment_count']} 段 + 1), "
+                f"实际 {len(storyboard_paths)} 帧, 缺失 {missing_count} 帧。"
+                f"部分帧可能被安全过滤器拦截，请调整人物设定后重试。"
             )
-            logger.error(error_msg)
+            logger.error(f"[DA][Job {job_id}] {error_msg}")
             raise RuntimeError(error_msg)
 
-        # ========== 阶段 3：VGA 首尾帧并行生成视频片段 ==========
+        # ========== Stage 3: VGA start/end frame parallel video segment generation ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.VIDEOS_GENERATING,
             progress=0.40,
-            message="VGA 正在首尾帧并行生成视频片段...",
+            message="VGA is generating video segments with start/end frames in parallel...",
         )
-        logger.info(f"[DA][Job {job_id}] 开始 VGA 首尾帧并行视频生成")
+        logger.info(f"[DA][Job {job_id}] Starting VGA start/end frame parallel video generation")
 
         segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
 
-        # 增量推送视频片段 URL 到前端
+        # Incrementally push video segment URLs to frontend
         segment_urls_so_far = []
 
         def _on_segment_done(i: int, total: int, segment_path: str = ""):
-            """VGA 每段完成时更新进度并增量推送 URL"""
+            """Update progress and incrementally push URLs when each VGA segment completes"""
             if segment_path:
                 url = f"/artifacts/{job_id}/segments/{os.path.basename(segment_path)}"
                 segment_urls_so_far.append(url)
             job_manager.update_job(
                 job_id,
                 progress=0.40 + 0.40 * (i + 1) / total,
-                message=f"视频片段生成中 ({i + 1}/{total})...",
+                message=f"Generating video segments ({i + 1}/{total})...",
                 segment_urls=list(segment_urls_so_far),
             )
 
@@ -540,90 +549,96 @@ async def run_pipeline(
         job_manager.update_job(
             job_id,
             progress=0.82,
-            message=f"视频片段全部完成: {len(segment_paths)} 段",
+            message=f"All video segments complete: {len(segment_paths)} segments",
             segment_urls=segment_urls,
         )
-        logger.info(f"[DA][Job {job_id}] VGA 完成: {len(segment_paths)} 段")
+        logger.info(f"[DA][Job {job_id}] VGA complete: {len(segment_paths)} segments")
 
-        # ---- 取消检查点 3：VGA 视频生成完成后 ----
+        # ---- Cancel checkpoint 3: After VGA video generation ----
         if _is_cancelled():
-            logger.info(f"[DA][Job {job_id}] 视频生成后检测到取消信号")
+            logger.info(f"[DA][Job {job_id}] Cancel signal detected after video generation")
             job_manager.update_job(
                 job_id,
                 status=JobStatus.CANCELLED,
                 progress=0.0,
-                message="用户取消了任务（视频生成后）",
+                message="User cancelled the job (after video generation)",
             )
             return
 
-        # ========== 阶段 4：FFmpeg 拼接 ==========
+        # ========== Stage 4: FFmpeg stitching ==========
         job_manager.update_job(
             job_id,
             status=JobStatus.STITCHING,
             progress=0.85,
-            message="FFmpeg 正在拼接最终视频...",
+            message="FFmpeg is stitching the final video...",
         )
-        logger.info(f"[DA][Job {job_id}] 开始 FFmpeg 拼接")
+        logger.info(f"[DA][Job {job_id}] Starting FFmpeg stitching")
 
         final_dir = os.path.join(ARTIFACTS_DIR, job_id)
         final_path = os.path.join(final_dir, "final.mp4")
 
-        # 首尾帧模式：相邻片段共享一帧（上段尾帧 = 下段首帧），需裁掉重复
+        # Start/end frame mode: adjacent segments share one frame (prev end frame = next start frame), need to trim overlap
         await ffmpeg_tools.stitch_segments(
             segment_paths=segment_paths,
             output_path=final_path,
             trim_overlap_frames=True,
         )
 
-        logger.info(f"[DA][Job {job_id}] FFmpeg 拼接完成: {final_path}")
+        logger.info(f"[DA][Job {job_id}] FFmpeg stitching complete: {final_path}")
 
-        # ========== 标记完成 ==========
-        # final_video 存文件路径，get_progress 会自动生成下载 URL
+        # ========== Mark as completed ==========
+        # final_video stores file path, get_progress will auto-generate the download URL
         job_manager.update_job(
             job_id,
             status=JobStatus.COMPLETED,
             progress=1.0,
-            message=f"视频生成完成：「{script.title}」",
+            message=f"Video generation complete: \"{script.title}\"",
             final_video=final_path,
         )
-        logger.info(f"[DA][Job {job_id}] 流水线完成: {final_path}")
+        logger.info(f"[DA][Job {job_id}] Pipeline complete: {final_path}")
 
     except asyncio.CancelledError:
-        # asyncio.Task 被 cancel() 时触发
-        logger.info(f"[DA][Job {job_id}] 流水线被 asyncio.CancelledError 中断")
+        # Triggered when asyncio.Task is cancel()'d
+        logger.info(f"[DA][Job {job_id}] Pipeline interrupted by asyncio.CancelledError")
         job_manager.update_job(
             job_id,
             status=JobStatus.CANCELLED,
             progress=0.0,
-            message="用户取消了任务",
+            message="User cancelled the job",
         )
 
     except Exception as e:
-        logger.error(f"[DA][Job {job_id}] 流水线失败: {e}\n{traceback.format_exc()}")
+        logger.error(f"[DA][Job {job_id}] Pipeline failed: {e}\n{traceback.format_exc()}")
+        # 检测安全过滤器错误，设置特定错误类型 key 供前端 i18n 翻译
+        err_str = str(e)
+        if SAFETY_FILTER_ERROR_TAG in err_str:
+            error_message = "safety_filtered"
+        else:
+            error_message = f"Generation failed: {err_str}"
         job_manager.update_job(
             job_id,
             status=JobStatus.FAILED,
             progress=0.0,
-            message=f"生成失败：{str(e)}",
+            message=error_message,
         )
 
     finally:
-        # v14：无论成功/失败/取消，都通知 JobManager 任务结束，触发下一个队列任务
+        # v14: Regardless of success/failure/cancel, notify JobManager that job is finished to trigger next queued job
         job_manager.on_job_finished(job_id)
-        logger.info(f"[DA][Job {job_id}] run_pipeline finally 块执行完毕")
+        logger.info(f"[DA][Job {job_id}] run_pipeline finally block executed")
 
 
 def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[bytes]:
     """
-    从 job 数据中读取素材图片。
+    Load an asset image from job data.
 
-    参数:
-        job: 任务数据
-        asset_key: 素材 key（如 "model"）
-        image_field: 图片字段名（如 "portrait_image"）
+    Args:
+        job: Job data dict
+        asset_key: Asset key (e.g., "model")
+        image_field: Image field name (e.g., "portrait_image")
 
-    返回:
-        图片 bytes，如果文件不存在返回 None
+    Returns:
+        Image bytes, or None if file does not exist
     """
     asset = job.get(asset_key)
     if not asset:
@@ -637,19 +652,19 @@ def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[b
         with open(path, "rb") as f:
             return f.read()
     except Exception as e:
-        logger.warning(f"[DA] 读取素材图片失败 ({asset_key}/{image_field}): {e}")
+        logger.warning(f"[DA] Failed to load asset image ({asset_key}/{image_field}): {e}")
         return None
 
 
 def _load_first_product_image(job: dict) -> Optional[bytes]:
     """
-    读取产品图片（优先 instruction_image，其次 original_images 第一张）。
+    Load product image (prefers instruction_image, falls back to first original_images entry).
     """
     item = job.get("item")
     if not item:
         return None
 
-    # 优先使用 ADA 生成的产品说明图
+    # Prefer ADA-generated product instruction image
     instruction = item.get("instruction_image")
     if instruction and os.path.exists(instruction):
         try:
@@ -658,7 +673,7 @@ def _load_first_product_image(job: dict) -> Optional[bytes]:
         except Exception:
             pass
 
-    # 降级到用户上传的原始图片
+    # Fall back to user-uploaded original images
     originals = item.get("original_images", [])
     for path in originals:
         if path and os.path.exists(path):

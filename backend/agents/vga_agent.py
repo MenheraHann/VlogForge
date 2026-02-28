@@ -177,7 +177,14 @@ VEO_FIXED_CAMERA_PREFIX = (
     "The person in the video speaks directly to the camera. "
     "Her lip movements must match the dialogue in the description. "
     "This is NOT a voiceover or narration — the person is talking on camera like a vlog selfie video. "
-    "Generate natural lip sync that matches the spoken words.\n\n"
+    "Generate natural lip sync that matches the spoken words. "
+    "Speech pace should be slow and natural, with pauses between sentences.\n\n"
+    "IMPORTANT REALISM INSTRUCTION: "
+    "This video must look like authentic daily life footage, NOT a commercial or advertisement. "
+    "The person's actions and expressions must be natural, casual, and unforced — like a real person chatting at home. "
+    "No exaggerated acting, no overly expressive gestures, no commercial-style presentation. "
+    "No beauty filter, no skin smoothing, no overly perfect lighting. "
+    "Raw realism, intimate atmosphere, imperfect beauty, authentic human moment.\n\n"
 )
 
 

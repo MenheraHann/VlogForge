@@ -1,0 +1,273 @@
+{
+  "app": {
+    "title": "VlogForge - AI Vlog商品紹介動画ジェネレーター",
+    "name": "VlogForge"
+  },
+
+  "nav": {
+    "items": "商品",
+    "models": "モデル"
+  },
+
+  "asset": {
+    "items": "商品",
+    "models": "モデル",
+    "itemsIcon": "📦 商品",
+    "modelsIcon": "👤 モデル",
+    "addItem": "+ 商品を追加",
+    "addModel": "+ モデルを追加",
+    "noAssets": "素材がありません",
+    "confirmed": "確認済み",
+    "pending": "未確認",
+    "generating": "作成中...",
+    "generatingName": "素材",
+    "detail": "詳細",
+    "delete": "削除",
+    "edit": "編集",
+    "editNotSupported": "この素材は編集できません",
+    "confirmDelete": "{name}を削除しますか？",
+    "deleted": "{name}を削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "deleteFailedWith": "削除に失敗: {error}",
+    "notFound": "素材が見つかりません",
+    "loadFailed": "素材の読み込みに失敗しました",
+    "failed": "生成失敗",
+    "retry": "再生成",
+    "genFailed": "生成に失敗しました",
+    "unknownAsset": "不明な素材",
+    "rateLimited": "APIレート制限を超えました。1〜2分後に再試行してください",
+    "quotaExhausted": "API使用量の上限に達しました。しばらくしてから再試行してください",
+    "safetyFiltered": "コンテンツが安全フィルターによりブロックされました。キャラクターの年齢やコンテンツの組み合わせがプラットフォームのルールに違反している可能性があります。キャラクター設定を調整して再試行してください。"
+  },
+
+  "button": {
+    "generate": "動画を生成",
+    "quickstart": "一言で素材を作成",
+    "quickstartProcessing": "AI 解析中...",
+    "back": "← 戻る",
+    "download": "動画をダウンロード",
+    "newTask": "続けて生成",
+    "clear": "✕ クリア",
+    "confirm": "確認",
+    "submit": "送信",
+    "cancel": "キャンセル",
+    "preview": "プレビュー",
+    "confirmSelect": "選択を確認",
+    "submitting": "送信中...",
+    "confirming": "確認中...",
+    "creating": "作成中...",
+    "regenerate": "再生成",
+    "regenerating": "再生成中..."
+  },
+
+  "form": {
+    "oneLineDesc": "一行で説明",
+    "oneLineDescPlaceholder": "例：浴室でアミノ酸洗顔フォームを紹介するアジア女性 / オープニングは面白くして",
+    "quickstartHint": "AIが自動的に商品+モデルに分解し、両方の素材を一度に作成します",
+    "targetPlatform": "ターゲットプラットフォーム",
+    "videoDuration": "動画の長さ",
+    "durationLabel": "{segments}セグメント · {seconds}秒",
+    "description": "説明",
+    "referenceImages": "参考画像（任意）",
+    "uploadRef": "クリックして参考画像をアップロード",
+    "itemPlaceholder": "商品情報を入力、例：アミノ酸洗顔フォーム、マイルド処方、敏感肌向け",
+    "modelPlaceholder": "人物の説明を入力、例：20代のアジア女性、ショートヘア、リビングでVlog撮影",
+    "analyzeByImage": "画像を基に分析してください",
+    "autoModelDesc": "Vlog商品紹介に適した親しみやすい女性、リビングで撮影"
+  },
+
+  "slot": {
+    "item": "商品",
+    "model": "モデル",
+    "itemRequired": "*必須",
+    "modelOptional": "任意",
+    "dragOrUpload": "素材をドラッグまたはクリックしてアップロード",
+    "typeMismatch": "タイプ不一致：{type}素材が必要です",
+    "typeItem": "商品",
+    "typeModel": "モデル",
+    "selectLookFirst": "先にルックを選択してください",
+    "confirmInfoFirst": "先に商品情報の確認を完了してください"
+  },
+
+  "modal": {
+    "createAsset": "素材を作成",
+    "createItem": "商品素材を作成",
+    "createModel": "モデル素材を作成",
+    "createItemBtn": "商品を作成",
+    "createModelBtn": "モデルを作成",
+    "selectPlan": "プランを選択",
+    "assetDetail": "素材の詳細",
+    "itemDetail": "商品詳細 - {name}",
+    "modelDetail": "モデル詳細 - {name}",
+    "productInfoConfirm": "商品情報の確認",
+    "productInfoConfirmWith": "商品情報の確認 — {name}",
+    "modelReview": "モデルルック確認 - {name}",
+    "selectLook": "{label}を選択 - {name}",
+    "lookPlan": "ルックプラン",
+    "planLabel": "プラン {letter}",
+    "selectHint": "クリックして{label}を選択：",
+    "noLookImage": "ルック画像なし"
+  },
+
+  "detail": {
+    "thumbnail": "サムネイル",
+    "threeView": "三面図",
+    "portrait": "ポートレート",
+    "p0SellingPoint": "P0 コアセールスポイント",
+    "p1SellingPoint": "P1 サブセールスポイント",
+    "fullDescription": "詳細説明",
+    "language": "言語",
+    "appearance": "外見",
+    "personality": "雰囲気・スタイル",
+    "outfits": "コーディネート",
+    "scene": "撮影シーン",
+    "empty": "なし",
+    "editBtn": "編集",
+    "confirmBtn": "確認",
+    "saved": "保存しました",
+    "saveFailed": "保存に失敗: {error}"
+  },
+
+  "questionnaire": {
+    "levelQuestion": "{priority}レベルの質問",
+    "counter": "{current} / {total}",
+    "canSkip": "スキップ可",
+    "required": "必須",
+    "customAnswer": "自分で回答する",
+    "customPlaceholder": "回答を入力...",
+    "prevQuestion": "前の質問",
+    "nextQuestion": "次の質問",
+    "skip": "スキップ",
+    "submitAndCreate": "送信して素材を生成",
+    "noQuestions": "確認する質問はありません",
+    "selectOrWrite": "選択肢を選ぶか、自分で入力してください",
+    "writeYourAnswer": "回答を入力してください",
+    "answerRequired": "必須項目に回答してください: {label}"
+  },
+
+  "modelReview": {
+    "confirmBtn": "✓ 確認",
+    "regenerateBtn": "↻ 再生成",
+    "adjustPlaceholder": "調整内容を入力、例：髪をもう少し長くして...",
+    "submitFeedback": "送信",
+    "submittingFeedback": "送信中...",
+    "confirmSuccess": "モデルルックを確認しました",
+    "confirmFailed": "確認に失敗",
+    "confirmFailedWith": "確認に失敗: {error}",
+    "regenerateSuccess": "ルックを再生成中、お待ちください...",
+    "regenerateFailed": "再生成に失敗",
+    "regenerateFailedWith": "再生成に失敗: {error}",
+    "adjustSuccess": "フィードバックに基づいてルックを調整中...",
+    "adjustFailed": "送信に失敗",
+    "adjustFailedWith": "送信に失敗: {error}",
+    "generationFailed": "モデルルックの生成に失敗しました。再試行してください"
+  },
+
+  "pipeline": {
+    "script": "スクリプト",
+    "images": "絵コンテ",
+    "videos": "動画",
+    "stitching": "結合",
+    "preparing": "準備中..."
+  },
+
+  "toast": {
+    "modelCreating": "モデル素材を作成中、お待ちください...",
+    "modelCreateSuccess": "{name}を作成しました",
+    "modelCreateFailed": "作成に失敗: {error}",
+    "itemAnalyzed": "{name}の分析が完了しました。商品情報を確認してください",
+    "itemRejected": "商品が拒否されました: {reason}",
+    "itemAnalyzeFailed": "分析に失敗: {error}",
+    "itemConfirming": "商品素材を確認中、お待ちください...",
+    "itemConfirmSuccess": "{name}のプロファイルを作成しました",
+    "itemConfirmFailed": "確認に失敗: {error}",
+    "quickstartFailed": "クイック作成に失敗: {error}",
+    "quickstartCreated": "両方の素材タイプを作成しました。順番に確認してください",
+    "quickstartItemRejected": "商品が拒否されました: {reason}",
+    "analyzingItem": "商品を分析中...",
+    "itemAnalyzeComplete": "{name}の分析が完了しました",
+    "autoCreatingModel": "モデルを自動作成中...",
+    "submittingVideo": "動画生成を送信中...",
+    "videoTaskCreated": "動画生成タスクを作成しました",
+    "generateFailed": "生成に失敗: {error}",
+    "generationFailed": "生成に失敗: {error}",
+    "selectFailed": "選択に失敗: {error}",
+    "lookSelected": "{label}を選択しました",
+    "jobCancelled": "タスクをキャンセルしました",
+    "cancelFailed": "キャンセルに失敗: {error}",
+    "videoNotReady": "動画ファイルがまだ準備できていません",
+    "queryFailed": "照会に失敗: {error}",
+    "lastJobFailed": "前回の生成タスクが失敗しました",
+    "jobRestored": "進行中の生成タスクを復元しました",
+    "inputSentenceFirst": "先に一行の説明を入力してください",
+    "statusCreating": "作成中",
+    "statusCreated": "作成済み",
+    "modelSlotCreating": "{name} {status}",
+    "createFailed": "作成に失敗: {error}"
+  },
+
+  "status": {
+    "queued": "待機中",
+    "script": "スクリプト生成中",
+    "images": "絵コンテ生成中",
+    "videos": "動画セグメント生成中",
+    "stitching": "動画結合中",
+    "completed": "完了",
+    "failed": "失敗",
+    "cancelled": "キャンセル済み"
+  },
+
+  "queue": {
+    "title": "🎬 レンダーキュー",
+    "toggleTooltip": "折りたたみ/展開",
+    "waitingMsg": "前のタスクの完了を待っています...",
+    "videoComplete": "✓ 動画生成完了",
+    "unknownError": "不明なエラー",
+    "cancelledMsg": "キャンセル済み",
+    "cancelBtn": "キャンセル",
+    "previewBtn": "プレビュー",
+    "downloadBtn": "ダウンロード",
+    "jobName": "タスク {id}",
+    "cancelConfirm": "このタスクをキャンセルしますか？",
+    "cancelFailed": "キャンセルに失敗: HTTP {status}"
+  },
+
+  "result": {
+    "storyboard": "絵コンテ",
+    "videoSegments": "動画セグメント",
+    "downloadVideo": "動画をダウンロード",
+    "continueGenerate": "続けて生成",
+    "frame": "フレーム {index}",
+    "segment": "セグメント {index}",
+    "segmentNumber": "セグメント {id}",
+    "productPlacement": "商品配置",
+    "download": "ダウンロード"
+  },
+
+  "create": {
+    "createItem": "商品を作成",
+    "createModel": "モデルを作成"
+  },
+
+  "platform": {
+    "douyin": "Douyin (9:16 縦型)",
+    "xiaohongshu": "Xiaohongshu (9:16 縦型)",
+    "youtube": "YouTube (16:9 横型)"
+  },
+
+  "section": {
+    "generateVideo": "動画を生成"
+  },
+
+  "script": {
+    "person": "人物",
+    "scene": "シーン",
+    "style": "スタイル",
+    "lighting": "照明"
+  },
+
+  "storyboard": {
+    "title": "絵コンテ",
+    "videoSegments": "動画セグメントプレビュー"
+  }
+}

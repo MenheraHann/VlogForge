@@ -135,6 +135,12 @@ class ModelAsset(BaseModel):
 
     full_description: str = Field("", description="ADA 生成的完整人设描述")
 
+    # v17: ADA 根据人物国籍/种族自动判定的口语语言（供 DA 生成 voice_anchor 时使用）
+    language: str = Field("", description="人物口语语言，如 Mandarin Chinese、English、Japanese（由 ADA 根据国籍/种族判定）")
+
+    # v16: 生成失败时的错误信息（展示给用户）
+    error_message: str = Field("", description="生成失败时的用户可见错误信息")
+
 
 # ========== 请求模型 ==========
 

@@ -29,9 +29,11 @@ _RETRY_MAX_DELAY = 60          # 单次等待上限
 _RETRY_MAX_ATTEMPTS = 4        # 最大重试次数
 
 # 可重试的瞬态错误关键词（消息匹配）
+# 安全过滤器错误标识（不可重试，需要用户调整内容）
+SAFETY_FILTER_ERROR_TAG = "[SAFETY_FILTERED]"
+
 _RETRYABLE_MESSAGES = [
     "Gemini 响应中未包含图片",
-    "Gemini 响应无 candidates",
     "Connection aborted",
     "RemoteDisconnected",
     "connection without response",
@@ -106,7 +108,11 @@ def _get_client():
 def _extract_image_from_response(response) -> bytes:
     """从 Gemini 响应中提取第一张图片"""
     if not response.candidates:
-        raise RuntimeError("Gemini 响应无 candidates（可能被安全过滤拦截）")
+        # 安全过滤器拦截：不可重试，需要用户调整内容
+        raise RuntimeError(
+            f"{SAFETY_FILTER_ERROR_TAG} 内容被安全过滤器拦截，"
+            f"可能由于人物年龄或内容组合不符合平台规则，请调整人物设定后重试"
+        )
     for part in response.candidates[0].content.parts:
         if hasattr(part, "inline_data") and part.inline_data:
             if part.inline_data.mime_type.startswith("image/"):
@@ -141,6 +147,7 @@ def _extract_all_images_from_response(response) -> list[bytes]:
 async def text_to_image(
     prompt: str,
     system_instruction: str = "",
+    model: str = "",
 ) -> bytes:
     """
     文本生成图片（text2img）。
@@ -148,12 +155,14 @@ async def text_to_image(
     参数:
         prompt: 图片描述提示词
         system_instruction: 系统指令（可选）
+        model: 指定模型（可选，默认使用 IMAGE_GEN_MODEL）
 
     返回:
         图片 bytes（PNG 格式）
     """
+    use_model = model or IMAGE_GEN_MODEL
     client = _get_client()
-    logger.info(f"[ImageGen] text2img: {prompt[:80]}...")
+    logger.info(f"[ImageGen] text2img ({use_model}): {prompt[:80]}...")
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
@@ -163,7 +172,7 @@ async def text_to_image(
         config.system_instruction = system_instruction
 
     response = await client.aio.models.generate_content(
-        model=IMAGE_GEN_MODEL,
+        model=use_model,
         contents=prompt,
         config=config,
     )

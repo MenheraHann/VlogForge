@@ -1,12 +1,12 @@
 """
-VA Agent - 美术指导（Visual Agent）
-负责：全并行图生图生成分镜，每帧从素材图独立生成
-v12 架构：全帧并行，每帧 = 素材图(人物+产品) + style_guide + 帧提示词 → Nano Banana
+VA Agent - Visual Director (Visual Agent)
+Responsibilities: Fully parallel image-to-image storyboard generation, each frame generated independently from asset images
+v12 architecture: All frames in parallel, each frame = asset images (person + product) + style_guide + frame prompt → Nano Banana
 
-工作流：
-  所有帧 = 素材图（人物半身近景照（含场景） + 产品）+ 帧提示词 → Nano Banana（并行）
-  每帧基于同一组素材图生成，天然保持人物/场景一致性
-  相比链式：速度 ~3x，且避免链式传递导致的镜头/人物漂移
+Workflow:
+  All frames = asset images (person half-body close-up portrait (with scene) + product) + frame prompt → Nano Banana (parallel)
+  Each frame is generated from the same set of asset images, naturally maintaining person/scene consistency
+  Compared to chained approach: ~3x speed, and avoids camera/person drift caused by chain propagation
 """
 
 import os
@@ -16,59 +16,95 @@ from typing import Callable, Optional
 
 from backend.models import ScriptOutput
 from backend.tools.image_gen import image_to_image, text_to_image, save_image
+from backend.utils.age_guard import enforce_minimum_age
 
 logger = logging.getLogger(__name__)
 
-# 最大并行生成数（避免 API 限流）
+# Maximum concurrent generation count (to avoid API rate limiting)
 MAX_CONCURRENT = 3
 
-# 每帧图生图的系统指令（统一，不再区分首帧/后续帧）
-VA_FRAME_INSTRUCTION = """你是专业的 vlog 带货分镜图生成助手。
-基于提供的素材图片（人物半身近景照（含拍摄场景）、产品）和帧描述，生成对应的分镜图。
+# Unified system instruction for image-to-image generation per frame
+VA_FRAME_INSTRUCTION = """You are a professional vlog product promotion storyboard generation assistant.
+Based on the provided asset images (person half-body close-up portrait (with filming scene) and product) and frame description, generate the corresponding storyboard frame.
 
-【最高优先级 — 严格复刻参考图】
-- 你的首要任务是**严格复刻**第一张参考图（人物素材）的一切视觉信息
-- 构图、镜头距离、拍摄角度、人物在画面中的位置和比例必须与参考图**完全一致**
-- 场景布局（家具、墙面、装饰物的位置和比例）必须与参考图**完全一致**
-- 光线方向、色温、明暗程度、画面色调必须与参考图**完全一致**
-- 唯一允许改变的是：人物的**动作、表情、手势**和手中道具
+[HIGHEST PRIORITY — Strictly Replicate Reference Image — ZERO TOLERANCE]
+- Your primary task is to **pixel-level replicate** ALL visual information from the first reference image (person asset)
+- This is the MOST IMPORTANT rule — everything below serves this principle
 
-【固定机位原则】
-- 模拟手机架在固定位置自拍的效果，镜头始终不动
-- 禁止切换镜头：不要远景、不要特写、不要俯拍、不要仰拍、不要侧拍
-- 禁止改变拍摄距离：不要推进、不要拉远
-- 背景不能有任何位移或变形
+[Clothing — ABSOLUTELY NO CHANGES]
+- The person's clothing must be **exactly identical** to the reference image: same color, same material, same neckline, same sleeves, same fit
+- Do NOT change, add, remove, or modify any clothing item — not even subtle changes like rolling up sleeves or unbuttoning
+- Do NOT add accessories, jewelry, or props that are not in the reference image
+- If the reference shows a white T-shirt, every frame must show the exact same white T-shirt — no switching to other tops
 
-【人物一致性】
-- 人物外貌（五官、发型、肤色、体型）严格匹配人物素材照片，不可有任何偏差
-- 穿着和配饰严格匹配人物素材照片，不可更换或修改
-- 仅按照帧描述改变人物的动作、表情、手势和手中道具
+[Scene — ABSOLUTELY NO CHANGES]
+- Scene layout (furniture, walls, decorations — positions, proportions, and distances) must be **pixel-level identical** to the reference image
+- Do NOT add any new objects to the scene. Do NOT remove any existing objects. Do NOT rearrange anything
+- Wall decorations, furniture placement, background items must remain in their exact positions
+- The room/environment must look like the exact same physical space — not a similar-looking space
 
-【场景与光影一致性】
-- 场景环境严格匹配人物素材中的拍摄场景，不可添加或移除任何物体
-- 光线方向、色温、阴影位置、明暗程度必须与参考图完全一致
-- 画面色调和氛围跨帧统一，不可改变滤镜或调色风格
+[Lighting — ABSOLUTELY NO CHANGES]
+- Lighting direction, color temperature, brightness level, and color tone must be **exactly identical** to the reference image
+- Shadow positions and intensities must match the reference image precisely
+- Color grading and atmosphere must remain uniform — no warming, no cooling, no filter changes
+- If the reference has cool/neutral lighting, every frame must have the same cool/neutral lighting
 
-【产品植入】
-- 如需植入产品，人物自然地手持或展示，不改变镜头距离
-- 产品外观严格匹配产品素材照片
+[Composition — ABSOLUTELY NO CHANGES]
+- Camera distance, shooting angle, and the person's position and proportion in the frame must be **exactly identical** to the reference image
+- Simulate the effect of a phone mounted in a fixed position — the camera NEVER moves
+- No shot switching: no wide shot, no close-up, no top-down, no low-angle, no side angle
+- No distance changes: no zoom in, no pull back
+- Background must not shift or deform in any way
 
-【画面风格】
-- 真人写实、vlog 自拍风格、手机前置摄像头质感
-- 不要电影感、不要广告大片风格、不要过度滤镜
+[Character Consistency — FACE AND BODY]
+- Person's facial features (face shape, eyes, nose, mouth, eyebrows) must be **exactly identical** to the reference — no deviation
+- Hairstyle, hair color, skin color, body type must strictly match
+- Makeup level must match: if reference shows no makeup, do not add makeup
+
+[THE ONLY THINGS ALLOWED TO CHANGE]
+- The person's **actions, expressions, gestures** as specified in the frame description
+- Props in hand (product being held/displayed) when specified by the frame description
+- NOTHING ELSE may change — clothing, scene, lighting, composition, appearance must all remain identical to the reference
+
+[Product Placement]
+- When product placement is needed, the person naturally holds or displays the product without changing camera distance
+- Product appearance must strictly match the product asset photo
+
+[Visual Style]
+- Photorealistic, vlog selfie style, phone front camera quality
+- No cinematic feel, no commercial/ad campaign style, no heavy filters
+
+[Anti-Pattern Negatives — MUST enforce]
+- no table visible, no camera visible, no selfie angle
+- no beauty filter, no skin smoothing, no overly perfect skin
+- no overly perfect lighting, no studio lighting, no commercial look
+- no warm yellow tint, no romantic filter, no stylized color grading
+- raw realism, imperfect beauty, documentary lifestyle quality
+
+[Atmosphere and Realism]
+- The generated frame must feel like a real snapshot from daily life — NOT a posed photo or ad campaign image
+- Skin should have natural texture: subtle pores, slight unevenness, minor imperfections are GOOD — they make the image look real
+- Hair should be slightly messy and asymmetric, not perfectly styled
+- The overall mood should be quiet, authentic, and intimate — like a real person in their real space
 """
 
 
 def _build_frame_prompt(frame_prompt: str, style_guide) -> str:
     """
-    将 style_guide 信息注入帧提示词，增强跨帧一致性。
+    Inject style_guide information into the frame prompt to enhance cross-frame consistency.
+    v18: 年龄保护 — 对 person_description 和 frame_prompt 执行年龄合规检查
     """
+    # 对 frame_prompt 本身执行年龄保护
+    frame_prompt = enforce_minimum_age(frame_prompt)
+
     if not style_guide:
         return frame_prompt
 
     style_lines = []
     if hasattr(style_guide, 'person_description') and style_guide.person_description:
-        style_lines.append(f"Person: {style_guide.person_description}")
+        # 对 person_description 执行年龄保护
+        safe_person_desc = enforce_minimum_age(style_guide.person_description)
+        style_lines.append(f"Person: {safe_person_desc}")
     if hasattr(style_guide, 'scene_context') and style_guide.scene_context:
         style_lines.append(f"Scene: {style_guide.scene_context}")
     if hasattr(style_guide, 'visual_style') and style_guide.visual_style:
@@ -80,7 +116,18 @@ def _build_frame_prompt(frame_prompt: str, style_guide) -> str:
         return frame_prompt
 
     style_block = "\n".join(style_lines)
-    return f"[Style Guide]\n{style_block}\n\n[Frame Description]\n{frame_prompt}"
+
+    # Atmosphere realism tags — appended to every frame to ensure natural feel
+    atmosphere_tags = (
+        "\n\n[Atmosphere Tags]\n"
+        "raw realism, imperfect beauty, authentic daily life moment, "
+        "natural skin texture with pores and subtle imperfections, "
+        "slightly messy asymmetric hair, relaxed unposed expression, "
+        "documentary lifestyle photography, no beauty filter, no skin smoothing, "
+        "no overly perfect lighting, no commercial look"
+    )
+
+    return f"[Style Guide]\n{style_block}\n\n[Frame Description]\n{frame_prompt}{atmosphere_tags}"
 
 
 async def generate_storyboard(
@@ -91,33 +138,33 @@ async def generate_storyboard(
     on_frame_done: Optional[Callable[[int, int, str], None]] = None,
 ) -> list[str]:
     """
-    全并行生成分镜图序列：每帧从素材图独立生成。
+    Fully parallel storyboard frame sequence generation: each frame generated independently from asset images.
 
-    参数:
-        script: DA 输出的脚本（含帧提示词 + style_guide）
-        output_dir: 分镜图输出目录
-        person_image: 人物半身近景照 bytes（portrait_image，已包含拍摄场景）
-        product_image: 产品图 bytes（instruction_image 或 original）
-        on_frame_done: 每帧完成时的回调 (帧索引, 总帧数, 帧路径)
+    Args:
+        script: DA output script (with frame prompts + style_guide)
+        output_dir: Storyboard output directory
+        person_image: Person half-body close-up portrait bytes (portrait_image, includes filming scene)
+        product_image: Product image bytes (instruction_image or original)
+        on_frame_done: Callback when each frame is done (frame_index, total_frames, frame_path)
 
-    返回:
-        分镜图路径列表（N+1 张图，N = 分段数）
+    Returns:
+        List of storyboard frame paths (N+1 images, N = segment count)
     """
     os.makedirs(output_dir, exist_ok=True)
     segments = script.segments
     style_guide = script.style_guide
 
-    # 收集所有帧的提示词：帧1=首段首帧，帧2~N+1=各段尾帧
+    # Collect all frame prompts: frame 1 = first segment's start frame, frames 2~N+1 = each segment's end frame
     frame_specs = []
 
-    # 帧 1：第一段的 frame_start_prompt
+    # Frame 1: first segment's frame_start_prompt
     frame_specs.append({
         "prompt": segments[0].frame_start_prompt,
         "needs_product": segments[0].needs_product,
         "frame_num": 1,
     })
 
-    # 帧 2 到 N+1：每段的 frame_end_prompt
+    # Frames 2 to N+1: each segment's frame_end_prompt
     for i, seg in enumerate(segments):
         frame_specs.append({
             "prompt": seg.frame_end_prompt,
@@ -125,58 +172,58 @@ async def generate_storyboard(
             "frame_num": i + 2,
         })
 
-    # 防守性检查：重复帧告警
+    # Defensive check: duplicate frame prompt warning
     seen_prompts = {}
     for spec in frame_specs:
         p = spec["prompt"]
         if p in seen_prompts:
             logger.warning(
-                f"[VA] ⚠️ 重复帧提示词: 帧 {spec['frame_num']} 与帧 {seen_prompts[p]} 相同，"
-                f"生成的图片可能一模一样"
+                f"[VA] WARNING: Duplicate frame prompt detected: Frame {spec['frame_num']} "
+                f"is identical to Frame {seen_prompts[p]} — generated images may be identical"
             )
         else:
             seen_prompts[p] = spec["frame_num"]
 
     total_frames = len(frame_specs)
     logger.info(
-        f"[VA] 全并行模式: {len(segments)} 段 → {total_frames} 帧, "
-        f"并发上限={MAX_CONCURRENT}"
+        f"[VA] Full parallel mode: {len(segments)} segments → {total_frames} frames, "
+        f"max_concurrent={MAX_CONCURRENT}"
     )
 
-    # 记录完成进度
+    # Track completion progress
     done_count = 0
     done_lock = asyncio.Lock()
 
     async def _generate_one(spec: dict) -> tuple[int, str]:
-        """生成单帧分镜图"""
+        """Generate a single storyboard frame"""
         nonlocal done_count
 
         frame_num = spec["frame_num"]
         raw_prompt = spec["prompt"]
         needs_product = spec["needs_product"]
 
-        # 注入 style_guide 到提示词，参考图锚定 + 动作指令
+        # Inject style_guide into prompt, reference image anchoring + action instructions
         enhanced_prompt = _build_frame_prompt(raw_prompt, style_guide)
         enhanced_prompt = (
-            f"【最高优先级 — 严格复刻参考图】\n"
-            f"第一张参考图是人物素材，你必须严格复刻该图中的一切视觉信息：\n"
-            f"- 人物：五官、发型、肤色、体型、穿着（不可有任何偏差）\n"
-            f"- 构图：拍摄角度、镜头距离、人物在画面中的位置和比例（完全一致）\n"
-            f"- 场景：背景布局、家具/墙面/装饰物（位置和比例不变）\n"
-            f"- 光影：光线方向、色温、明暗、色调（完全一致）\n\n"
-            f"【唯一允许改变的内容 — 动作指令】\n{raw_prompt}\n\n"
-            f"仅执行上述动作/表情/手势变化，其他一切保持与参考图完全一致。\n\n"
+            f"[HIGHEST PRIORITY — Strictly Replicate Reference Image]\n"
+            f"The first reference image is the person asset. You MUST strictly replicate ALL visual information from it:\n"
+            f"- Person: facial features, hairstyle, skin color, body type, clothing (NO deviation allowed)\n"
+            f"- Composition: camera angle, focal distance, person's position and proportion in frame (exactly identical)\n"
+            f"- Scene: background layout, furniture/walls/decorations (positions and proportions unchanged)\n"
+            f"- Lighting: light direction, color temperature, brightness, color tone (exactly identical)\n\n"
+            f"[ONLY ALLOWED CHANGES — Action Instructions]\n{raw_prompt}\n\n"
+            f"Only perform the above action/expression/gesture changes. Everything else MUST remain exactly the same as the reference image.\n\n"
             f"{enhanced_prompt}"
         )
 
-        # 构建输入图片列表
+        # Build input image list
         input_images = []
         if person_image:
             input_images.append(person_image)
         if product_image and needs_product:
             input_images.append(product_image)
 
-        # 生成图片
+        # Generate image
         if input_images:
             frame_bytes = await image_to_image(
                 input_images=input_images,
@@ -189,80 +236,80 @@ async def generate_storyboard(
                 system_instruction=VA_FRAME_INSTRUCTION,
             )
 
-        # 保存
+        # Save
         path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
         save_image(frame_bytes, path)
 
-        # 更新进度
+        # Update progress
         async with done_lock:
             done_count += 1
-            logger.info(f"[VA] 帧 {frame_num} 生成完成 ({done_count}/{total_frames})")
+            logger.info(f"[VA] Frame {frame_num} generation complete ({done_count}/{total_frames})")
             if on_frame_done:
                 on_frame_done(done_count - 1, total_frames, path)
 
         return frame_num, path
 
-    # 使用信号量控制并发数
+    # Use semaphore to control concurrency
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     async def _generate_with_limit(spec: dict) -> tuple[int, str]:
         async with semaphore:
             return await _generate_one(spec)
 
-    # 全部并行发出
+    # Launch all frames in parallel
     tasks = [_generate_with_limit(spec) for spec in frame_specs]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 按帧号排序整理结果
+    # Sort and organize results by frame number
     ordered_paths = [""] * total_frames
     first_pass_errors = []
 
     for result in results:
         if isinstance(result, Exception):
             first_pass_errors.append(str(result))
-            logger.error(f"[VA] 帧生成失败: {result}")
+            logger.error(f"[VA] Frame generation failed: {result}")
         else:
             frame_num, path = result
             ordered_paths[frame_num - 1] = path
 
-    # ---- 失败帧重试（逐帧重试 1 次，复用相同的 img2img 逻辑） ----
+    # ---- Failed frame retry (retry each failed frame once, reusing the same img2img logic) ----
     failed_indices = [i for i, p in enumerate(ordered_paths) if not p]
     if failed_indices:
         logger.warning(
-            f"[VA] 首轮有 {len(failed_indices)} 帧失败，开始逐帧重试: "
-            f"帧号={[i + 1 for i in failed_indices]}"
+            f"[VA] First round: {len(failed_indices)} frames failed, starting per-frame retry: "
+            f"frame_nums={[i + 1 for i in failed_indices]}"
         )
         retry_tasks = []
         for idx in failed_indices:
             retry_tasks.append(_generate_with_limit(frame_specs[idx]))
         retry_results = await asyncio.gather(*retry_tasks, return_exceptions=True)
 
-        # 将重试成功的帧填回
+        # Fill in successfully retried frames
         still_failed_indices = []
         for idx, result in zip(failed_indices, retry_results):
             if isinstance(result, Exception):
-                logger.warning(f"[VA] 帧 {idx + 1} 重试仍失败: {result}")
+                logger.warning(f"[VA] Frame {idx + 1} retry still failed: {result}")
                 still_failed_indices.append(idx)
             else:
                 frame_num, path = result
                 ordered_paths[idx] = path
-                logger.info(f"[VA] 帧 {frame_num} 重试成功")
+                logger.info(f"[VA] Frame {frame_num} retry succeeded")
     else:
         still_failed_indices = []
 
-    # ---- 兜底：对重试仍失败的帧，用简化 prompt 再试 img2img（保留参考图） ----
+    # ---- Fallback: for frames that still failed after retry, use simplified prompt with img2img (keep reference image) ----
     if still_failed_indices:
         logger.warning(
-            f"[VA] {len(still_failed_indices)} 帧重试仍失败，降级简化 prompt 兜底: "
-            f"帧号={[i + 1 for i in still_failed_indices]}"
+            f"[VA] {len(still_failed_indices)} frames still failed after retry, "
+            f"falling back to simplified prompt: frame_nums={[i + 1 for i in still_failed_indices]}"
         )
         for idx in still_failed_indices:
             spec = frame_specs[idx]
             frame_num = spec["frame_num"]
-            # 简化 prompt，减少复杂度但保留参考图
+            # Simplified prompt: reduce complexity but keep reference image
             simplified_prompt = spec["prompt"]
             try:
-                # img2img 兜底，始终携带人物参考图
+                # img2img fallback: always include person reference image
                 fallback_images = [person_image]
                 if product_image and spec.get("needs_product"):
                     fallback_images.append(product_image)
@@ -275,36 +322,36 @@ async def generate_storyboard(
                 path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
                 save_image(fallback_bytes, path)
                 ordered_paths[idx] = path
-                logger.info(f"[VA] 帧 {frame_num} 简化 prompt img2img 兜底成功")
+                logger.info(f"[VA] Frame {frame_num} simplified prompt img2img fallback succeeded")
 
-                # 更新进度
+                # Update progress
                 async with done_lock:
                     done_count += 1
                     if on_frame_done:
                         on_frame_done(done_count - 1, total_frames, path)
             except Exception as e:
-                logger.error(f"[VA] 帧 {frame_num} text_to_image 兜底也失败: {e}")
+                logger.error(f"[VA] Frame {frame_num} fallback also failed: {e}")
 
-    # ---- 最终结果校验 ----
+    # ---- Final result validation ----
     final_paths = [p for p in ordered_paths if p]
     final_failed = [i + 1 for i, p in enumerate(ordered_paths) if not p]
 
     if final_failed:
         logger.error(
-            f"[VA] 最终仍有 {len(final_failed)} 帧失败（重试 + 兜底均未成功）: "
-            f"帧号={final_failed}"
+            f"[VA] Final: {len(final_failed)} frames still failed (retry + fallback both unsuccessful): "
+            f"frame_nums={final_failed}"
         )
 
     if not final_paths:
-        raise RuntimeError(f"[VA] 所有分镜图生成失败（含重试和兜底）: {first_pass_errors}")
+        raise RuntimeError(f"[VA] All storyboard frames generation failed (including retry and fallback): {first_pass_errors}")
 
-    # 数量校验：期望 segments + 1 帧
+    # Count validation: expect segments + 1 frames
     expected_count = len(segments) + 1
     if len(final_paths) != expected_count:
         logger.warning(
-            f"[VA] 帧数量不匹配: 期望 {expected_count}, 实际 {len(final_paths)}, "
-            f"缺失帧号={final_failed}"
+            f"[VA] Frame count mismatch: expected {expected_count}, got {len(final_paths)}, "
+            f"missing frame_nums={final_failed}"
         )
 
-    logger.info(f"[VA] 分镜图全部完成: {len(final_paths)}/{total_frames} 帧成功")
+    logger.info(f"[VA] All storyboard frames complete: {len(final_paths)}/{total_frames} frames succeeded")
     return final_paths

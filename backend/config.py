@@ -61,8 +61,11 @@ def get_genai_client(location: str = "") -> genai.Client:
 # 文本生成模型（DA 脚本生成、ADA 文本分析）
 TEXT_MODEL = "gemini-2.5-flash"
 
-# 图片生成模型（Nano Banana — ADA 生图 + VA 图生图）
+# 图片生成模型（Nano Banana — VA 图生图）
 IMAGE_GEN_MODEL = "gemini-2.5-flash-image"
+
+# 图片生成模型 Pro（Nano Banana Pro — ADA 人物生图，质量更高）
+IMAGE_GEN_MODEL_PRO = "gemini-2.5-flash-preview-image"
 
 # 视频生成模型（Veo 3.1 Preview：Vertex AI 支持首尾帧模式）
 VIDEO_GEN_MODEL = "veo-3.1-generate-preview"

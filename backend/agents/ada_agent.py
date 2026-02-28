@@ -12,7 +12,7 @@ from typing import Optional
 
 from google.genai import types
 
-from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR
+from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR, IMAGE_GEN_MODEL_PRO
 from backend.models import (
     AssetType, AssetStatus, ItemAsset, ModelAsset,
     QuestionnaireStatus, QuestionnaireField,
@@ -39,6 +39,7 @@ from backend.prompts.ada_prompts import (
     build_quickstart_prompt,
     get_quickstart_schema,
 )
+from backend.utils.age_guard import enforce_minimum_age
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,12 @@ async def create_model_asset(
 
     logger.info(f"[ADA] 人设分析完成: {data.get('name')}, 场景={data.get('scene_context', '')[:30]}")
 
+    # v18: 年龄保护 — 对 ADA 输出的 appearance 和 full_description 执行年龄合规检查
+    data["appearance"] = enforce_minimum_age(data.get("appearance", ""))
+    data["full_description"] = enforce_minimum_age(data.get("full_description", ""))
+    if data.get("image_prompt"):
+        data["image_prompt"] = enforce_minimum_age(data["image_prompt"])
+
     # 保存参考图
     ref_paths = []
     asset_dir = os.path.join(ASSETS_DIR, asset_id)
@@ -431,11 +438,17 @@ async def create_model_asset(
             ref_paths.append(path)
 
     # v10: 生成多套「人在场景中的半身近景」方案图（关键词式提示词）
-    scene_context = data.get("scene_context", "客厅，背景是沙发、夜晚自然光、明亮的环境")
+    # v16: 增加超写实瑕疵描述 + 纪录片生活摄影风格
+    scene_context = data.get("scene_context", "living room, sofa on the left in background, neutral indoor lighting slightly uneven with subtle shadows, bright environment")
     base_image_prompt = data.get("image_prompt", "")
     if not base_image_prompt:
-        # 降级：用关键词拼接
-        base_image_prompt = f"半身近景、{data['appearance']}、面对镜头、{scene_context}、手机拍摄的真实质感"
+        # 降级：用关键词拼接（含写实瑕疵关键词）
+        base_image_prompt = (
+            f"medium shot upper body, {data['appearance']}, natural skin with subtle imperfections, "
+            f"facing camera, person centered in frame with headroom above, "
+            f"head to chest framing with visible background, {scene_context}, "
+            f"authentic smartphone photo quality, documentary lifestyle photography"
+        )
     logger.info(f"[ADA] 图片生成提示词: {base_image_prompt[:80]}...")
     look_paths = []
     for i in range(num_looks):
@@ -449,6 +462,10 @@ async def create_model_asset(
         except Exception as e:
             logger.warning(f"[ADA] 方案 {chr(65 + i)} 生成失败: {e}")
 
+    # v17: 提取 ADA 判定的人物口语语言（供 DA 生成 voice_anchor 时使用）
+    language = data.get("language", "Mandarin Chinese")
+    logger.info(f"[ADA] 人物语言: {language}")
+
     asset = ModelAsset(
         id=asset_id,
         name=data["name"],
@@ -456,6 +473,7 @@ async def create_model_asset(
         personality=data["personality"],
         outfits=data["outfits"],
         scene_context=scene_context,
+        language=language,
         reference_images=ref_paths,
         look_options=look_paths,
         full_description=data["full_description"],

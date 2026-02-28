@@ -1,0 +1,273 @@
+{
+  "app": {
+    "title": "VlogForge - AI Vlog 带货视频生成器",
+    "name": "VlogForge"
+  },
+
+  "nav": {
+    "items": "物品",
+    "models": "人物"
+  },
+
+  "asset": {
+    "items": "物品",
+    "models": "人物",
+    "itemsIcon": "📦 物品",
+    "modelsIcon": "👤 人物",
+    "addItem": "+ 添加物品",
+    "addModel": "+ 添加人物",
+    "noAssets": "暂无素材",
+    "confirmed": "已确认",
+    "pending": "待确认",
+    "generating": "制作中...",
+    "generatingName": "素材",
+    "detail": "详情",
+    "delete": "删除",
+    "edit": "编辑",
+    "editNotSupported": "该素材暂不支持编辑",
+    "confirmDelete": "确定删除 {name}？",
+    "deleted": "{name} 已删除",
+    "deleteFailed": "删除失败",
+    "deleteFailedWith": "删除失败: {error}",
+    "notFound": "素材不存在",
+    "loadFailed": "加载素材失败",
+    "failed": "生成失败",
+    "retry": "重新生成",
+    "genFailed": "生成失败",
+    "unknownAsset": "未知素材",
+    "rateLimited": "API 调用频率超限，请等待 1-2 分钟后重试",
+    "quotaExhausted": "API 配额已用完，请稍后再试",
+    "safetyFiltered": "内容被安全过滤器拦截，可能由于人物年龄或内容组合不符合平台规则，请调整人物设定后重试"
+  },
+
+  "button": {
+    "generate": "开始生成",
+    "quickstart": "一句话快速创建素材",
+    "quickstartProcessing": "AI 拆解中...",
+    "back": "← 返回",
+    "download": "下载视频",
+    "newTask": "继续生成",
+    "clear": "✕ 清空",
+    "confirm": "确认",
+    "submit": "提交",
+    "cancel": "取消",
+    "preview": "预览",
+    "confirmSelect": "确认选择",
+    "submitting": "提交中...",
+    "confirming": "确认中...",
+    "creating": "创建中...",
+    "regenerate": "重新生成",
+    "regenerating": "重新生成中..."
+  },
+
+  "form": {
+    "oneLineDesc": "一句话描述",
+    "oneLineDescPlaceholder": "如：帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶 / 开场要搞笑一点",
+    "quickstartHint": "AI 自动拆解为物品+人物，一次创建两类素材",
+    "targetPlatform": "目标平台",
+    "videoDuration": "视频时长",
+    "durationLabel": "{segments} 段 · {seconds}s",
+    "description": "描述",
+    "referenceImages": "参考图片（可选）",
+    "uploadRef": "点击上传参考图",
+    "itemPlaceholder": "描述产品信息，如：一瓶氨基酸洗面奶，温和配方不紧绷，适合敏感肌",
+    "modelPlaceholder": "描述人物形象，如：20多岁亚洲女生，短发，在客厅拍摄vlog",
+    "analyzeByImage": "请根据图片分析",
+    "autoModelDesc": "适合vlog带货的亲和女生，客厅拍摄"
+  },
+
+  "slot": {
+    "item": "物品",
+    "model": "人物",
+    "itemRequired": "*必填",
+    "modelOptional": "可选",
+    "dragOrUpload": "拖入素材 或 点击上传",
+    "typeMismatch": "类型不匹配：需要{type}素材",
+    "typeItem": "物品",
+    "typeModel": "人物",
+    "selectLookFirst": "请先选择造型方案",
+    "confirmInfoFirst": "请先完成产品信息确认"
+  },
+
+  "modal": {
+    "createAsset": "创建素材",
+    "createItem": "创建物品素材",
+    "createModel": "创建人物素材",
+    "createItemBtn": "创建物品",
+    "createModelBtn": "创建人物",
+    "selectPlan": "选择方案",
+    "assetDetail": "素材详情",
+    "itemDetail": "物品详情 - {name}",
+    "modelDetail": "人物详情 - {name}",
+    "productInfoConfirm": "产品信息确认",
+    "productInfoConfirmWith": "产品信息确认 — {name}",
+    "modelReview": "人物造型审核 - {name}",
+    "selectLook": "选择{label} - {name}",
+    "lookPlan": "造型方案",
+    "planLabel": "方案 {letter}",
+    "selectHint": "点击选择一个{label}：",
+    "noLookImage": "暂无造型图"
+  },
+
+  "detail": {
+    "thumbnail": "缩略图",
+    "threeView": "三视图",
+    "portrait": "人物形象",
+    "p0SellingPoint": "P0 核心卖点",
+    "p1SellingPoint": "P1 辅助卖点",
+    "fullDescription": "完整描述",
+    "language": "语言",
+    "appearance": "外貌特征",
+    "personality": "气质风格",
+    "outfits": "穿搭",
+    "scene": "拍摄场景",
+    "empty": "暂无",
+    "editBtn": "编辑",
+    "confirmBtn": "确认",
+    "saved": "已保存",
+    "saveFailed": "保存失败: {error}"
+  },
+
+  "questionnaire": {
+    "levelQuestion": "{priority} 级问题",
+    "counter": "{current} / {total}",
+    "canSkip": "可跳过",
+    "required": "必答",
+    "customAnswer": "我来填写",
+    "customPlaceholder": "输入你的回答...",
+    "prevQuestion": "上一题",
+    "nextQuestion": "下一题",
+    "skip": "跳过",
+    "submitAndCreate": "提交并生成素材",
+    "noQuestions": "没有需要确认的问题",
+    "selectOrWrite": "请选择一个选项或自行填写",
+    "writeYourAnswer": "请填写你的回答",
+    "answerRequired": "请回答必填项：{label}"
+  },
+
+  "modelReview": {
+    "confirmBtn": "✓ 确认",
+    "regenerateBtn": "↻ 重新生成",
+    "adjustPlaceholder": "输入调整意见，例如：头发再长一点...",
+    "submitFeedback": "提交",
+    "submittingFeedback": "提交中...",
+    "confirmSuccess": "人物造型已确认",
+    "confirmFailed": "确认失败",
+    "confirmFailedWith": "确认失败: {error}",
+    "regenerateSuccess": "正在重新生成造型，请稍候...",
+    "regenerateFailed": "重新生成失败",
+    "regenerateFailedWith": "重新生成失败: {error}",
+    "adjustSuccess": "正在根据意见调整造型，请稍候...",
+    "adjustFailed": "提交失败",
+    "adjustFailedWith": "提交失败: {error}",
+    "generationFailed": "人物造型生成失败，请重试"
+  },
+
+  "pipeline": {
+    "script": "脚本",
+    "images": "分镜图",
+    "videos": "视频",
+    "stitching": "拼接",
+    "preparing": "准备中..."
+  },
+
+  "toast": {
+    "modelCreating": "人物素材创建中，请稍候...",
+    "modelCreateSuccess": "{name} 创建成功",
+    "modelCreateFailed": "创建失败: {error}",
+    "itemAnalyzed": "{name} 分析完成，请确认产品信息",
+    "itemRejected": "物品被拒绝: {reason}",
+    "itemAnalyzeFailed": "分析失败: {error}",
+    "itemConfirming": "物品素材确认中，请稍候...",
+    "itemConfirmSuccess": "{name} 档案创建完成",
+    "itemConfirmFailed": "确认失败: {error}",
+    "quickstartFailed": "快速创建失败: {error}",
+    "quickstartCreated": "两类素材已创建，请依次确认",
+    "quickstartItemRejected": "物品被拒绝: {reason}",
+    "analyzingItem": "正在分析物品...",
+    "itemAnalyzeComplete": "{name} 分析完成",
+    "autoCreatingModel": "正在自动创建人物...",
+    "submittingVideo": "正在提交视频生成...",
+    "videoTaskCreated": "视频生成任务已创建",
+    "generateFailed": "生成失败: {error}",
+    "generationFailed": "生成失败: {error}",
+    "selectFailed": "选择失败: {error}",
+    "lookSelected": "{label}已选择",
+    "jobCancelled": "任务已取消",
+    "cancelFailed": "取消失败: {error}",
+    "videoNotReady": "视频文件尚未就绪",
+    "queryFailed": "查询失败: {error}",
+    "lastJobFailed": "上次的生成任务已失败",
+    "jobRestored": "已恢复进行中的生成任务",
+    "inputSentenceFirst": "请先输入一句话描述",
+    "statusCreating": "创建中",
+    "statusCreated": "已创建",
+    "modelSlotCreating": "{name} {status}",
+    "createFailed": "创建失败: {error}"
+  },
+
+  "status": {
+    "queued": "排队中",
+    "script": "生成脚本",
+    "images": "生成分镜图",
+    "videos": "生成视频片段",
+    "stitching": "拼接视频",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+
+  "queue": {
+    "title": "🎬 渲染队列",
+    "toggleTooltip": "折叠/展开",
+    "waitingMsg": "等待前面的任务完成...",
+    "videoComplete": "✓ 视频生成完成",
+    "unknownError": "未知错误",
+    "cancelledMsg": "已取消",
+    "cancelBtn": "取消",
+    "previewBtn": "预览",
+    "downloadBtn": "下载",
+    "jobName": "任务 {id}",
+    "cancelConfirm": "确定要取消这个任务吗？",
+    "cancelFailed": "取消失败: HTTP {status}"
+  },
+
+  "result": {
+    "storyboard": "分镜图",
+    "videoSegments": "视频片段",
+    "downloadVideo": "下载视频",
+    "continueGenerate": "继续生成",
+    "frame": "帧 {index}",
+    "segment": "片段 {index}",
+    "segmentNumber": "分段 {id}",
+    "productPlacement": "产品植入",
+    "download": "下载"
+  },
+
+  "create": {
+    "createItem": "创建物品",
+    "createModel": "创建人物"
+  },
+
+  "platform": {
+    "douyin": "抖音 (9:16 竖屏)",
+    "xiaohongshu": "小红书 (9:16 竖屏)",
+    "youtube": "YouTube (16:9 横屏)"
+  },
+
+  "section": {
+    "generateVideo": "生成视频"
+  },
+
+  "script": {
+    "person": "人物",
+    "scene": "场景",
+    "style": "风格",
+    "lighting": "光线"
+  },
+
+  "storyboard": {
+    "title": "分镜图",
+    "videoSegments": "视频片段预览"
+  }
+}

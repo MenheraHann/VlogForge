@@ -33,6 +33,7 @@ from backend.agents.ada_agent import (
     create_model_asset,
     quickstart_parse,
 )
+from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
 
 # 日志配置
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -124,6 +125,16 @@ async def _generate_model_looks(
         existing = asset_manager.get_model(model_id)
         if existing:
             existing.status = AssetStatus.FAILED
+            # v16: 存储错误类型 key，前端通过 i18n 翻译显示
+            err_msg = str(e)
+            if SAFETY_FILTER_ERROR_TAG in err_msg:
+                existing.error_message = "safety_filtered"
+            elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                existing.error_message = "rate_limited"
+            elif "quota" in err_msg.lower():
+                existing.error_message = "quota_exhausted"
+            else:
+                existing.error_message = f"error:{err_msg[:100]}"
             asset_manager.save_model(existing)
 
 
@@ -364,6 +375,15 @@ async def _regenerate_model_task(
         existing = asset_manager.get_model(model_id)
         if existing:
             existing.status = AssetStatus.FAILED
+            err_msg = str(e)
+            if SAFETY_FILTER_ERROR_TAG in err_msg:
+                existing.error_message = "safety_filtered"
+            elif "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                existing.error_message = "rate_limited"
+            elif "quota" in err_msg.lower():
+                existing.error_message = "quota_exhausted"
+            else:
+                existing.error_message = f"error:{err_msg[:100]}"
             asset_manager.save_model(existing)
 
 

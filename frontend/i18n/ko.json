@@ -1,0 +1,273 @@
+{
+  "app": {
+    "title": "VlogForge - AI Vlog 상품 영상 생성기",
+    "name": "VlogForge"
+  },
+
+  "nav": {
+    "items": "상품",
+    "models": "모델"
+  },
+
+  "asset": {
+    "items": "상품",
+    "models": "모델",
+    "itemsIcon": "📦 상품",
+    "modelsIcon": "👤 모델",
+    "addItem": "+ 상품 추가",
+    "addModel": "+ 모델 추가",
+    "noAssets": "아직 소재가 없습니다",
+    "confirmed": "확인됨",
+    "pending": "미확인",
+    "generating": "생성 중...",
+    "generatingName": "소재",
+    "detail": "상세",
+    "delete": "삭제",
+    "edit": "편집",
+    "editNotSupported": "이 소재는 편집할 수 없습니다",
+    "confirmDelete": "{name}을(를) 삭제하시겠습니까?",
+    "deleted": "{name} 삭제 완료",
+    "deleteFailed": "삭제 실패",
+    "deleteFailedWith": "삭제 실패: {error}",
+    "notFound": "소재를 찾을 수 없습니다",
+    "loadFailed": "소재 불러오기 실패",
+    "failed": "생성 실패",
+    "retry": "재생성",
+    "genFailed": "생성에 실패했습니다",
+    "unknownAsset": "알 수 없는 소재",
+    "rateLimited": "API 호출 빈도 초과, 1~2분 후 다시 시도해주세요",
+    "quotaExhausted": "API 할당량이 소진되었습니다. 잠시 후 다시 시도해주세요",
+    "safetyFiltered": "콘텐츠가 안전 필터에 의해 차단되었습니다. 캐릭터 나이 또는 콘텐츠 조합이 플랫폼 규칙에 위반될 수 있습니다. 캐릭터 설정을 조정한 후 다시 시도해 주세요."
+  },
+
+  "button": {
+    "generate": "영상 생성",
+    "quickstart": "한 줄로 소재 빠른 생성",
+    "quickstartProcessing": "AI 분석 중...",
+    "back": "← 뒤로",
+    "download": "영상 다운로드",
+    "newTask": "계속 생성",
+    "clear": "✕ 초기화",
+    "confirm": "확인",
+    "submit": "제출",
+    "cancel": "취소",
+    "preview": "미리보기",
+    "confirmSelect": "선택 확인",
+    "submitting": "제출 중...",
+    "confirming": "확인 중...",
+    "creating": "생성 중...",
+    "regenerate": "다시 생성",
+    "regenerating": "다시 생성 중..."
+  },
+
+  "form": {
+    "oneLineDesc": "한 줄 설명",
+    "oneLineDescPlaceholder": "예: 욕실에서 아미노산 클렌저를 추천하는 아시아 여성 / 오프닝은 재미있게",
+    "quickstartHint": "AI가 자동으로 상품+모델로 분해하여 두 가지 소재를 한 번에 생성합니다",
+    "targetPlatform": "대상 플랫폼",
+    "videoDuration": "영상 길이",
+    "durationLabel": "{segments}세그먼트 · {seconds}초",
+    "description": "설명",
+    "referenceImages": "참고 이미지 (선택)",
+    "uploadRef": "클릭하여 참고 이미지 업로드",
+    "itemPlaceholder": "상품 정보를 입력하세요. 예: 아미노산 클렌저, 순한 포뮬러, 민감성 피부용",
+    "modelPlaceholder": "인물을 설명하세요. 예: 20대 아시아 여성, 단발, 거실에서 브이로그 촬영",
+    "analyzeByImage": "이미지를 기반으로 분석해 주세요",
+    "autoModelDesc": "브이로그 상품 소개에 적합한 친근한 여성, 거실에서 촬영"
+  },
+
+  "slot": {
+    "item": "상품",
+    "model": "모델",
+    "itemRequired": "*필수",
+    "modelOptional": "선택",
+    "dragOrUpload": "소재를 드래그하거나 클릭하여 업로드",
+    "typeMismatch": "유형 불일치: {type} 소재가 필요합니다",
+    "typeItem": "상품",
+    "typeModel": "모델",
+    "selectLookFirst": "먼저 룩을 선택해 주세요",
+    "confirmInfoFirst": "먼저 상품 정보 확인을 완료해 주세요"
+  },
+
+  "modal": {
+    "createAsset": "소재 생성",
+    "createItem": "상품 소재 생성",
+    "createModel": "모델 소재 생성",
+    "createItemBtn": "상품 생성",
+    "createModelBtn": "모델 생성",
+    "selectPlan": "플랜 선택",
+    "assetDetail": "소재 상세",
+    "itemDetail": "상품 상세 - {name}",
+    "modelDetail": "모델 상세 - {name}",
+    "productInfoConfirm": "상품 정보 확인",
+    "productInfoConfirmWith": "상품 정보 확인 — {name}",
+    "modelReview": "모델 룩 검토 - {name}",
+    "selectLook": "{label} 선택 - {name}",
+    "lookPlan": "룩 플랜",
+    "planLabel": "플랜 {letter}",
+    "selectHint": "클릭하여 {label}를 선택하세요:",
+    "noLookImage": "룩 이미지 없음"
+  },
+
+  "detail": {
+    "thumbnail": "썸네일",
+    "threeView": "3면도",
+    "portrait": "인물 이미지",
+    "p0SellingPoint": "P0 핵심 셀링 포인트",
+    "p1SellingPoint": "P1 보조 셀링 포인트",
+    "fullDescription": "상세 설명",
+    "language": "언어",
+    "appearance": "외모",
+    "personality": "분위기 & 스타일",
+    "outfits": "코디",
+    "scene": "촬영 장면",
+    "empty": "없음",
+    "editBtn": "편집",
+    "confirmBtn": "확인",
+    "saved": "저장 완료",
+    "saveFailed": "저장 실패: {error}"
+  },
+
+  "questionnaire": {
+    "levelQuestion": "{priority} 레벨 질문",
+    "counter": "{current} / {total}",
+    "canSkip": "건너뛰기 가능",
+    "required": "필수",
+    "customAnswer": "직접 입력",
+    "customPlaceholder": "답변을 입력하세요...",
+    "prevQuestion": "이전",
+    "nextQuestion": "다음",
+    "skip": "건너뛰기",
+    "submitAndCreate": "제출 및 소재 생성",
+    "noQuestions": "확인할 질문이 없습니다",
+    "selectOrWrite": "옵션을 선택하거나 직접 입력해 주세요",
+    "writeYourAnswer": "답변을 입력해 주세요",
+    "answerRequired": "필수 항목에 답변해 주세요: {label}"
+  },
+
+  "modelReview": {
+    "confirmBtn": "✓ 확인",
+    "regenerateBtn": "↻ 다시 생성",
+    "adjustPlaceholder": "조정 의견을 입력하세요. 예: 머리카락을 좀 더 길게...",
+    "submitFeedback": "제출",
+    "submittingFeedback": "제출 중...",
+    "confirmSuccess": "모델 룩이 확인되었습니다",
+    "confirmFailed": "확인 실패",
+    "confirmFailedWith": "확인 실패: {error}",
+    "regenerateSuccess": "룩을 다시 생성 중입니다. 잠시 기다려 주세요...",
+    "regenerateFailed": "다시 생성 실패",
+    "regenerateFailedWith": "다시 생성 실패: {error}",
+    "adjustSuccess": "피드백에 따라 룩을 조정 중입니다...",
+    "adjustFailed": "제출 실패",
+    "adjustFailedWith": "제출 실패: {error}",
+    "generationFailed": "모델 룩 생성에 실패했습니다. 다시 시도해 주세요"
+  },
+
+  "pipeline": {
+    "script": "스크립트",
+    "images": "스토리보드",
+    "videos": "영상",
+    "stitching": "합성",
+    "preparing": "준비 중..."
+  },
+
+  "toast": {
+    "modelCreating": "모델 소재 생성 중, 잠시 기다려 주세요...",
+    "modelCreateSuccess": "{name} 생성 완료",
+    "modelCreateFailed": "생성 실패: {error}",
+    "itemAnalyzed": "{name} 분석 완료, 상품 정보를 확인해 주세요",
+    "itemRejected": "상품 거부됨: {reason}",
+    "itemAnalyzeFailed": "분석 실패: {error}",
+    "itemConfirming": "상품 소재 확인 중, 잠시 기다려 주세요...",
+    "itemConfirmSuccess": "{name} 프로필 생성 완료",
+    "itemConfirmFailed": "확인 실패: {error}",
+    "quickstartFailed": "빠른 생성 실패: {error}",
+    "quickstartCreated": "두 가지 소재 유형이 생성되었습니다. 순서대로 확인해 주세요",
+    "quickstartItemRejected": "상품 거부됨: {reason}",
+    "analyzingItem": "상품 분석 중...",
+    "itemAnalyzeComplete": "{name} 분석 완료",
+    "autoCreatingModel": "모델 자동 생성 중...",
+    "submittingVideo": "영상 생성 제출 중...",
+    "videoTaskCreated": "영상 생성 작업이 생성되었습니다",
+    "generateFailed": "생성 실패: {error}",
+    "generationFailed": "생성 실패: {error}",
+    "selectFailed": "선택 실패: {error}",
+    "lookSelected": "{label} 선택 완료",
+    "jobCancelled": "작업 취소됨",
+    "cancelFailed": "취소 실패: {error}",
+    "videoNotReady": "영상 파일이 아직 준비되지 않았습니다",
+    "queryFailed": "조회 실패: {error}",
+    "lastJobFailed": "이전 생성 작업이 실패했습니다",
+    "jobRestored": "진행 중인 생성 작업을 복원했습니다",
+    "inputSentenceFirst": "먼저 한 줄 설명을 입력해 주세요",
+    "statusCreating": "생성 중",
+    "statusCreated": "생성됨",
+    "modelSlotCreating": "{name} {status}",
+    "createFailed": "생성 실패: {error}"
+  },
+
+  "status": {
+    "queued": "대기 중",
+    "script": "스크립트 생성 중",
+    "images": "스토리보드 생성 중",
+    "videos": "영상 세그먼트 생성 중",
+    "stitching": "영상 합성 중",
+    "completed": "완료",
+    "failed": "실패",
+    "cancelled": "취소됨"
+  },
+
+  "queue": {
+    "title": "🎬 렌더 큐",
+    "toggleTooltip": "접기/펼치기",
+    "waitingMsg": "이전 작업 완료를 기다리는 중...",
+    "videoComplete": "✓ 영상 생성 완료",
+    "unknownError": "알 수 없는 오류",
+    "cancelledMsg": "취소됨",
+    "cancelBtn": "취소",
+    "previewBtn": "미리보기",
+    "downloadBtn": "다운로드",
+    "jobName": "작업 {id}",
+    "cancelConfirm": "이 작업을 취소하시겠습니까?",
+    "cancelFailed": "취소 실패: HTTP {status}"
+  },
+
+  "result": {
+    "storyboard": "스토리보드",
+    "videoSegments": "영상 세그먼트",
+    "downloadVideo": "영상 다운로드",
+    "continueGenerate": "계속 생성",
+    "frame": "프레임 {index}",
+    "segment": "세그먼트 {index}",
+    "segmentNumber": "세그먼트 {id}",
+    "productPlacement": "상품 배치",
+    "download": "다운로드"
+  },
+
+  "create": {
+    "createItem": "상품 생성",
+    "createModel": "모델 생성"
+  },
+
+  "platform": {
+    "douyin": "Douyin (9:16 세로)",
+    "xiaohongshu": "Xiaohongshu (9:16 세로)",
+    "youtube": "YouTube (16:9 가로)"
+  },
+
+  "section": {
+    "generateVideo": "영상 생성"
+  },
+
+  "script": {
+    "person": "인물",
+    "scene": "장면",
+    "style": "스타일",
+    "lighting": "조명"
+  },
+
+  "storyboard": {
+    "title": "스토리보드",
+    "videoSegments": "영상 세그먼트 미리보기"
+  }
+}

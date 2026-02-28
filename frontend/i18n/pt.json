@@ -1,0 +1,273 @@
+{
+  "app": {
+    "title": "VlogForge - Gerador de Vídeos de Produtos com IA",
+    "name": "VlogForge"
+  },
+
+  "nav": {
+    "items": "Produtos",
+    "models": "Modelos"
+  },
+
+  "asset": {
+    "items": "Produtos",
+    "models": "Modelos",
+    "itemsIcon": "📦 Produtos",
+    "modelsIcon": "👤 Modelos",
+    "addItem": "+ Adicionar produto",
+    "addModel": "+ Adicionar modelo",
+    "noAssets": "Nenhum material ainda",
+    "confirmed": "Confirmado",
+    "pending": "Pendente",
+    "generating": "Gerando...",
+    "generatingName": "Material",
+    "detail": "Detalhes",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "editNotSupported": "Este material não pode ser editado",
+    "confirmDelete": "Excluir {name}?",
+    "deleted": "{name} excluído",
+    "deleteFailed": "Falha ao excluir",
+    "deleteFailedWith": "Falha ao excluir: {error}",
+    "notFound": "Material não encontrado",
+    "loadFailed": "Falha ao carregar materiais",
+    "failed": "Falha na geração",
+    "retry": "Regenerar",
+    "genFailed": "Falha na geração",
+    "unknownAsset": "Material desconhecido",
+    "rateLimited": "Limite de API excedido, aguarde 1-2 minutos e tente novamente",
+    "quotaExhausted": "Cota de API esgotada, tente novamente mais tarde",
+    "safetyFiltered": "Conteúdo bloqueado por filtros de segurança. Isso pode ser devido à idade do personagem ou à combinação de conteúdo que viola as regras da plataforma. Ajuste as configurações do personagem e tente novamente."
+  },
+
+  "button": {
+    "generate": "Gerar vídeo",
+    "quickstart": "Criação rápida com uma frase",
+    "quickstartProcessing": "IA analisando...",
+    "back": "← Voltar",
+    "download": "Baixar vídeo",
+    "newTask": "Gerar mais",
+    "clear": "✕ Limpar",
+    "confirm": "Confirmar",
+    "submit": "Enviar",
+    "cancel": "Cancelar",
+    "preview": "Visualizar",
+    "confirmSelect": "Confirmar seleção",
+    "submitting": "Enviando...",
+    "confirming": "Confirmando...",
+    "creating": "Criando...",
+    "regenerate": "Regenerar",
+    "regenerating": "Regenerando..."
+  },
+
+  "form": {
+    "oneLineDesc": "Descrição em uma linha",
+    "oneLineDescPlaceholder": "Ex.: Uma garota asiática recomendando limpador facial no banheiro / a abertura deve ser engraçada",
+    "quickstartHint": "A IA divide automaticamente em produto + modelo e cria ambos os tipos de material de uma vez",
+    "targetPlatform": "Plataforma alvo",
+    "videoDuration": "Duração do vídeo",
+    "durationLabel": "{segments} segmentos · {seconds}s",
+    "description": "Descrição",
+    "referenceImages": "Imagens de referência (opcional)",
+    "uploadRef": "Clique para enviar imagens de referência",
+    "itemPlaceholder": "Descreva o produto, ex.: Um limpador facial de aminoácidos, fórmula suave, para pele sensível",
+    "modelPlaceholder": "Descreva a pessoa, ex.: Mulher asiática de 20 e poucos anos, cabelo curto, gravando um vlog na sala",
+    "analyzeByImage": "Por favor, analise com base na imagem",
+    "autoModelDesc": "Uma garota simpática adequada para vlog de produtos, filmada na sala"
+  },
+
+  "slot": {
+    "item": "Produto",
+    "model": "Modelo",
+    "itemRequired": "*Obrigatório",
+    "modelOptional": "Opcional",
+    "dragOrUpload": "Arraste material ou clique para enviar",
+    "typeMismatch": "Tipo incompatível: necessário material de {type}",
+    "typeItem": "produto",
+    "typeModel": "modelo",
+    "selectLookFirst": "Primeiro selecione um look",
+    "confirmInfoFirst": "Primeiro complete a confirmação das informações do produto"
+  },
+
+  "modal": {
+    "createAsset": "Criar material",
+    "createItem": "Criar material de produto",
+    "createModel": "Criar material de modelo",
+    "createItemBtn": "Criar produto",
+    "createModelBtn": "Criar modelo",
+    "selectPlan": "Selecionar plano",
+    "assetDetail": "Detalhes do material",
+    "itemDetail": "Detalhes do produto - {name}",
+    "modelDetail": "Detalhes do modelo - {name}",
+    "productInfoConfirm": "Confirmação de informações do produto",
+    "productInfoConfirmWith": "Confirmação de informações — {name}",
+    "modelReview": "Revisão do look - {name}",
+    "selectLook": "Selecionar {label} - {name}",
+    "lookPlan": "Plano de look",
+    "planLabel": "Plano {letter}",
+    "selectHint": "Clique para selecionar um {label}:",
+    "noLookImage": "Sem imagem de look"
+  },
+
+  "detail": {
+    "thumbnail": "Miniatura",
+    "threeView": "Vista tripla",
+    "portrait": "Retrato",
+    "p0SellingPoint": "P0 Pontos de venda principais",
+    "p1SellingPoint": "P1 Pontos de venda secundários",
+    "fullDescription": "Descrição completa",
+    "language": "Idioma",
+    "appearance": "Aparência",
+    "personality": "Personalidade e estilo",
+    "outfits": "Traje",
+    "scene": "Cena de filmagem",
+    "empty": "N/D",
+    "editBtn": "Editar",
+    "confirmBtn": "Confirmar",
+    "saved": "Salvo",
+    "saveFailed": "Falha ao salvar: {error}"
+  },
+
+  "questionnaire": {
+    "levelQuestion": "Pergunta de prioridade {priority}",
+    "counter": "{current} / {total}",
+    "canSkip": "Pode pular",
+    "required": "Obrigatória",
+    "customAnswer": "Escrever minha resposta",
+    "customPlaceholder": "Digite sua resposta...",
+    "prevQuestion": "Anterior",
+    "nextQuestion": "Próxima",
+    "skip": "Pular",
+    "submitAndCreate": "Enviar e gerar material",
+    "noQuestions": "Nenhuma pergunta para confirmar",
+    "selectOrWrite": "Selecione uma opção ou escreva a sua",
+    "writeYourAnswer": "Escreva sua resposta",
+    "answerRequired": "Por favor responda à pergunta obrigatória: {label}"
+  },
+
+  "modelReview": {
+    "confirmBtn": "✓ Confirmar",
+    "regenerateBtn": "↻ Regenerar",
+    "adjustPlaceholder": "Digite seus comentários, ex.: Cabelo um pouco mais longo...",
+    "submitFeedback": "Enviar",
+    "submittingFeedback": "Enviando...",
+    "confirmSuccess": "Look do modelo confirmado",
+    "confirmFailed": "Falha na confirmação",
+    "confirmFailedWith": "Falha na confirmação: {error}",
+    "regenerateSuccess": "Regenerando look, por favor aguarde...",
+    "regenerateFailed": "Falha na regeneração",
+    "regenerateFailedWith": "Falha na regeneração: {error}",
+    "adjustSuccess": "Ajustando look com base nos comentários...",
+    "adjustFailed": "Falha ao enviar",
+    "adjustFailedWith": "Falha ao enviar: {error}",
+    "generationFailed": "Falha na geração do look. Por favor, tente novamente"
+  },
+
+  "pipeline": {
+    "script": "Roteiro",
+    "images": "Storyboard",
+    "videos": "Vídeos",
+    "stitching": "Junção",
+    "preparing": "Preparando..."
+  },
+
+  "toast": {
+    "modelCreating": "Criando material de modelo, por favor aguarde...",
+    "modelCreateSuccess": "{name} criado com sucesso",
+    "modelCreateFailed": "Falha ao criar: {error}",
+    "itemAnalyzed": "Análise de {name} concluída. Confirme as informações do produto",
+    "itemRejected": "Produto rejeitado: {reason}",
+    "itemAnalyzeFailed": "Falha na análise: {error}",
+    "itemConfirming": "Confirmando material do produto, por favor aguarde...",
+    "itemConfirmSuccess": "Perfil de {name} criado",
+    "itemConfirmFailed": "Falha na confirmação: {error}",
+    "quickstartFailed": "Falha na criação rápida: {error}",
+    "quickstartCreated": "Ambos os tipos de material foram criados. Confirme um por um",
+    "quickstartItemRejected": "Produto rejeitado: {reason}",
+    "analyzingItem": "Analisando produto...",
+    "itemAnalyzeComplete": "Análise de {name} concluída",
+    "autoCreatingModel": "Criando modelo automaticamente...",
+    "submittingVideo": "Enviando geração de vídeo...",
+    "videoTaskCreated": "Tarefa de geração de vídeo criada",
+    "generateFailed": "Falha na geração: {error}",
+    "generationFailed": "Falha na geração: {error}",
+    "selectFailed": "Falha na seleção: {error}",
+    "lookSelected": "{label} selecionado",
+    "jobCancelled": "Tarefa cancelada",
+    "cancelFailed": "Falha ao cancelar: {error}",
+    "videoNotReady": "O arquivo de vídeo ainda não está pronto",
+    "queryFailed": "Falha na consulta: {error}",
+    "lastJobFailed": "A tarefa de geração anterior falhou",
+    "jobRestored": "Tarefa de geração em andamento restaurada",
+    "inputSentenceFirst": "Primeiro digite uma descrição em uma linha",
+    "statusCreating": "Criando",
+    "statusCreated": "Criado",
+    "modelSlotCreating": "{name} {status}",
+    "createFailed": "Falha ao criar: {error}"
+  },
+
+  "status": {
+    "queued": "Na fila",
+    "script": "Gerando roteiro",
+    "images": "Gerando storyboard",
+    "videos": "Gerando segmentos de vídeo",
+    "stitching": "Juntando vídeo",
+    "completed": "Concluído",
+    "failed": "Falhou",
+    "cancelled": "Cancelado"
+  },
+
+  "queue": {
+    "title": "🎬 Fila de renderização",
+    "toggleTooltip": "Recolher/Expandir",
+    "waitingMsg": "Aguardando as tarefas anteriores terminarem...",
+    "videoComplete": "✓ Geração de vídeo concluída",
+    "unknownError": "Erro desconhecido",
+    "cancelledMsg": "Cancelado",
+    "cancelBtn": "Cancelar",
+    "previewBtn": "Visualizar",
+    "downloadBtn": "Baixar",
+    "jobName": "Tarefa {id}",
+    "cancelConfirm": "Tem certeza que deseja cancelar esta tarefa?",
+    "cancelFailed": "Falha ao cancelar: HTTP {status}"
+  },
+
+  "result": {
+    "storyboard": "Storyboard",
+    "videoSegments": "Segmentos de vídeo",
+    "downloadVideo": "Baixar vídeo",
+    "continueGenerate": "Gerar mais",
+    "frame": "Quadro {index}",
+    "segment": "Segmento {index}",
+    "segmentNumber": "Segmento {id}",
+    "productPlacement": "Posicionamento do produto",
+    "download": "Baixar"
+  },
+
+  "create": {
+    "createItem": "Criar produto",
+    "createModel": "Criar modelo"
+  },
+
+  "platform": {
+    "douyin": "Douyin (9:16 Vertical)",
+    "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
+    "youtube": "YouTube (16:9 Horizontal)"
+  },
+
+  "section": {
+    "generateVideo": "Gerar vídeo"
+  },
+
+  "script": {
+    "person": "Pessoa",
+    "scene": "Cena",
+    "style": "Estilo",
+    "lighting": "Iluminação"
+  },
+
+  "storyboard": {
+    "title": "Storyboard",
+    "videoSegments": "Pré-visualização dos segmentos"
+  }
+}

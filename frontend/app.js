@@ -38,6 +38,35 @@ function showToast(message, type = "info") {
   }, 3000);
 }
 
+// ========== 图片预览 Lightbox ==========
+function initLightbox() {
+  const overlay = $("#image-lightbox");
+  if (!overlay) return;
+  const img = overlay.querySelector(".lightbox-img");
+  const closeBtn = overlay.querySelector(".lightbox-close");
+
+  // 关闭
+  function closeLightbox() { overlay.style.display = "none"; }
+  closeBtn.addEventListener("click", closeLightbox);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeLightbox(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.style.display !== "none") closeLightbox(); });
+
+  // 全局委托：点击 .asset-mini-thumb / .detail-image-item img / .model-review-image img 打开预览
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+    if (
+      (target.matches(".asset-mini-thumb") ||
+       target.matches(".detail-image-item img") ||
+       target.matches(".model-review-image img")) &&
+      target.src
+    ) {
+      e.stopPropagation();
+      img.src = target.src;
+      overlay.style.display = "flex";
+    }
+  });
+}
+
 // ========== 状态 ==========
 let assets = { items: [], models: [] };
 let currentJobId = null;
@@ -72,7 +101,7 @@ $("#nav-logo").addEventListener("click", () => { showView("home"); refreshAssets
 async function refreshAssets() {
   try {
     const res = await fetch("/api/assets");
-    if (!res.ok) throw new Error("加载素材失败");
+    if (!res.ok) throw new Error(t('asset.loadFailed'));
     const data = await res.json();
     assets.items = data.items || [];
     assets.models = data.models || [];
@@ -96,7 +125,7 @@ function renderColumnList(type, list, containerSel) {
   container.innerHTML = "";
 
   if (list.length === 0) {
-    container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">暂无素材</div>`;
+    container.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">${t('asset.noAssets')}</div>`;
     return;
   }
 
@@ -165,15 +194,66 @@ function createMiniCard(type, asset) {
       <div class="asset-mini-card-inner">
         <div class="asset-mini-thumb-skeleton"></div>
         <div class="asset-mini-info">
-          <div class="asset-mini-name">${escapeHtml(asset.name || "素材")}</div>
-          <div class="asset-mini-meta" style="color:#3b82f6;">制作中...</div>
+          <div class="asset-mini-name">${escapeHtml(asset.name || t('asset.generatingName'))}</div>
+          <div class="asset-mini-meta" style="color:#3b82f6;">${t('asset.generating')}</div>
         </div>
       </div>
       <div class="asset-generating-progress">
         <span class="gen-spinner"></span>
-        <span class="gen-progress-text">制作中...</span>
+        <span class="gen-progress-text">${t('asset.generating')}</span>
       </div>
     `;
+    return card;
+  }
+
+  // v16: failed 状态：显示错误信息 + 重试/删除按钮
+  if (asset.status === "failed") {
+    card.className = "asset-mini-card failed";
+    // 根据后端返回的错误类型 key 映射 i18n 翻译
+    let errorMsg = t('asset.genFailed') || "生成失败";
+    if (asset.error_message === "safety_filtered") {
+      errorMsg = t('asset.safetyFiltered');
+    } else if (asset.error_message === "rate_limited") {
+      errorMsg = t('asset.rateLimited');
+    } else if (asset.error_message === "quota_exhausted") {
+      errorMsg = t('asset.quotaExhausted');
+    } else if (asset.error_message && asset.error_message.startsWith("error:")) {
+      errorMsg = asset.error_message.slice(6);
+    }
+    card.innerHTML = `
+      <div class="asset-mini-card-inner">
+        <div class="asset-failed-icon">&#9888;</div>
+        <div class="asset-mini-info">
+          <div class="asset-mini-name">${escapeHtml(asset.name || t('asset.unknownAsset') || "未知素材")}</div>
+          <div class="asset-failed-error">${escapeHtml(errorMsg)}</div>
+        </div>
+      </div>
+      <div class="asset-mini-actions">
+        ${type === "models" ? `<button class="btn-retry" data-edit="${asset.id}">${t('asset.retry') || "重新生成"}</button>` : ""}
+        <button class="btn-sm btn-danger" data-delete="${asset.id}">${t('asset.delete') || "删除"}</button>
+      </div>
+    `;
+    // 绑定重试按钮
+    const retryBtn = card.querySelector("[data-edit]");
+    if (retryBtn) {
+      retryBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openModelReviewModal(asset);
+      });
+    }
+    // 绑定删除按钮
+    card.querySelector("[data-delete]").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(t('asset.confirmDelete', {name: asset.name}) || `确认删除 ${asset.name}？`)) return;
+      try {
+        const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(t('asset.deleteFailed'));
+        showToast(t('asset.deleted', {name: asset.name}), "success");
+        refreshAssets();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    });
     return card;
   }
 
@@ -209,22 +289,22 @@ function createMiniCard(type, asset) {
   // v12: 状态标签（generating 已提前 return，这里只有 pending / confirmed）
   let badge = "";
   if (isConfirmed) {
-    badge = `<span class="asset-mini-badge success">已确认</span>`;
+    badge = `<span class="asset-mini-badge success">${t('asset.confirmed')}</span>`;
   } else {
-    badge = `<span class="asset-mini-badge warning">待确认</span>`;
+    badge = `<span class="asset-mini-badge warning">${t('asset.pending')}</span>`;
   }
 
   // v7: 按钮根据状态不同
   let actionBtns = "";
   if (isConfirmed) {
     actionBtns = `
-      <button class="btn-sm btn-detail" data-detail="${asset.id}">详情</button>
-      <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
+      <button class="btn-sm btn-detail" data-detail="${asset.id}">${t('asset.detail')}</button>
+      <button class="btn-sm btn-danger" data-delete="${asset.id}">${t('asset.delete')}</button>
     `;
   } else {
     actionBtns = `
-      <button class="btn-sm btn-edit" data-edit="${asset.id}">编辑</button>
-      <button class="btn-sm btn-danger" data-delete="${asset.id}">删除</button>
+      <button class="btn-sm btn-edit" data-edit="${asset.id}">${t('asset.edit')}</button>
+      <button class="btn-sm btn-danger" data-delete="${asset.id}">${t('asset.delete')}</button>
     `;
   }
 
@@ -258,10 +338,12 @@ function createMiniCard(type, asset) {
       e.stopPropagation();
       if (type === "items" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
         openQuestionnaireModal(asset);
-      } else if (type === "models" && asset.status === "pending") {
+      } else if (type === "models" && (asset.status === "pending" || asset.status === "failed" || asset.status === "confirmed")) {
         openModelReviewModal(asset);
+      } else if (type === "models" && asset.status === "generating") {
+        showToast(t('asset.generating') || "生成中，请稍候...", "info");
       } else {
-        showToast("该素材暂不支持编辑", "warning");
+        showToast(t('asset.editNotSupported'), "warning");
       }
     });
   }
@@ -269,15 +351,15 @@ function createMiniCard(type, asset) {
   // 点击删除
   card.querySelector("[data-delete]").addEventListener("click", async (e) => {
     e.stopPropagation();
-    if (!confirm(`确定删除 ${asset.name}？`)) return;
+    if (!confirm(t('asset.confirmDelete', {name: asset.name}))) return;
     try {
       const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("删除失败");
-      showToast(`${asset.name} 已删除`, "success");
+      if (!res.ok) throw new Error(t('asset.deleteFailed'));
+      showToast(t('asset.deleted', {name: asset.name}), "success");
       if (slotAssets[slotType] && slotAssets[slotType].id === asset.id) clearSlot(slotType);
       refreshAssets();
     } catch (err) {
-      showToast(`删除失败: ${err.message}`, "error");
+      showToast(t('asset.deleteFailedWith', {error: err.message}), "error");
     }
   });
 
@@ -299,9 +381,9 @@ function renderTagSection(sectionId, label, text, assetId, fieldKey) {
     <div class="detail-tag-section" data-section="${sectionId}">
       <div class="detail-tag-header">
         <span class="detail-tag-label">${escapeHtml(label)}</span>
-        <button class="btn-sm btn-tag-edit" data-asset="${assetId}" data-field="${fieldKey}" data-section="${sectionId}">编辑</button>
+        <button class="btn-sm btn-tag-edit" data-asset="${assetId}" data-field="${fieldKey}" data-section="${sectionId}">${t('detail.editBtn')}</button>
       </div>
-      <div class="detail-tag-body">${tagsHtml || '<span class="detail-tag-empty">暂无</span>'}</div>
+      <div class="detail-tag-body">${tagsHtml || '<span class="detail-tag-empty">' + t('detail.empty') + '</span>'}</div>
     </div>
   `;
 }
@@ -323,16 +405,16 @@ function openDetailModal(type, asset) {
   const title = $("#detail-modal-title");
   const body = $("#detail-modal-body");
 
-  const labels = { items: "物品", models: "人物" };
-  title.textContent = `${labels[type]}详情 - ${asset.name}`;
+  const detailTitleKey = type === "items" ? 'modal.itemDetail' : 'modal.modelDetail';
+  title.textContent = t(detailTitleKey, {name: asset.name});
 
   let content = "";
 
   if (type === "items") {
     // v7: 三张产品图
     content += renderImagesRow(asset, [
-      { field: "thumbnail_image", label: "缩略图" },
-      { field: "three_view_image", label: "三视图" },
+      { field: "thumbnail_image", label: t('detail.thumbnail') },
+      { field: "three_view_image", label: t('detail.threeView') },
     ]);
 
     // v7: tag 分区展示 + 编辑
@@ -343,23 +425,24 @@ function openDetailModal(type, asset) {
 
     // 卖点
     const sp = asset.selling_points || {};
-    if (sp.P0 && sp.P0.length) content += renderTagSection("sp-p0", "P0 核心卖点", sp.P0.join("、"), asset.id, "selling_points.P0");
-    if (sp.P1 && sp.P1.length) content += renderTagSection("sp-p1", "P1 辅助卖点", sp.P1.join("、"), asset.id, "selling_points.P1");
+    if (sp.P0 && sp.P0.length) content += renderTagSection("sp-p0", t('detail.p0SellingPoint'), sp.P0.join("、"), asset.id, "selling_points.P0");
+    if (sp.P1 && sp.P1.length) content += renderTagSection("sp-p1", t('detail.p1SellingPoint'), sp.P1.join("、"), asset.id, "selling_points.P1");
 
-    content += `<div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
+    content += `<div class="detail-section"><h4>${t('detail.fullDescription')}</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
 
   } else if (type === "models") {
     // v10: 一张大图（portrait_image，人在场景中的半身近景照）
     content += renderImagesRow(asset, [
-      { field: "portrait_image", label: "人物形象" },
+      { field: "portrait_image", label: t('detail.portrait') },
     ]);
 
-    content += renderTagSection("model-appearance", "外貌特征", asset.appearance, asset.id, "appearance");
-    content += renderTagSection("model-personality", "气质风格", asset.personality, asset.id, "personality");
-    content += renderTagSection("model-outfits", "穿搭", asset.outfits, asset.id, "outfits");
-    content += renderTagSection("model-scene", "拍摄场景", asset.scene_context, asset.id, "scene_context");
+    content += renderTagSection("model-language", t('detail.language'), asset.language, asset.id, "language");
+    content += renderTagSection("model-appearance", t('detail.appearance'), asset.appearance, asset.id, "appearance");
+    content += renderTagSection("model-personality", t('detail.personality'), asset.personality, asset.id, "personality");
+    content += renderTagSection("model-outfits", t('detail.outfits'), asset.outfits, asset.id, "outfits");
+    content += renderTagSection("model-scene", t('detail.scene'), asset.scene_context, asset.id, "scene_context");
 
-    content += `<div class="detail-section"><h4>完整描述</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
+    content += `<div class="detail-section"><h4>${t('detail.fullDescription')}</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
   }
 
   body.innerHTML = content;
@@ -374,9 +457,9 @@ function openDetailModal(type, asset) {
       const fieldPath = btn.dataset.field;
       const assetId = btn.dataset.asset;
 
-      if (btn.textContent === "编辑") {
+      if (btn.textContent === t('detail.editBtn')) {
         // 进入编辑模式
-        btn.textContent = "确认";
+        btn.textContent = t('detail.confirmBtn');
         btn.classList.add("btn-confirm");
         const currentTags = [...tagBody.querySelectorAll(".detail-tag")].map(t => t.textContent);
         tagBody.innerHTML = "";
@@ -395,7 +478,7 @@ function openDetailModal(type, asset) {
         tagBody.appendChild(addBtn);
       } else {
         // 确认保存
-        btn.textContent = "编辑";
+        btn.textContent = t('detail.editBtn');
         btn.classList.remove("btn-confirm");
         const inputs = tagBody.querySelectorAll(".detail-tag-input");
         const newValues = [...inputs].map(i => i.value.trim()).filter(Boolean);
@@ -404,7 +487,7 @@ function openDetailModal(type, asset) {
         // 更新显示
         tagBody.innerHTML = newValues.length > 0
           ? newValues.map(v => `<span class="detail-tag">${escapeHtml(v)}</span>`).join("")
-          : '<span class="detail-tag-empty">暂无</span>';
+          : '<span class="detail-tag-empty">' + t('detail.empty') + '</span>';
 
         // 保存到后端
         saveTagUpdate(assetId, fieldPath, newText);
@@ -448,7 +531,7 @@ async function saveTagUpdate(assetId, fieldPath, newValue) {
       }
       updates[parent] = parentObj;
     } catch (err) {
-      showToast(`保存失败: ${err.message}`, "error");
+      showToast(t('detail.saveFailed', {error: err.message}), "error");
       return;
     }
   } else {
@@ -459,11 +542,11 @@ async function saveTagUpdate(assetId, fieldPath, newValue) {
     const formData = new FormData();
     formData.append("updates", JSON.stringify(updates));
     const res = await fetch(`/api/assets/${assetId}`, { method: "PUT", body: formData });
-    if (!res.ok) throw new Error("保存失败");
-    showToast("已保存", "success");
+    if (!res.ok) throw new Error(t('detail.saveFailed', {error: ''}));
+    showToast(t('detail.saved'), "success");
     refreshAssets();
   } catch (err) {
-    showToast(`保存失败: ${err.message}`, "error");
+    showToast(t('detail.saveFailed', {error: err.message}), "error");
   }
 }
 
@@ -481,32 +564,32 @@ function openCreateModal(type) {
   const modal = $("#create-modal");
   const title = $("#modal-title");
   const body = $("#modal-body");
-  const labels = { items: "物品", models: "人物" };
-  title.textContent = `创建${labels[type]}素材`;
+  const createTitleKey = type === "items" ? 'modal.createItem' : 'modal.createModel';
+  title.textContent = t(createTitleKey);
 
   const placeholders = {
-    items: "描述产品信息，如：一瓶氨基酸洗面奶，温和配方不紧绷，适合敏感肌",
-    models: "描述人物形象，如：20多岁亚洲女生，短发，在客厅拍摄vlog",
+    items: t('form.itemPlaceholder'),
+    models: t('form.modelPlaceholder'),
   };
 
   body.innerHTML = `
     <form id="create-asset-form">
       <div class="form-group">
-        <label>描述</label>
+        <label>${t('form.description')}</label>
         <textarea id="create-desc" rows="3" placeholder="${placeholders[type]}" required></textarea>
       </div>
       <div class="form-group">
-        <label>参考图片（可选）</label>
+        <label>${t('form.referenceImages')}</label>
         <div class="upload-zone" id="create-upload-zone">
           <input type="file" id="create-file-input" accept="image/*" multiple hidden>
           <div class="upload-placeholder" id="create-upload-placeholder">
             <span class="upload-icon">&#128247;</span>
-            <span>点击上传参考图</span>
+            <span>${t('form.uploadRef')}</span>
           </div>
           <div class="upload-preview-sm" id="create-upload-preview"></div>
         </div>
       </div>
-      <button type="submit" class="btn-submit" id="create-submit-btn">创建${labels[type]}</button>
+      <button type="submit" class="btn-submit" id="create-submit-btn">${type === "items" ? t('create.createItem') : t('create.createModel')}</button>
     </form>
   `;
 
@@ -544,13 +627,13 @@ function openCreateModal(type) {
     e.preventDefault();
     const submitBtn = $("#create-submit-btn");
     submitBtn.disabled = true;
-    submitBtn.textContent = "创建中...";
+    submitBtn.textContent = t('button.creating');
 
     const desc = $("#create-desc").value.trim();
 
     if (type === "items") {
       // 物品走智能问卷流程
-      await handleItemCreate(desc, createFiles, submitBtn, labels[type]);
+      await handleItemCreate(desc, createFiles, submitBtn, type);
     } else {
       // v12: 人物 → 关闭模态框，发送请求，通过 refreshAssets 渲染 generating 卡片
       const formData = new FormData();
@@ -558,24 +641,24 @@ function openCreateModal(type) {
       createFiles.forEach((f) => formData.append("images", f));
 
       closeCreateModal();
-      showToast("人物素材创建中，请稍候...", "info");
+      showToast(t('toast.modelCreating'), "info");
 
       try {
         const res = await fetch("/api/assets/model", { method: "POST", body: formData });
-        if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "创建失败"); }
+        if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.createFailed', {error: ''})); }
         const data = await res.json();
 
         console.log(`[ModelCreate] 成功: ${data.asset.name}`);
         // 刷新列表，后端已保存 generating/pending 状态的素材
         await refreshAssets();
-        showToast(`${data.asset.name} 创建成功`, "success");
+        showToast(t('toast.modelCreateSuccess', {name: data.asset.name}), "success");
 
         // v15: 后端自动设置 portrait_image，pending 状态时用户通过审核弹窗确认
         if (data.asset && data.asset.status === "pending") {
           openModelReviewModal(data.asset);
         }
       } catch (err) {
-        showToast(`创建失败: ${err.message}`, "error");
+        showToast(t('toast.createFailed', {error: err.message}), "error");
         await refreshAssets();
       }
     }
@@ -585,7 +668,7 @@ function openCreateModal(type) {
 }
 
 // 物品创建 → 走智能问卷
-async function handleItemCreate(desc, files, submitBtn, label) {
+async function handleItemCreate(desc, files, submitBtn, type) {
   const formData = new FormData();
   formData.append("description", desc);
   files.forEach((f) => formData.append("images", f));
@@ -593,25 +676,25 @@ async function handleItemCreate(desc, files, submitBtn, label) {
   try {
     // 第 1 步：analyze
     const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "分析失败"); }
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.itemAnalyzeFailed', {error: ''})); }
     const data = await res.json();
 
     if (data.status === "rejected") {
-      showToast(`物品被拒绝: ${data.reason}`, "error");
+      showToast(t('toast.itemRejected', {reason: data.reason}), "error");
       closeCreateModal();
       return;
     }
 
-    showToast(`${data.asset.name} 分析完成，请确认产品信息`, "success");
+    showToast(t('toast.itemAnalyzed', {name: data.asset.name}), "success");
     closeCreateModal();
 
     // 打开问卷确认
     openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
     refreshAssets();
   } catch (err) {
-    showToast(`分析失败: ${err.message}`, "error");
+    showToast(t('toast.itemAnalyzeFailed', {error: err.message}), "error");
     submitBtn.disabled = false;
-    submitBtn.textContent = `创建${label}`;
+    submitBtn.textContent = type === "items" ? t('create.createItem') : t('create.createModel');
   }
 }
 
@@ -629,11 +712,11 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
   // 使用传入的问卷，或从 asset 中取
   const questions = questionnaire || asset.questionnaire_fields || [];
   if (questions.length === 0) {
-    showToast("没有需要确认的问题", "warning");
+    showToast(t('questionnaire.noQuestions'), "warning");
     return;
   }
 
-  title.textContent = `产品信息确认 — ${asset.name}`;
+  title.textContent = t('modal.productInfoConfirmWith', {name: asset.name});
 
   // 存储用户的回答
   const answers = questions.map(q => ({
@@ -677,8 +760,8 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
             <div class="q-stepper-fill" style="width: ${((index + 1) / total) * 100}%"></div>
           </div>
           <div class="q-stepper-meta">
-            <span class="q-stepper-label">${q.priority} 级问题</span>
-            <span class="q-stepper-counter">${index + 1} / ${total}</span>
+            <span class="q-stepper-label">${t('questionnaire.levelQuestion', {priority: q.priority})}</span>
+            <span class="q-stepper-counter">${t('questionnaire.counter', {current: index + 1, total: total})}</span>
           </div>
         </div>
 
@@ -686,8 +769,8 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
           <div class="q-card-header">
             <span class="q-priority-badge">${q.priority}</span>
             ${isOptional
-              ? '<span class="q-optional-badge">可跳过</span>'
-              : '<span class="q-required-badge">必答</span>'}
+              ? '<span class="q-optional-badge">' + t('questionnaire.canSkip') + '</span>'
+              : '<span class="q-required-badge">' + t('questionnaire.required') + '</span>'}
           </div>
           <h3 class="q-card-question">${escapeHtml(q.label)}</h3>
 
@@ -706,24 +789,24 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
 
             <div class="q-option q-option-custom ${selectedOption === 'c' ? 'selected' : ''}" data-choice="c">
               <div class="q-option-label">C</div>
-              <div class="q-option-text">我来填写</div>
+              <div class="q-option-text">${t('questionnaire.customAnswer')}</div>
             </div>
           </div>
 
           <div class="q-custom-input-wrap" id="q-custom-wrap" style="display:${selectedOption === 'c' ? 'block' : 'none'}">
             <textarea class="q-custom-input" id="q-custom-input" rows="2"
-              placeholder="输入你的回答...">${selectedOption === 'c' ? escapeHtml(currentAnswer) : ''}</textarea>
+              placeholder="${t('questionnaire.customPlaceholder')}">${selectedOption === 'c' ? escapeHtml(currentAnswer) : ''}</textarea>
           </div>
         </div>
 
         <div class="q-nav">
-          <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>&#8592; 上一题</button>
+          <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>&#8592; ${t('questionnaire.prevQuestion')}</button>
           <div class="q-nav-center">
-            ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">跳过</button>' : ''}
+            ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">' + t('questionnaire.skip') + '</button>' : ''}
           </div>
           ${index < total - 1
-            ? '<button class="q-nav-btn q-nav-next" id="q-next">下一题 &#8594;</button>'
-            : '<button class="q-nav-btn q-nav-submit" id="q-submit">提交并生成素材</button>'
+            ? '<button class="q-nav-btn q-nav-next" id="q-next">' + t('questionnaire.nextQuestion') + ' &#8594;</button>'
+            : '<button class="q-nav-btn q-nav-submit" id="q-submit">' + t('questionnaire.submitAndCreate') + '</button>'
           }
         </div>
       </div>
@@ -798,11 +881,11 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
     const q = questions[currentIndex];
     saveCurrentAnswer();
     if (q.required && !answers[currentIndex].value) {
-      showToast("请选择一个选项或自行填写", "warning");
+      showToast(t('questionnaire.selectOrWrite'), "warning");
       return false;
     }
     if (answers[currentIndex].source === "user" && q.required && !answers[currentIndex].value) {
-      showToast("请填写你的回答", "warning");
+      showToast(t('questionnaire.writeYourAnswer'), "warning");
       return false;
     }
     return true;
@@ -822,7 +905,7 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       if (q.required) {
         const ans = confirmed.find(a => a.key === q.key);
         if (!ans || !ans.value) {
-          showToast(`请回答必填项：${q.label}`, "error");
+          showToast(t('questionnaire.answerRequired', {label: q.label}), "error");
           return;
         }
       }
@@ -830,7 +913,7 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
 
     // v12: 关闭问卷模态框，发送确认请求，通过 refreshAssets 渲染 generating 卡片
     modal.style.display = "none";
-    showToast("物品素材确认中，请稍候...", "info");
+    showToast(t('toast.itemConfirming'), "info");
 
     // 立即刷新一次，显示后端刚创建的 generating 状态卡片
     await refreshAssets();
@@ -840,15 +923,15 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       formData.append("confirmed_fields", JSON.stringify(confirmed));
 
       const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "确认失败"); }
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.itemConfirmFailed', {error: ''})); }
 
       const data = await res.json();
       console.log(`[ItemConfirm] 成功: ${data.asset.name}`);
       // 刷新列表获取 confirmed 状态
       await refreshAssets();
-      showToast(`${data.asset.name || "物品"} 档案创建完成`, "success");
+      showToast(t('toast.itemConfirmSuccess', {name: data.asset.name || t('asset.items')}), "success");
     } catch (err) {
-      showToast(`确认失败: ${err.message}`, "error");
+      showToast(t('toast.itemConfirmFailed', {error: err.message}), "error");
       await refreshAssets();
     }
   }
@@ -883,22 +966,22 @@ function openModelReviewModal(asset) {
   overlay.innerHTML = `
     <div class="modal model-review-modal">
       <div class="modal-header">
-        <h2>人物造型审核 - ${escapeHtml(asset.name)}</h2>
+        <h2>${t('modal.modelReview', {name: escapeHtml(asset.name)})}</h2>
         <button class="modal-close model-review-close">&times;</button>
       </div>
       <div class="model-review-image">
         ${imgUrl
-          ? `<img src="${imgUrl}" alt="${escapeHtml(asset.name)} 造型图" />`
-          : `<div class="model-review-placeholder">暂无造型图</div>`
+          ? `<img src="${imgUrl}" alt="${escapeHtml(asset.name)}" />`
+          : `<div class="model-review-placeholder">${t('modal.noLookImage')}</div>`
         }
       </div>
       <div class="model-review-actions">
-        <button class="btn-submit model-review-confirm">&#10003; 确认</button>
-        <button class="btn-submit model-review-regenerate" style="background:rgba(255,255,255,0.08);color:var(--text-primary);">&#8635; 重新生成</button>
+        <button class="btn-submit model-review-confirm">${t('modelReview.confirmBtn')}</button>
+        <button class="btn-submit model-review-regenerate" style="background:rgba(255,255,255,0.08);color:var(--text-primary);">${t('modelReview.regenerateBtn')}</button>
       </div>
       <div class="model-review-feedback">
-        <textarea class="model-review-textarea" placeholder="输入调整意见，例如：头发再长一点..." rows="3"></textarea>
-        <button class="btn-submit model-review-submit">提交</button>
+        <textarea class="model-review-textarea" placeholder="${t('modelReview.adjustPlaceholder')}" rows="3"></textarea>
+        <button class="btn-submit model-review-submit">${t('modelReview.submitFeedback')}</button>
       </div>
     </div>
   `;
@@ -922,36 +1005,36 @@ function openModelReviewModal(asset) {
   // --- 确认按钮 ---
   confirmBtn.addEventListener("click", async () => {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = "确认中...";
+    confirmBtn.textContent = t('button.confirming');
     try {
       const res = await fetch(`/api/assets/model/${asset.id}/select`, { method: "POST" });
-      if (!res.ok) throw new Error("确认失败");
-      showToast("人物造型已确认", "success");
+      if (!res.ok) throw new Error(t('modelReview.confirmFailed'));
+      showToast(t('modelReview.confirmSuccess'), "success");
       closeReview();
       await refreshAssets();
     } catch (err) {
-      showToast(`确认失败: ${err.message}`, "error");
+      showToast(t('modelReview.confirmFailedWith', {error: err.message}), "error");
       confirmBtn.disabled = false;
-      confirmBtn.innerHTML = "&#10003; 确认";
+      confirmBtn.innerHTML = t('modelReview.confirmBtn');
     }
   });
 
   // --- 重新生成按钮 ---
   regenBtn.addEventListener("click", async () => {
     regenBtn.disabled = true;
-    regenBtn.innerHTML = '<span class="spinner-inline"></span> 重新生成中...';
+    regenBtn.innerHTML = '<span class="spinner-inline"></span> ' + t('button.regenerating');
     try {
       const res = await fetch(`/api/assets/model/${asset.id}/regenerate`, { method: "POST" });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "重新生成失败"); }
-      showToast("正在重新生成造型，请稍候...", "info");
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('modelReview.regenerateFailed')); }
+      showToast(t('modelReview.regenerateSuccess'), "info");
       closeReview();
       await refreshAssets();
       // 启动轮询，generating → pending 后自动弹出审核弹窗
       startModelReviewPoll(asset.id);
     } catch (err) {
-      showToast(`重新生成失败: ${err.message}`, "error");
+      showToast(t('modelReview.regenerateFailedWith', {error: err.message}), "error");
       regenBtn.disabled = false;
-      regenBtn.innerHTML = "&#8635; 重新生成";
+      regenBtn.innerHTML = t('modelReview.regenerateBtn');
     }
   });
 
@@ -965,21 +1048,21 @@ function openModelReviewModal(asset) {
     const feedback = textarea.value.trim();
     if (!feedback) return;
     submitBtn.disabled = true;
-    submitBtn.textContent = "提交中...";
+    submitBtn.textContent = t('modelReview.submittingFeedback');
     try {
       const fd = new FormData();
       fd.append("feedback", feedback);
       const res = await fetch(`/api/assets/model/${asset.id}/adjust`, { method: "POST", body: fd });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "提交失败"); }
-      showToast("正在根据意见调整造型，请稍候...", "info");
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('modelReview.adjustFailed')); }
+      showToast(t('modelReview.adjustSuccess'), "info");
       closeReview();
       await refreshAssets();
       // 启动轮询，generating → pending 后自动弹出审核弹窗
       startModelReviewPoll(asset.id);
     } catch (err) {
-      showToast(`提交失败: ${err.message}`, "error");
+      showToast(t('modelReview.adjustFailedWith', {error: err.message}), "error");
       submitBtn.disabled = false;
-      submitBtn.textContent = "提交";
+      submitBtn.textContent = t('modelReview.submitFeedback');
     }
   });
 }
@@ -1013,7 +1096,7 @@ function startModelReviewPoll(assetId) {
         openModelReviewModal(model);
       } else if (model.status === "failed") {
         clearInterval(pollInterval);
-        showToast("人物造型生成失败，请重试", "error");
+        showToast(t('modelReview.generationFailed'), "error");
         await refreshAssets();
       }
     } catch (err) {
@@ -1029,8 +1112,8 @@ function openSelectModal(assetType, asset, options) {
   const title = $("#select-modal-title");
   const body = $("#select-modal-body");
 
-  const label = "造型方案";
-  title.textContent = `选择${label} - ${asset.name}`;
+  const label = t('modal.lookPlan');
+  title.textContent = t('modal.selectLook', {label: label, name: asset.name});
 
   let cardsHtml = "";
   options.forEach((path, i) => {
@@ -1038,15 +1121,15 @@ function openSelectModal(assetType, asset, options) {
     cardsHtml += `
       <div class="option-card" data-index="${i}">
         <img src="/assets/${asset.id}/${filename}" alt="${label} ${String.fromCharCode(65 + i)}" onerror="this.src=''">
-        <div class="option-card-label">方案 ${String.fromCharCode(65 + i)}</div>
+        <div class="option-card-label">${t('modal.planLabel', {letter: String.fromCharCode(65 + i)})}</div>
       </div>
     `;
   });
 
   body.innerHTML = `
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">点击选择一个${label}：</p>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">${t('modal.selectHint', {label: label})}</p>
     <div class="options-grid">${cardsHtml}</div>
-    <button class="btn-submit" id="confirm-select-btn" disabled>确认选择</button>
+    <button class="btn-submit" id="confirm-select-btn" disabled>${t('button.confirmSelect')}</button>
   `;
 
   let selectedIndex = null;
@@ -1065,23 +1148,23 @@ function openSelectModal(assetType, asset, options) {
   confirmBtn.addEventListener("click", async () => {
     if (selectedIndex === null) return;
     confirmBtn.disabled = true;
-    confirmBtn.textContent = "提交中...";
+    confirmBtn.textContent = t('button.submitting');
 
     try {
       const endpoint = `/api/assets/model/${asset.id}/select`;
       const formData = new FormData();
       formData.append("look_index", selectedIndex);
       const res = await fetch(endpoint, { method: "POST", body: formData });
-      if (!res.ok) throw new Error("选择失败");
+      if (!res.ok) throw new Error(t('toast.selectFailed', {error: ''}));
       // v10: 选择后设置 portrait_image
       asset.portrait_image = options[selectedIndex];
-      showToast(`${label}已选择`, "success");
+      showToast(t('toast.lookSelected', {label: label}), "success");
       closeSelectModal();
       refreshAssets();
     } catch (err) {
-      showToast(`选择失败: ${err.message}`, "error");
+      showToast(t('toast.selectFailed', {error: err.message}), "error");
       confirmBtn.disabled = false;
-      confirmBtn.textContent = "确认选择";
+      confirmBtn.textContent = t('button.confirmSelect');
     }
   });
 
@@ -1129,18 +1212,18 @@ function setupSlot(slotType) {
     try {
       const { type, id } = JSON.parse(raw);
       if (type !== slotType) {
-        showToast(`类型不匹配：需要${slotType === "item" ? "物品" : "人物"}素材`, "warning");
+        showToast(t('slot.typeMismatch', {type: slotType === "item" ? t('slot.typeItem') : t('slot.typeModel')}), "warning");
         return;
       }
 
       // 查找素材
       const listKey = type === "item" ? "items" : "models";
       const asset = assets[listKey].find((a) => a.id === id);
-      if (!asset) { showToast("素材不存在", "error"); return; }
+      if (!asset) { showToast(t('asset.notFound'), "error"); return; }
 
       // 验证状态
-      if (type === "model" && !asset.portrait_image) { showToast("请先选择造型方案", "warning"); return; }
-      if (type === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast("请先完成产品信息确认", "warning"); return; }
+      if (type === "model" && !asset.portrait_image) { showToast(t('slot.selectLookFirst'), "warning"); return; }
+      if (type === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
 
       bindSlot(slotType, asset);
     } catch (err) {
@@ -1176,7 +1259,7 @@ function clearSlot(slotType) {
   slotBody.classList.add("slot-empty");
   slotBody.innerHTML = `
     <span class="slot-icon">${icons[slotType]}</span>
-    <span class="slot-hint">拖入素材 或 点击上传</span>
+    <span class="slot-hint">${t('slot.dragOrUpload')}</span>
     <input type="file" class="slot-file-input" accept="image/*" ${slotType === "item" ? "multiple" : ""} hidden>
   `;
   clearBtn.style.display = "none";
@@ -1195,30 +1278,30 @@ function clearSlot(slotType) {
 
 async function handleSlotUpload(slotType, files) {
   const formData = new FormData();
-  formData.append("description", "请根据图片分析");
+  formData.append("description", t('form.analyzeByImage'));
   files.forEach((f) => formData.append("images", f));
 
   if (slotType === "item") {
     // 走问卷流程（analyze 较快，不需要占位卡片）
     try {
-      showToast("正在分析物品...", "info");
+      showToast(t('toast.analyzingItem'), "info");
       const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("分析失败");
+      if (!res.ok) throw new Error(t('toast.itemAnalyzeFailed', {error: ''}));
       const data = await res.json();
       if (data.status === "rejected") { showToast(data.reason, "error"); return; }
-      showToast(`${data.asset.name} 分析完成`, "success");
+      showToast(t('toast.itemAnalyzeComplete', {name: data.asset.name}), "success");
       openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
       refreshAssets();
     } catch (err) {
-      showToast(`分析失败: ${err.message}`, "error");
+      showToast(t('toast.itemAnalyzeFailed', {error: err.message}), "error");
     }
   } else {
     // v12: 人物 → 发送请求，通过 refreshAssets 渲染后端状态卡片
-    showToast("人物素材创建中，请稍候...", "info");
+    showToast(t('toast.modelCreating'), "info");
 
     try {
       const res = await fetch("/api/assets/model", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("创建失败");
+      if (!res.ok) throw new Error(t('toast.createFailed', {error: ''}));
       const data = await res.json();
 
       // v15: 后端自动设置 portrait_image，不再前端自动 select
@@ -1228,13 +1311,13 @@ async function handleSlotUpload(slotType, files) {
         if (data.asset.status === "confirmed") {
           bindSlot(slotType, data.asset);
         }
-        const statusMsg = data.status_detail === "generating" ? "创建中" : "已创建";
-        showToast(`${data.asset.name} ${statusMsg}`, "success");
+        const statusMsg = data.status_detail === "generating" ? t('toast.statusCreating') : t('toast.statusCreated');
+        showToast(t('toast.modelSlotCreating', {name: data.asset.name, status: statusMsg}), "success");
       }
       // 启动轮询，等后台生成完成后自动刷新
       startGeneratingPollIfNeeded();
     } catch (err) {
-      showToast(`创建失败: ${err.message}`, "error");
+      showToast(t('toast.createFailed', {error: err.message}), "error");
       await refreshAssets();
     }
   }
@@ -1249,14 +1332,14 @@ setupSlot("model");
 $("#btn-quickstart").addEventListener("click", async () => {
   const sentence = $("#gen-prompt").value.trim();
   if (!sentence) {
-    showToast("请先输入一句话描述", "warning");
+    showToast(t('toast.inputSentenceFirst'), "warning");
     $("#gen-prompt").focus();
     return;
   }
 
   const btn = $("#btn-quickstart");
   btn.disabled = true;
-  btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> AI 拆解中...';
+  btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> ' + t('button.quickstartProcessing');
 
   // v12: 通过 refreshAssets 渲染后端 generating 状态卡片，无需前端占位
   try {
@@ -1271,12 +1354,12 @@ $("#btn-quickstart").addEventListener("click", async () => {
     }
 
     const res = await fetch("/api/quickstart/create", { method: "POST", body: formData });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || "快速创建失败"); }
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.quickstartFailed', {error: ''})); }
     const data = await res.json();
 
     // 刷新列表，后端已保存 generating/pending 状态的素材
     await refreshAssets();
-    showToast("两类素材已创建，请依次确认", "success");
+    showToast(t('toast.quickstartCreated'), "success");
 
     // 处理物品：打开问卷确认
     if (data.assets.item && data.assets.item.asset) {
@@ -1284,7 +1367,7 @@ $("#btn-quickstart").addEventListener("click", async () => {
       if (data.assets.item.status !== "rejected") {
         openQuestionnaireModal(itemAsset, data.assets.item.questionnaire, data.assets.item.selling_points);
       } else {
-        showToast(`物品被拒绝: ${data.assets.item.reason}`, "error");
+        showToast(t('toast.quickstartItemRejected', {reason: data.assets.item.reason}), "error");
       }
     }
 
@@ -1298,11 +1381,11 @@ $("#btn-quickstart").addEventListener("click", async () => {
     setupQuickstartChain();
 
   } catch (err) {
-    showToast(`快速创建失败: ${err.message}`, "error");
+    showToast(t('toast.quickstartFailed', {error: err.message}), "error");
     await refreshAssets();
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<span class="btn-quickstart-icon">&#9889;</span> 一句话快速创建素材';
+    btn.innerHTML = '<span class="btn-quickstart-icon">&#9889;</span> ' + t('button.quickstart');
   }
 });
 
@@ -1334,14 +1417,14 @@ function setupQuickstartChain() {
  * 后端返回的 status 字段对应的中文显示名
  */
 const STAGE_LABELS = {
-  queued: "排队中",
-  script: "生成脚本",
-  images: "生成分镜图",
-  videos: "生成视频片段",
-  stitching: "拼接视频",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
+  queued: t('status.queued'),
+  script: t('status.script'),
+  images: t('status.images'),
+  videos: t('status.videos'),
+  stitching: t('status.stitching'),
+  completed: t('status.completed'),
+  failed: t('status.failed'),
+  cancelled: t('status.cancelled'),
 };
 
 /**
@@ -1446,7 +1529,7 @@ function createJobCard(job) {
   card.className = `job-card ${statusClass}`;
 
   // 任务名称（优先用 name 字段，回退到 job_id 前8位）
-  const name = job.name || `任务 ${(job.job_id || "").substring(0, 8)}`;
+  const name = job.name || t('queue.jobName', {id: (job.job_id || "").substring(0, 8)});
 
   // 状态标签
   const badgeLabel = STAGE_LABELS[status] || status;
@@ -1459,7 +1542,7 @@ function createJobCard(job) {
   // 消息/进度文字
   let messageHtml = "";
   if (status === "queued") {
-    messageHtml = `<div class="job-card-message">等待前面的任务完成...</div>`;
+    messageHtml = `<div class="job-card-message">${t('queue.waitingMsg')}</div>`;
   } else if (running) {
     const pct = Math.round((job.progress || 0) * 100);
     messageHtml = `
@@ -1472,24 +1555,28 @@ function createJobCard(job) {
       </div>
     `;
   } else if (status === "completed") {
-    messageHtml = `<div class="job-card-message" style="color:var(--success);">&#10003; 视频生成完成</div>`;
+    messageHtml = `<div class="job-card-message" style="color:var(--success);">${t('queue.videoComplete')}</div>`;
   } else if (status === "failed") {
-    const reason = job.message || "未知错误";
+    // 根据后端错误类型 key 映射 i18n 翻译（安全过滤器/限流等）
+    let reason = job.message || t('queue.unknownError');
+    if (reason === "safety_filtered") {
+      reason = t('asset.safetyFiltered');
+    }
     messageHtml = `<div class="job-card-message" style="color:var(--error);">&#10007; ${escapeHtml(reason)}</div>`;
   } else if (status === "cancelled") {
-    messageHtml = `<div class="job-card-message">已取消</div>`;
+    messageHtml = `<div class="job-card-message">${t('queue.cancelledMsg')}</div>`;
   }
 
   // 操作按钮
   let actionsHtml = "";
   if (status === "queued" || running) {
     // 排队中 / 渲染中：可取消
-    actionsHtml = `<button class="job-btn job-btn-cancel" data-cancel="${job.job_id}">取消</button>`;
+    actionsHtml = `<button class="job-btn job-btn-cancel" data-cancel="${job.job_id}">${t('queue.cancelBtn')}</button>`;
   } else if (status === "completed") {
     // 已完成：预览（跳到进度详情页查看结果） + 下载
     actionsHtml = `
-      <button class="job-btn job-btn-preview" data-preview="${job.job_id}">预览</button>
-      ${job.final_video_url ? `<a class="job-btn job-btn-download" href="${job.final_video_url}" download>下载</a>` : ""}
+      <button class="job-btn job-btn-preview" data-preview="${job.job_id}">${t('queue.previewBtn')}</button>
+      ${job.final_video_url ? `<a class="job-btn job-btn-download" href="${job.final_video_url}" download>${t('queue.downloadBtn')}</a>` : ""}
     `;
   }
   // failed / cancelled 不显示操作按钮
@@ -1550,15 +1637,15 @@ function createJobCard(job) {
  * 取消任务
  */
 async function cancelJob(jobId) {
-  if (!confirm("确定要取消这个任务吗？")) return;
+  if (!confirm(t('queue.cancelConfirm'))) return;
   try {
     const resp = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
-    if (!resp.ok) throw new Error(`取消失败: HTTP ${resp.status}`);
-    showToast("任务已取消", "info");
+    if (!resp.ok) throw new Error(t('queue.cancelFailed', {status: resp.status}));
+    showToast(t('toast.jobCancelled'), "info");
     // 立即刷新队列
     await fetchJobQueue();
   } catch (err) {
-    showToast(`取消失败: ${err.message}`, "error");
+    showToast(t('toast.cancelFailed', {error: err.message}), "error");
   }
 }
 
@@ -1581,16 +1668,16 @@ function viewJobProgress(jobId) {
 async function viewJobResult(jobId) {
   try {
     const resp = await fetch(`/api/status/${jobId}`);
-    if (!resp.ok) throw new Error("查询失败");
+    if (!resp.ok) throw new Error(t('toast.queryFailed', {error: ''}));
     const data = await resp.json();
     if (data.status === "completed" && data.final_video_url) {
       currentJobId = jobId;
       showResult(data);
     } else {
-      showToast("视频文件尚未就绪", "warning");
+      showToast(t('toast.videoNotReady'), "warning");
     }
   } catch (err) {
-    showToast(`查询失败: ${err.message}`, "error");
+    showToast(t('toast.queryFailed', {error: err.message}), "error");
   }
 }
 
@@ -1653,9 +1740,9 @@ $("#btn-generate").addEventListener("click", async () => {
   try {
     // 如果人物槽位为空，先自动创建并确认
     if (!slotAssets.model) {
-      showToast("正在自动创建人物...", "info");
+      showToast(t('toast.autoCreatingModel'), "info");
       const fd = new FormData();
-      fd.append("description", extra || "适合vlog带货的亲和女生，客厅拍摄");
+      fd.append("description", extra || t('form.autoModelDesc'));
       const res = await fetch("/api/assets/model", { method: "POST", body: fd });
       const data = await res.json();
       // v15: 后端自动设置 portrait_image，直接调 select 确认
@@ -1666,7 +1753,7 @@ $("#btn-generate").addEventListener("click", async () => {
     }
 
     // 提交生成
-    showToast("正在提交视频生成...", "info");
+    showToast(t('toast.submittingVideo'), "info");
     const genForm = new FormData();
     genForm.append("item_id", slotAssets.item.id);
     genForm.append("model_id", slotAssets.model.id);
@@ -1675,7 +1762,7 @@ $("#btn-generate").addEventListener("click", async () => {
     genForm.append("extra_requirements", extra);
 
     const genRes = await fetch("/api/generate/v2", { method: "POST", body: genForm });
-    if (!genRes.ok) { const err = await genRes.json(); throw new Error(err.detail || "生成失败"); }
+    if (!genRes.ok) { const err = await genRes.json(); throw new Error(err.detail || t('toast.generateFailed', {error: ''})); }
     const genData = await genRes.json();
 
     currentJobId = genData.job_id;
@@ -1689,10 +1776,10 @@ $("#btn-generate").addEventListener("click", async () => {
     resetProgressUI();
     showView("progress");
     startSSE(currentJobId);
-    showToast("视频生成任务已创建", "success");
+    showToast(t('toast.videoTaskCreated'), "success");
     refreshAssets();
   } catch (err) {
-    showToast(`生成失败: ${err.message}`, "error");
+    showToast(t('toast.generateFailed', {error: err.message}), "error");
   } finally {
     btn.disabled = false;
     btn.classList.remove("loading");
@@ -1710,7 +1797,7 @@ const STATUS_TO_STAGE = {
 
 function resetProgressUI() {
   $("#progress-fill").style.width = "0%";
-  $("#progress-message").textContent = "准备中...";
+  $("#progress-message").textContent = t('pipeline.preparing');
   $("#script-preview").style.display = "none";
   $("#script-title").textContent = "";
   $("#style-guide").innerHTML = "";
@@ -1738,7 +1825,10 @@ function startSSE(jobId) {
       // 刷新队列面板，反映最新状态
       fetchJobQueue();
       if (data.status === "completed" && data.final_video_url) showResult(data);
-      else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
+      else if (data.status === "failed") {
+        const errMsg = data.message === "safety_filtered" ? t('asset.safetyFiltered') : (data.message || t('queue.unknownError'));
+        showToast(t('toast.generationFailed', {error: errMsg}), "error");
+      }
     }
   };
   eventSource.onerror = () => { eventSource.close(); eventSource = null; startPolling(jobId); };
@@ -1756,7 +1846,10 @@ function startPolling(jobId) {
         // 刷新队列面板，反映最新状态
         fetchJobQueue();
         if (data.status === "completed" && data.final_video_url) showResult(data);
-        else if (data.status === "failed") showToast(`生成失败: ${data.message || "未知错误"}`, "error");
+        else if (data.status === "failed") {
+          const errMsg = data.message === "safety_filtered" ? t('asset.safetyFiltered') : (data.message || t('queue.unknownError'));
+          showToast(t('toast.generationFailed', {error: errMsg}), "error");
+        }
       }
     } catch { /* 继续轮询 */ }
   }, 2000);
@@ -1802,10 +1895,10 @@ function renderScript(script) {
   $("#script-title").textContent = `\u300C${script.title}\u300D`;
   const guide = script.style_guide;
   $("#style-guide").innerHTML = `
-    <div class="style-guide-item"><div class="label">人物</div><div class="value">${escapeHtml(guide.person_description)}</div></div>
-    <div class="style-guide-item"><div class="label">场景</div><div class="value">${escapeHtml(guide.scene_context || guide.scene_description)}</div></div>
-    <div class="style-guide-item"><div class="label">风格</div><div class="value">${escapeHtml(guide.visual_style)}</div></div>
-    <div class="style-guide-item"><div class="label">光线</div><div class="value">${escapeHtml(guide.lighting)}</div></div>
+    <div class="style-guide-item"><div class="label">${t('script.person')}</div><div class="value">${escapeHtml(guide.person_description)}</div></div>
+    <div class="style-guide-item"><div class="label">${t('script.scene')}</div><div class="value">${escapeHtml(guide.scene_context || guide.scene_description)}</div></div>
+    <div class="style-guide-item"><div class="label">${t('script.style')}</div><div class="value">${escapeHtml(guide.visual_style)}</div></div>
+    <div class="style-guide-item"><div class="label">${t('script.lighting')}</div><div class="value">${escapeHtml(guide.lighting)}</div></div>
   `;
   const list = $("#segments-list");
   list.innerHTML = "";
@@ -1814,8 +1907,8 @@ function renderScript(script) {
     el.className = `segment-item${seg.needs_product ? " has-product" : ""}`;
     el.innerHTML = `
       <div class="segment-header">
-        <span class="segment-number">分段 ${seg.segment_id}</span>
-        ${seg.needs_product ? '<span class="segment-badge">产品植入</span>' : ""}
+        <span class="segment-number">${t('result.segmentNumber', {id: seg.segment_id})}</span>
+        ${seg.needs_product ? '<span class="segment-badge">' + t('result.productPlacement') + '</span>' : ""}
       </div>
       <div class="segment-narration">${escapeHtml(seg.narration)}</div>
       <div class="segment-action">${escapeHtml(seg.action_description)}</div>
@@ -1833,7 +1926,7 @@ function renderStoryboard(urls) {
   for (let i = existingCount; i < urls.length; i++) {
     const img = document.createElement("img");
     img.src = urls[i];
-    img.alt = `帧 ${i + 1}`;
+    img.alt = t('result.frame', {index: i + 1});
     img.loading = "lazy";
     grid.appendChild(img);
   }
@@ -1878,9 +1971,9 @@ function showResult(data) {
       const item = document.createElement("div");
       item.className = "result-frame-item";
       item.innerHTML = `
-        <img src="${url}" alt="帧 ${i + 1}" loading="lazy">
-        <a class="result-frame-download" href="${url}" download title="下载">&#11015;</a>
-        <div class="result-frame-label">帧 ${i + 1}</div>
+        <img src="${url}" alt="${t('result.frame', {index: i + 1})}" loading="lazy">
+        <a class="result-frame-download" href="${url}" download title="${t('result.download')}">&#11015;</a>
+        <div class="result-frame-label">${t('result.frame', {index: i + 1})}</div>
       `;
       storyboardGrid.appendChild(item);
     });
@@ -1900,8 +1993,8 @@ function showResult(data) {
       item.innerHTML = `
         <video src="${url}" controls preload="metadata"></video>
         <div class="result-seg-actions">
-          <span class="result-seg-label">片段 ${i + 1}</span>
-          <a class="result-seg-download" href="${url}" download>下载</a>
+          <span class="result-seg-label">${t('result.segment', {index: i + 1})}</span>
+          <a class="result-seg-download" href="${url}" download>${t('result.download')}</a>
         </div>
       `;
       segVideoGrid.appendChild(item);
@@ -1921,8 +2014,8 @@ function showResult(data) {
       el.className = `segment-item${seg.needs_product ? " has-product" : ""}`;
       el.innerHTML = `
         <div class="segment-header">
-          <span class="segment-number">分段 ${seg.segment_id}</span>
-          ${seg.needs_product ? '<span class="segment-badge">产品植入</span>' : ""}
+          <span class="segment-number">${t('result.segmentNumber', {id: seg.segment_id})}</span>
+          ${seg.needs_product ? '<span class="segment-badge">' + t('result.productPlacement') + '</span>' : ""}
         </div>
         <div class="segment-narration">${escapeHtml(seg.narration)}</div>
       `;
@@ -1982,7 +2075,7 @@ async function restoreJobIfNeeded() {
     } else if (data.status === "failed") {
       // 任务已失败 → 清除，留在首页
       localStorage.removeItem('vlogforge_job_id');
-      showToast("上次的生成任务已失败", "error");
+      showToast(t('toast.lastJobFailed'), "error");
     } else {
       // 任务仍在进行中 → 恢复进度视图并重连 SSE
       currentJobId = savedJobId;
@@ -1990,7 +2083,7 @@ async function restoreJobIfNeeded() {
       showView("progress");
       updateProgress(data);
       startSSE(savedJobId);
-      showToast("已恢复进行中的生成任务", "info");
+      showToast(t('toast.jobRestored'), "info");
     }
   } catch (err) {
     // 网络错误等，清除存储，不阻塞正常加载
@@ -2005,16 +2098,24 @@ function updateDurationLabel() {
   if (!slider) return;
   const n = parseInt(slider.value);
   const label = $("#gen-duration-label");
-  if (label) label.textContent = `${n} 段 · ${n * 6}s`;
+  if (label) label.textContent = t('form.durationLabel', {segments: n, seconds: n * 6});
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // 等待 i18n 翻译加载完成，避免 t() 返回 key 而非翻译文本
+  if (window.i18nPromise) {
+    await window.i18nPromise;
+  }
+
   // 初始化时长滑块
   const slider = $("#gen-segments");
   if (slider) {
     slider.addEventListener("input", updateDurationLabel);
     updateDurationLabel();
   }
+
+  // 初始化图片预览 Lightbox
+  initLightbox();
 
   // 初始化素材库
   refreshAssets();
