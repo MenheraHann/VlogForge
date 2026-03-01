@@ -38,6 +38,56 @@ function showToast(message, type = "info") {
   }, 3000);
 }
 
+/**
+ * v16 UX: 带撤销按钮的 Toast（用于删除等可恢复操作）
+ * @param {string} message - 提示文字
+ * @param {number} duration - 倒计时（毫秒）
+ * @param {Function} onUndo - 点击撤销时回调
+ * @param {Function} onExpire - 倒计时结束时回调（执行实际删除）
+ * @returns {Function} cancel - 调用可立即取消倒计时并移除 toast
+ */
+function showUndoToast(message, duration, onUndo, onExpire) {
+  let container = $(".toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast info undo-toast";
+  const msgSpan = document.createElement("span");
+  msgSpan.textContent = message;
+  const undoBtn = document.createElement("button");
+  undoBtn.className = "toast-undo-btn";
+  undoBtn.textContent = t('asset.undoDelete');
+  toast.appendChild(msgSpan);
+  toast.appendChild(undoBtn);
+  container.appendChild(toast);
+
+  let expired = false;
+  const timer = setTimeout(() => {
+    expired = true;
+    fadeOut();
+    onExpire();
+  }, duration);
+
+  function fadeOut() {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(20px)";
+    toast.style.transition = "all 0.3s";
+    setTimeout(() => toast.remove(), 300);
+  }
+
+  undoBtn.addEventListener("click", () => {
+    if (expired) return;
+    clearTimeout(timer);
+    fadeOut();
+    onUndo();
+  });
+
+  return () => { clearTimeout(timer); fadeOut(); };
+}
+
 // ========== 图片预览 Lightbox ==========
 function initLightbox() {
   const overlay = $("#image-lightbox");
@@ -78,6 +128,17 @@ let slotAssets = { item: null, model: null };
 
 // v12: generating 状态轮询定时器（后端驱动状态，无需前端占位卡片）
 let generatingPollTimer = null;
+
+// v16 UX: generating 素材等待计时
+const generatingTimestamps = {};  // assetId → Date.now()
+let generatingTimerInterval = null;
+
+// v16 UX: 视频生成计时（用于 ETA 估算）
+let generationStartTime = null;
+
+// v16 UX: 跟踪最后已知的 pipeline 阶段（用于错误消息定位）
+let lastKnownStage = null;
+
 
 // ========== 渲染队列状态 ==========
 let queuePollTimer = null;        // 队列轮询定时器
@@ -156,9 +217,48 @@ function startGeneratingPollIfNeeded() {
     }, 5000);
   } else if (!hasGenerating && generatingPollTimer) {
     // 没有 generating 素材但定时器还在运行，清理之
+    stopGeneratingTimer();
+    // 清理旧的计时记录，防止重新生成时显示旧时间
+    Object.keys(generatingTimestamps).forEach(k => delete generatingTimestamps[k]);
     clearInterval(generatingPollTimer);
     generatingPollTimer = null;
   }
+}
+
+// v16 UX: 等待计时器 — 每秒更新所有 generating 卡片的已等待时间
+function startGeneratingTimer() {
+  if (generatingTimerInterval) return;
+  generatingTimerInterval = setInterval(() => {
+    const els = document.querySelectorAll('.gen-elapsed');
+    if (els.length === 0) {
+      clearInterval(generatingTimerInterval);
+      generatingTimerInterval = null;
+      return;
+    }
+    els.forEach(el => {
+      const assetId = el.dataset.assetId;
+      const startTime = generatingTimestamps[assetId];
+      if (startTime) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        el.textContent = t('asset.elapsed', {seconds: elapsed});
+      }
+    });
+  }, 1000);
+}
+
+function stopGeneratingTimer() {
+  if (generatingTimerInterval) {
+    clearInterval(generatingTimerInterval);
+    generatingTimerInterval = null;
+  }
+}
+
+// v16 UX: 格式化剩余时间
+function formatETA(seconds) {
+  if (seconds < 60) return t('pipeline.etaSeconds', {seconds: Math.ceil(seconds)});
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.ceil(seconds % 60);
+  return t('pipeline.etaMinutes', {minutes: mins, seconds: secs});
 }
 
 function getAssetThumbUrl(asset) {
@@ -186,8 +286,12 @@ function createMiniCard(type, asset) {
   const isGenerating = asset.status === "generating";
   const isConfirmed = asset.status === "confirmed";
 
-  // generating 状态：骨架卡片 + spinner，复用现有 CSS .generating 样式
+  // generating 状态：骨架卡片 + spinner + 等待计时，复用现有 CSS .generating 样式
   if (isGenerating) {
+    // v16 UX: 记录首次看到 generating 的时间戳
+    if (!generatingTimestamps[asset.id]) {
+      generatingTimestamps[asset.id] = Date.now();
+    }
     card.className = "asset-mini-card generating";
     card.innerHTML = `
       <div class="asset-generating-bar"><div class="asset-generating-bar-fill"></div></div>
@@ -201,8 +305,10 @@ function createMiniCard(type, asset) {
       <div class="asset-generating-progress">
         <span class="gen-spinner"></span>
         <span class="gen-progress-text">${t('asset.generating')}</span>
+        <span class="gen-elapsed" data-asset-id="${asset.id}"></span>
       </div>
     `;
+    startGeneratingTimer();
     return card;
   }
 
@@ -241,18 +347,24 @@ function createMiniCard(type, asset) {
         openModelReviewModal(asset);
       });
     }
-    // 绑定删除按钮
-    card.querySelector("[data-delete]").addEventListener("click", async (e) => {
+    // v16 UX: 绑定删除按钮（5秒可撤销）
+    card.querySelector("[data-delete]").addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!confirm(t('asset.confirmDelete', {name: asset.name}) || `确认删除 ${asset.name}？`)) return;
-      try {
-        const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error(t('asset.deleteFailed'));
-        showToast(t('asset.deleted', {name: asset.name}), "success");
-        refreshAssets();
-      } catch (err) {
-        showToast(err.message, "error");
-      }
+      card.style.display = "none";
+      showUndoToast(
+        t('asset.deleted', {name: asset.name}),
+        5000,
+        () => { card.style.display = ""; showToast(t('asset.deleteUndone'), "info"); refreshAssets(); },
+        async () => {
+          try {
+            const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error(t('asset.deleteFailed'));
+            refreshAssets();
+          } catch (err) {
+            card.style.display = ""; showToast(t('asset.deleteFailedWith', {error: err.message}), "error"); refreshAssets();
+          }
+        }
+      );
     });
     return card;
   }
@@ -290,6 +402,9 @@ function createMiniCard(type, asset) {
   let badge = "";
   if (isConfirmed) {
     badge = `<span class="asset-mini-badge success">${t('asset.confirmed')}</span>`;
+  } else if (type === "models") {
+    // v16 UX: pending 人物卡片用脉冲动画提醒用户点击审核
+    badge = `<span class="asset-mini-badge warning pulse">${t('asset.pendingReview')}</span>`;
   } else {
     badge = `<span class="asset-mini-badge warning">${t('asset.pending')}</span>`;
   }
@@ -348,19 +463,37 @@ function createMiniCard(type, asset) {
     });
   }
 
-  // 点击删除
-  card.querySelector("[data-delete]").addEventListener("click", async (e) => {
+  // v16 UX: 点击删除（5秒可撤销）
+  card.querySelector("[data-delete]").addEventListener("click", (e) => {
     e.stopPropagation();
-    if (!confirm(t('asset.confirmDelete', {name: asset.name}))) return;
-    try {
-      const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(t('asset.deleteFailed'));
-      showToast(t('asset.deleted', {name: asset.name}), "success");
-      if (slotAssets[slotType] && slotAssets[slotType].id === asset.id) clearSlot(slotType);
-      refreshAssets();
-    } catch (err) {
-      showToast(t('asset.deleteFailedWith', {error: err.message}), "error");
-    }
+    // 保存槽位状态以便恢复
+    const wasInSlot = slotAssets[slotType] && slotAssets[slotType].id === asset.id;
+    // 先从 UI 移除卡片（乐观操作）
+    card.style.display = "none";
+    if (wasInSlot) clearSlot(slotType);
+
+    showUndoToast(
+      t('asset.deleted', {name: asset.name}),
+      5000,
+      // 撤销：恢复卡片和槽位
+      () => {
+        card.style.display = "";
+        showToast(t('asset.deleteUndone'), "info");
+        refreshAssets();
+      },
+      // 到期：真正执行删除
+      async () => {
+        try {
+          const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error(t('asset.deleteFailed'));
+          refreshAssets();
+        } catch (err) {
+          card.style.display = "";
+          showToast(t('asset.deleteFailedWith', {error: err.message}), "error");
+          refreshAssets();
+        }
+      }
+    );
   });
 
   return card;
@@ -651,11 +784,12 @@ function openCreateModal(type) {
         console.log(`[ModelCreate] 成功: ${data.asset.name}`);
         // 刷新列表，后端已保存 generating/pending 状态的素材
         await refreshAssets();
-        showToast(t('toast.modelCreateSuccess', {name: data.asset.name}), "success");
 
-        // v15: 后端自动设置 portrait_image，pending 状态时用户通过审核弹窗确认
+        // v16 UX: pending 状态直接提示去审核，否则显示创建成功
         if (data.asset && data.asset.status === "pending") {
-          openModelReviewModal(data.asset);
+          showToast(t('toast.modelReadyForReview', {name: data.asset.name}), "success");
+        } else {
+          showToast(t('toast.modelCreateSuccess', {name: data.asset.name}), "success");
         }
       } catch (err) {
         showToast(t('toast.createFailed', {error: err.message}), "error");
@@ -1092,8 +1226,8 @@ function startModelReviewPoll(assetId) {
         assets.models = data.models || [];
         renderColumnList("items", assets.items, "#col-items");
         renderColumnList("models", assets.models, "#col-models");
-        // 自动弹出审核弹窗
-        openModelReviewModal(model);
+        // v16 UX: 改为 Toast 通知，不再自动弹窗打断用户
+        showToast(t('toast.modelReadyForReview', {name: model.name}), "success");
       } else if (model.status === "failed") {
         clearInterval(pollInterval);
         showToast(t('modelReview.generationFailed'), "error");
@@ -1399,10 +1533,9 @@ function setupQuickstartChain() {
       if (window._pendingModelReview) {
         const asset = window._pendingModelReview;
         window._pendingModelReview = null;
-        // pending 状态：直接打开审核弹窗
-        // generating 状态：等轮询结束后再由用户手动点击编辑
+        // v16 UX: 改为 Toast 通知，让用户主动点击卡片审核
         if (asset.status === "pending") {
-          setTimeout(() => openModelReviewModal(asset), 300);
+          showToast(t('toast.modelReadyForReview', {name: asset.name}), "success");
         }
       }
     }
@@ -1416,16 +1549,26 @@ function setupQuickstartChain() {
  * 阶段中文映射表
  * 后端返回的 status 字段对应的中文显示名
  */
-const STAGE_LABELS = {
-  queued: t('status.queued'),
-  script: t('status.script'),
-  images: t('status.images'),
-  videos: t('status.videos'),
-  stitching: t('status.stitching'),
-  completed: t('status.completed'),
-  failed: t('status.failed'),
-  cancelled: t('status.cancelled'),
-};
+// v16 UX: 改为 let + 刷新函数，支持语言热切换
+let STAGE_LABELS = {};
+function refreshStageLabels() {
+  STAGE_LABELS = {
+    queued: t('status.queued'),
+    script: t('status.script'),
+    images: t('status.images'),
+    videos: t('status.videos'),
+    stitching: t('status.stitching'),
+    completed: t('status.completed'),
+    failed: t('status.failed'),
+    cancelled: t('status.cancelled'),
+  };
+}
+refreshStageLabels();
+
+/** 获取阶段的本地化标签（用于错误消息等） */
+function getStageLabel(stage) {
+  return STAGE_LABELS[stage] || stage;
+}
 
 /**
  * 判断任务是否处于「渲染中」状态（包括各个阶段）
@@ -1722,8 +1865,20 @@ function initQueuePanel() {
 // ========== 生成按钮 ==========
 
 function updateGenButton() {
-  // 物品必填
-  $("#btn-generate").disabled = !slotAssets.item;
+  const hasItem = !!slotAssets.item;
+  $("#btn-generate").disabled = !hasItem;
+
+  // v16 UX: 动态提示缺少什么条件
+  const hint = $("#gen-hint");
+  if (hint) {
+    if (!hasItem) {
+      hint.textContent = t('form.genHintNoItem');
+      hint.style.display = "block";
+    } else {
+      hint.textContent = "";
+      hint.style.display = "none";
+    }
+  }
 }
 
 $("#btn-generate").addEventListener("click", async () => {
@@ -1796,8 +1951,11 @@ const STATUS_TO_STAGE = {
 };
 
 function resetProgressUI() {
+  generationStartTime = Date.now();
   $("#progress-fill").style.width = "0%";
   $("#progress-message").textContent = t('pipeline.preparing');
+  const etaEl = $("#progress-eta");
+  if (etaEl) etaEl.textContent = "";
   $("#script-preview").style.display = "none";
   $("#script-title").textContent = "";
   $("#style-guide").innerHTML = "";
@@ -1827,7 +1985,9 @@ function startSSE(jobId) {
       if (data.status === "completed" && data.final_video_url) showResult(data);
       else if (data.status === "failed") {
         const errMsg = data.message === "safety_filtered" ? t('asset.safetyFiltered') : (data.message || t('queue.unknownError'));
-        showToast(t('toast.generationFailed', {error: errMsg}), "error");
+        const stageLabel = lastKnownStage ? getStageLabel(lastKnownStage) : null;
+        showToast(stageLabel ? t('toast.generationFailedAtStage', {stage: stageLabel, error: errMsg}) : t('toast.generationFailed', {error: errMsg}), "error");
+        lastKnownStage = null;
       }
     }
   };
@@ -1848,7 +2008,9 @@ function startPolling(jobId) {
         if (data.status === "completed" && data.final_video_url) showResult(data);
         else if (data.status === "failed") {
           const errMsg = data.message === "safety_filtered" ? t('asset.safetyFiltered') : (data.message || t('queue.unknownError'));
-          showToast(t('toast.generationFailed', {error: errMsg}), "error");
+          const stageLabel = lastKnownStage ? getStageLabel(lastKnownStage) : null;
+          showToast(stageLabel ? t('toast.generationFailedAtStage', {stage: stageLabel, error: errMsg}) : t('toast.generationFailed', {error: errMsg}), "error");
+          lastKnownStage = null;
         }
       }
     } catch { /* 继续轮询 */ }
@@ -1860,8 +2022,21 @@ function updateProgress(data) {
   $("#progress-fill").style.width = `${pct}%`;
   $("#progress-message").textContent = data.message || "";
 
+  // v16 UX: ETA 估算
+  const etaEl = $("#progress-eta");
+  if (etaEl && generationStartTime && data.progress > 0.1 && data.progress < 1) {
+    const elapsed = (Date.now() - generationStartTime) / 1000;
+    const remaining = (elapsed / data.progress) * (1 - data.progress);
+    etaEl.textContent = t('pipeline.eta', {time: formatETA(remaining)});
+  } else if (etaEl) {
+    etaEl.textContent = "";
+  }
+
   const stage = STATUS_TO_STAGE[data.status];
-  if (stage && stage !== "completed" && stage !== "failed") updatePipelineStage(stage);
+  if (stage && stage !== "completed" && stage !== "failed") {
+    lastKnownStage = stage;
+    updatePipelineStage(stage);
+  }
   if (data.status === "completed") STAGE_ORDER.forEach((s) => markStageDone(s));
 
   if (data.script && $("#script-preview").style.display === "none") {
@@ -2119,6 +2294,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 初始化素材库
   refreshAssets();
+
+  // v16 UX: 初始加载时显示生成按钮条件提示
+  updateGenButton();
+
+  // v16 UX: 监听语言热切换，刷新动态内容
+  window.addEventListener("i18n:langChanged", () => {
+    refreshStageLabels();
+    updateDurationLabel();
+    updateGenButton();
+    refreshAssets();
+    fetchJobQueue();
+  });
 
   // 初始化渲染队列面板交互
   initQueuePanel();

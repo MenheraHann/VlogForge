@@ -37,7 +37,11 @@
     "unknownAsset": "Unknown asset",
     "rateLimited": "API rate limit exceeded, please wait 1-2 minutes and retry",
     "quotaExhausted": "API quota exhausted, please try again later",
-    "safetyFiltered": "Content blocked by safety filters. This may be due to character age or content combination violating platform rules. Please adjust character settings and retry."
+    "safetyFiltered": "Content blocked by safety filters. This may be due to character age or content combination violating platform rules. Please adjust character settings and retry.",
+    "elapsed": "Waited {seconds}s",
+    "pendingReview": "Review",
+    "undoDelete": "Undo",
+    "deleteUndone": "Deletion undone"
   },
 
   "button": {
@@ -73,7 +77,8 @@
     "itemPlaceholder": "Describe the product, e.g.: An amino acid facial cleanser, gentle formula, suitable for sensitive skin",
     "modelPlaceholder": "Describe the person, e.g.: Asian woman in her 20s, short hair, filming a vlog in the living room",
     "analyzeByImage": "Please analyze based on the image",
-    "autoModelDesc": "A friendly girl suitable for vlog product promotion, filmed in the living room"
+    "autoModelDesc": "A friendly girl suitable for vlog product promotion, filmed in the living room",
+    "genHintNoItem": "Please drag an item asset into the slot above"
   },
 
   "slot": {
@@ -168,7 +173,14 @@
     "images": "Storyboard",
     "videos": "Videos",
     "stitching": "Stitching",
-    "preparing": "Preparing..."
+    "preparing": "Preparing...",
+    "eta": "~{time} remaining",
+    "etaSeconds": "{seconds}s",
+    "etaMinutes": "{minutes}m {seconds}s",
+    "scriptEst": "~10s",
+    "imagesEst": "~30s",
+    "videosEst": "~2min",
+    "stitchingEst": "~15s"
   },
 
   "toast": {
@@ -203,7 +215,9 @@
     "statusCreating": "Creating",
     "statusCreated": "Created",
     "modelSlotCreating": "{name} {status}",
-    "createFailed": "Creation failed: {error}"
+    "createFailed": "Creation failed: {error}",
+    "modelReadyForReview": "{name} portrait ready, click the card to review",
+    "generationFailedAtStage": "Failed at {stage}: {error}"
   },
 
   "status": {

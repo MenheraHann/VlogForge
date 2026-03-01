@@ -37,7 +37,11 @@
     "unknownAsset": "未知素材",
     "rateLimited": "API 调用频率超限，请等待 1-2 分钟后重试",
     "quotaExhausted": "API 配额已用完，请稍后再试",
-    "safetyFiltered": "内容被安全过滤器拦截，可能由于人物年龄或内容组合不符合平台规则，请调整人物设定后重试"
+    "safetyFiltered": "内容被安全过滤器拦截，可能由于人物年龄或内容组合不符合平台规则，请调整人物设定后重试",
+    "elapsed": "已等待 {seconds}s",
+    "pendingReview": "待审核",
+    "undoDelete": "撤销",
+    "deleteUndone": "已撤销删除"
   },
 
   "button": {
@@ -73,7 +77,8 @@
     "itemPlaceholder": "描述产品信息，如：一瓶氨基酸洗面奶，温和配方不紧绷，适合敏感肌",
     "modelPlaceholder": "描述人物形象，如：20多岁亚洲女生，短发，在客厅拍摄vlog",
     "analyzeByImage": "请根据图片分析",
-    "autoModelDesc": "适合vlog带货的亲和女生，客厅拍摄"
+    "autoModelDesc": "适合vlog带货的亲和女生，客厅拍摄",
+    "genHintNoItem": "请先将物品素材拖入上方槽位"
   },
 
   "slot": {
@@ -168,7 +173,14 @@
     "images": "分镜图",
     "videos": "视频",
     "stitching": "拼接",
-    "preparing": "准备中..."
+    "preparing": "准备中...",
+    "eta": "预计剩余 {time}",
+    "etaSeconds": "{seconds}s",
+    "etaMinutes": "{minutes}m {seconds}s",
+    "scriptEst": "~10s",
+    "imagesEst": "~30s",
+    "videosEst": "~2min",
+    "stitchingEst": "~15s"
   },
 
   "toast": {
@@ -203,7 +215,9 @@
     "statusCreating": "创建中",
     "statusCreated": "已创建",
     "modelSlotCreating": "{name} {status}",
-    "createFailed": "创建失败: {error}"
+    "createFailed": "创建失败: {error}",
+    "modelReadyForReview": "{name} 形象已生成，点击卡片查看",
+    "generationFailedAtStage": "{stage}阶段失败: {error}"
   },
 
   "status": {

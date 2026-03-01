@@ -37,7 +37,11 @@
     "unknownAsset": "Material desconhecido",
     "rateLimited": "Limite de API excedido, aguarde 1-2 minutos e tente novamente",
     "quotaExhausted": "Cota de API esgotada, tente novamente mais tarde",
-    "safetyFiltered": "Conteúdo bloqueado por filtros de segurança. Isso pode ser devido à idade do personagem ou à combinação de conteúdo que viola as regras da plataforma. Ajuste as configurações do personagem e tente novamente."
+    "safetyFiltered": "Conteúdo bloqueado por filtros de segurança. Isso pode ser devido à idade do personagem ou à combinação de conteúdo que viola as regras da plataforma. Ajuste as configurações do personagem e tente novamente.",
+    "elapsed": "{seconds}s aguardando",
+    "pendingReview": "Revisar",
+    "undoDelete": "Desfazer",
+    "deleteUndone": "Exclusão desfeita"
   },
 
   "button": {
@@ -73,7 +77,8 @@
     "itemPlaceholder": "Descreva o produto, ex.: Um limpador facial de aminoácidos, fórmula suave, para pele sensível",
     "modelPlaceholder": "Descreva a pessoa, ex.: Mulher asiática de 20 e poucos anos, cabelo curto, gravando um vlog na sala",
     "analyzeByImage": "Por favor, analise com base na imagem",
-    "autoModelDesc": "Uma garota simpática adequada para vlog de produtos, filmada na sala"
+    "autoModelDesc": "Uma garota simpática adequada para vlog de produtos, filmada na sala",
+    "genHintNoItem": "Arraste um produto para o espaço acima"
   },
 
   "slot": {
@@ -168,7 +173,14 @@
     "images": "Storyboard",
     "videos": "Vídeos",
     "stitching": "Junção",
-    "preparing": "Preparando..."
+    "preparing": "Preparando...",
+    "eta": "~{time} restante",
+    "etaSeconds": "{seconds}s",
+    "etaMinutes": "{minutes}m {seconds}s",
+    "scriptEst": "~10s",
+    "imagesEst": "~30s",
+    "videosEst": "~2min",
+    "stitchingEst": "~15s"
   },
 
   "toast": {
@@ -203,7 +215,9 @@
     "statusCreating": "Criando",
     "statusCreated": "Criado",
     "modelSlotCreating": "{name} {status}",
-    "createFailed": "Falha ao criar: {error}"
+    "createFailed": "Falha ao criar: {error}",
+    "modelReadyForReview": "Retrato de {name} pronto, clique no cartão para revisar",
+    "generationFailedAtStage": "Falha em {stage}: {error}"
   },
 
   "status": {

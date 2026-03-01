@@ -180,17 +180,28 @@
   }
 
   /**
-   * 切换语言
+   * 切换语言（无需刷新页面）
    * @param {string} lang - 目标语言代码
    */
-  function switchLanguage(lang) {
+  async function switchLanguage(lang) {
     if (!SUPPORTED_LANGS.includes(lang)) {
       console.warn(`[i18n] 不支持的语言: ${lang}`);
       return;
     }
     localStorage.setItem("vlogforge_lang", lang);
-    // 刷新页面以应用新语言
-    window.location.reload();
+    _currentLang = lang;
+
+    // 重新加载翻译文件
+    _translations = await loadTranslations(lang);
+
+    // 更新 HTML lang 属性
+    document.documentElement.lang = lang;
+
+    // 批量更新静态翻译
+    applyStaticTranslations();
+
+    // 通知其他模块（如 app.js）刷新动态内容
+    window.dispatchEvent(new CustomEvent("i18n:langChanged", { detail: { lang } }));
   }
 
   /**
@@ -230,8 +241,8 @@
     const langSwitcher = document.getElementById("lang-switcher");
     if (langSwitcher) {
       langSwitcher.value = _currentLang;
-      langSwitcher.addEventListener("change", (e) => {
-        switchLanguage(e.target.value);
+      langSwitcher.addEventListener("change", async (e) => {
+        await switchLanguage(e.target.value);
       });
     }
   }

@@ -37,7 +37,11 @@
     "unknownAsset": "不明な素材",
     "rateLimited": "APIレート制限を超えました。1〜2分後に再試行してください",
     "quotaExhausted": "API使用量の上限に達しました。しばらくしてから再試行してください",
-    "safetyFiltered": "コンテンツが安全フィルターによりブロックされました。キャラクターの年齢やコンテンツの組み合わせがプラットフォームのルールに違反している可能性があります。キャラクター設定を調整して再試行してください。"
+    "safetyFiltered": "コンテンツが安全フィルターによりブロックされました。キャラクターの年齢やコンテンツの組み合わせがプラットフォームのルールに違反している可能性があります。キャラクター設定を調整して再試行してください。",
+    "elapsed": "{seconds}秒待機中",
+    "pendingReview": "確認待ち",
+    "undoDelete": "元に戻す",
+    "deleteUndone": "削除を取り消しました"
   },
 
   "button": {
@@ -73,7 +77,8 @@
     "itemPlaceholder": "商品情報を入力、例：アミノ酸洗顔フォーム、マイルド処方、敏感肌向け",
     "modelPlaceholder": "人物の説明を入力、例：20代のアジア女性、ショートヘア、リビングでVlog撮影",
     "analyzeByImage": "画像を基に分析してください",
-    "autoModelDesc": "Vlog商品紹介に適した親しみやすい女性、リビングで撮影"
+    "autoModelDesc": "Vlog商品紹介に適した親しみやすい女性、リビングで撮影",
+    "genHintNoItem": "上のスロットに商品素材をドラッグしてください"
   },
 
   "slot": {
@@ -168,7 +173,14 @@
     "images": "絵コンテ",
     "videos": "動画",
     "stitching": "結合",
-    "preparing": "準備中..."
+    "preparing": "準備中...",
+    "eta": "残り約 {time}",
+    "etaSeconds": "{seconds}秒",
+    "etaMinutes": "{minutes}分 {seconds}秒",
+    "scriptEst": "~10秒",
+    "imagesEst": "~30秒",
+    "videosEst": "~2分",
+    "stitchingEst": "~15秒"
   },
 
   "toast": {
@@ -203,7 +215,9 @@
     "statusCreating": "作成中",
     "statusCreated": "作成済み",
     "modelSlotCreating": "{name} {status}",
-    "createFailed": "作成に失敗: {error}"
+    "createFailed": "作成に失敗: {error}",
+    "modelReadyForReview": "{name} の肖像が完成しました。カードをクリックして確認してください",
+    "generationFailedAtStage": "{stage}段階で失敗: {error}"
   },
 
   "status": {

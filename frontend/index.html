@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VlogForge - AI Vlog 带货视频生成器</title>
-  <link rel="stylesheet" href="styles.css?v=14.6">
+  <link rel="stylesheet" href="styles.css?v=16.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -176,6 +176,7 @@
           <span class="btn-text" data-i18n="button.generate">开始生成</span>
           <span class="btn-icon">&#10132;</span>
         </button>
+        <div class="gen-hint" id="gen-hint"></div>
       </div>
 
       <!-- ========== 渲染队列面板 ========== -->
@@ -261,27 +262,32 @@
           <div class="pipeline-step" data-stage="script">
             <div class="pipeline-dot"></div>
             <span data-i18n="pipeline.script">脚本</span>
+            <span class="pipeline-est" data-i18n="pipeline.scriptEst">~10s</span>
           </div>
           <div class="pipeline-line"></div>
           <div class="pipeline-step" data-stage="images">
             <div class="pipeline-dot"></div>
             <span data-i18n="pipeline.images">分镜图</span>
+            <span class="pipeline-est" data-i18n="pipeline.imagesEst">~30s</span>
           </div>
           <div class="pipeline-line"></div>
           <div class="pipeline-step" data-stage="videos">
             <div class="pipeline-dot"></div>
             <span data-i18n="pipeline.videos">视频</span>
+            <span class="pipeline-est" data-i18n="pipeline.videosEst">~2min</span>
           </div>
           <div class="pipeline-line"></div>
           <div class="pipeline-step" data-stage="stitching">
             <div class="pipeline-dot"></div>
             <span data-i18n="pipeline.stitching">拼接</span>
+            <span class="pipeline-est" data-i18n="pipeline.stitchingEst">~15s</span>
           </div>
         </div>
         <div class="progress-bar">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
         <p class="progress-message" id="progress-message" data-i18n="pipeline.preparing">准备中...</p>
+        <p class="progress-eta" id="progress-eta"></p>
       </div>
 
       <div class="script-preview card glass-card" id="script-preview" style="display:none;">
@@ -347,7 +353,7 @@
     </div>
   </section>
 
-  <script src="i18n.js?v=14.6"></script>
-  <script src="app.js?v=14.6"></script>
+  <script src="i18n.js?v=16.0"></script>
+  <script src="app.js?v=16.0"></script>
 </body>
 </html>

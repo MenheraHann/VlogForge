@@ -37,7 +37,11 @@
     "unknownAsset": "알 수 없는 소재",
     "rateLimited": "API 호출 빈도 초과, 1~2분 후 다시 시도해주세요",
     "quotaExhausted": "API 할당량이 소진되었습니다. 잠시 후 다시 시도해주세요",
-    "safetyFiltered": "콘텐츠가 안전 필터에 의해 차단되었습니다. 캐릭터 나이 또는 콘텐츠 조합이 플랫폼 규칙에 위반될 수 있습니다. 캐릭터 설정을 조정한 후 다시 시도해 주세요."
+    "safetyFiltered": "콘텐츠가 안전 필터에 의해 차단되었습니다. 캐릭터 나이 또는 콘텐츠 조합이 플랫폼 규칙에 위반될 수 있습니다. 캐릭터 설정을 조정한 후 다시 시도해 주세요.",
+    "elapsed": "{seconds}초 대기 중",
+    "pendingReview": "검토 대기",
+    "undoDelete": "실행 취소",
+    "deleteUndone": "삭제가 취소되었습니다"
   },
 
   "button": {
@@ -73,7 +77,8 @@
     "itemPlaceholder": "상품 정보를 입력하세요. 예: 아미노산 클렌저, 순한 포뮬러, 민감성 피부용",
     "modelPlaceholder": "인물을 설명하세요. 예: 20대 아시아 여성, 단발, 거실에서 브이로그 촬영",
     "analyzeByImage": "이미지를 기반으로 분석해 주세요",
-    "autoModelDesc": "브이로그 상품 소개에 적합한 친근한 여성, 거실에서 촬영"
+    "autoModelDesc": "브이로그 상품 소개에 적합한 친근한 여성, 거실에서 촬영",
+    "genHintNoItem": "위 슬롯에 상품 소재를 드래그해 주세요"
   },
 
   "slot": {
@@ -168,7 +173,14 @@
     "images": "스토리보드",
     "videos": "영상",
     "stitching": "합성",
-    "preparing": "준비 중..."
+    "preparing": "준비 중...",
+    "eta": "약 {time} 남음",
+    "etaSeconds": "{seconds}초",
+    "etaMinutes": "{minutes}분 {seconds}초",
+    "scriptEst": "~10초",
+    "imagesEst": "~30초",
+    "videosEst": "~2분",
+    "stitchingEst": "~15초"
   },
 
   "toast": {
@@ -203,7 +215,9 @@
     "statusCreating": "생성 중",
     "statusCreated": "생성됨",
     "modelSlotCreating": "{name} {status}",
-    "createFailed": "생성 실패: {error}"
+    "createFailed": "생성 실패: {error}",
+    "modelReadyForReview": "{name} 초상화가 완성되었습니다. 카드를 클릭하여 확인해 주세요",
+    "generationFailedAtStage": "{stage} 단계에서 실패: {error}"
   },
 
   "status": {
