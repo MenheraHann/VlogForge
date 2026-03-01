@@ -70,7 +70,8 @@
     "quickstartHint": "AI가 자동으로 상품+모델로 분해하여 두 가지 소재를 한 번에 생성합니다",
     "targetPlatform": "대상 플랫폼",
     "videoDuration": "영상 길이",
-    "durationLabel": "{segments}세그먼트 · {seconds}초",
+    "durationLabel": "{seconds}s（{segments}×6s）",
+    "durationUnselected": "미선택",
     "description": "설명",
     "referenceImages": "참고 이미지 (선택)",
     "uploadRef": "클릭하여 참고 이미지 업로드",
@@ -187,6 +188,7 @@
     "modelCreating": "모델 소재 생성 중, 잠시 기다려 주세요...",
     "modelCreateSuccess": "{name} 생성 완료",
     "modelCreateFailed": "생성 실패: {error}",
+    "itemAnalyzing": "상품 분석 중...",
     "itemAnalyzed": "{name} 분석 완료, 상품 정보를 확인해 주세요",
     "itemRejected": "상품 거부됨: {reason}",
     "itemAnalyzeFailed": "분석 실패: {error}",
@@ -266,11 +268,17 @@
   "platform": {
     "douyin": "Douyin (9:16 세로)",
     "xiaohongshu": "Xiaohongshu (9:16 세로)",
-    "youtube": "YouTube (16:9 가로)"
+    "youtube": "YouTube (16:9 가로)",
+    "unselected": "미선택"
   },
 
   "section": {
     "generateVideo": "영상 생성"
+  },
+
+  "dock": {
+    "generateVideo": "▷ 영상 생성",
+    "dragHint": "소재를 여기에 드래그하여 생성"
   },
 
   "script": {

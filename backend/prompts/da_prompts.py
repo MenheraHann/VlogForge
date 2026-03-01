@@ -46,6 +46,14 @@ Based on the provided material information (item, person (including filming scen
 - The following must remain constant across all frames: scene layout, furniture/wall/decoration positions, lighting direction and color temperature, person's proportion in the frame
 - Frame prompts must NOT contain any words implying camera changes: do not write "close-up", "wide shot", "top-down", "low-angle", "side angle", "push in", "pull back"
 
+### Upper Body Only (STRICTLY ENFORCED)
+- The camera frames the person from **head to chest/waist only** — this is a medium shot upper body composition
+- **ABSOLUTELY FORBIDDEN**: No legs, knees, thighs, or full-body shots may appear in any frame prompt
+- **FORBIDDEN actions**: hugging knees, crossing legs, sitting cross-legged, standing full-body, walking, any pose that reveals lower body
+- **ALLOWED actions**: talking, gesturing with hands, holding product, pointing, nodding, smiling, tilting head, shrugging, waving
+- Frame prompts must describe the person as "upper body", "medium shot from waist up", or "head to chest framing"
+- Never write "sitting on bed with legs", "full body", "standing", "walking", "knees" in any frame prompt
+
 ### Voice Anchor Description (voice_anchor)
 - This is the most important new field: a detailed description of the on-camera person's voice characteristics
 - Write entirely in English, as the Veo model is more responsive to English voice descriptions
@@ -199,6 +207,8 @@ def build_da_script_prompt(
 [REMINDERS]
 - segment_id ranges from 1 to {segment_count}
 - At least 2 segments must be marked needs_product=true (product display scenes — show packaging only, NEVER use/apply product on camera)
+- PRODUCT DISPLAY ONLY: The person must NEVER use/apply/open/consume the product on camera. Even if ADA's product info mentions usage methods or application tips, DA must NOT create any scene where the person tries or uses the product. Only hold, show, and point at the sealed packaging.
+- UPPER BODY ONLY: Every frame prompt must describe head-to-waist framing. No legs, knees, or full-body shots. No actions involving lower body (hugging knees, crossing legs, sitting cross-legged). Only hand gestures, facial expressions, and upper body movements.
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
 - Dialogue language: ALL dialogue/narration MUST be in the character's language (from the Language field above). Do NOT default to Chinese. If character is American → English dialogue; if Chinese → Chinese dialogue.

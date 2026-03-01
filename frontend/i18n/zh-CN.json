@@ -70,7 +70,8 @@
     "quickstartHint": "AI 自动拆解为物品+人物，一次创建两类素材",
     "targetPlatform": "目标平台",
     "videoDuration": "视频时长",
-    "durationLabel": "{segments} 段 · {seconds}s",
+    "durationLabel": "{seconds}s（{segments}×6s）",
+    "durationUnselected": "未选择",
     "description": "描述",
     "referenceImages": "参考图片（可选）",
     "uploadRef": "点击上传参考图",
@@ -187,6 +188,7 @@
     "modelCreating": "人物素材创建中，请稍候...",
     "modelCreateSuccess": "{name} 创建成功",
     "modelCreateFailed": "创建失败: {error}",
+    "itemAnalyzing": "正在分析物品...",
     "itemAnalyzed": "{name} 分析完成，请确认产品信息",
     "itemRejected": "物品被拒绝: {reason}",
     "itemAnalyzeFailed": "分析失败: {error}",
@@ -266,11 +268,17 @@
   "platform": {
     "douyin": "抖音 (9:16 竖屏)",
     "xiaohongshu": "小红书 (9:16 竖屏)",
-    "youtube": "YouTube (16:9 横屏)"
+    "youtube": "YouTube (16:9 横屏)",
+    "unselected": "未选择"
   },
 
   "section": {
     "generateVideo": "生成视频"
+  },
+
+  "dock": {
+    "generateVideo": "▷ 生成视频",
+    "dragHint": "将素材拖到这里开始生成"
   },
 
   "script": {

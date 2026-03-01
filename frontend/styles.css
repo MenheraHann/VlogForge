@@ -212,6 +212,239 @@ body {
   background: linear-gradient(90deg, transparent, var(--border-color), transparent);
 }
 
+/* ========== 素材滚动区（留出底部 Dock 空间） ========== */
+.asset-scroll-area {
+  padding-bottom: 180px; /* v18: 常驻 dock 高度约 140px + 余量 */
+}
+
+/* ========== 底部生成 Dock ========== */
+.gen-dock {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 66%;
+  max-width: 900px;
+  min-width: 480px;
+  z-index: 90;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border: none;
+  border-radius: 28px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);
+  transition: transform var(--duration-normal) var(--ease-out);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ====== Dock v18: Seedance 统一输入栏 ====== */
+
+/* Dock 内容区（始终展开，无 handle/toggle） */
+.gen-dock {
+  padding: 1rem 1.5rem 1rem;
+}
+
+/* 第一行：全宽文本框 */
+.dock-prompt-row {
+  margin-bottom: 0.75rem;
+}
+.dock-prompt-row textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  min-height: 48px;
+  max-height: 150px;
+  transition: none;
+  overflow-y: hidden;
+  line-height: 1.5;
+}
+.dock-prompt-row textarea:focus { outline: none; }
+.dock-prompt-row textarea::placeholder { color: rgba(255, 255, 255, 0.3); font-size: 0.9rem; }
+
+/* 第二行：pills（左） + 生成按钮（右） */
+.dock-config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Pills 容器 */
+.dock-pills {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Pill 通用样式 */
+.dock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  position: relative;
+}
+.dock-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+}
+.dock-pill.drag-highlight {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.12);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+}
+
+/* Pill 内元素 */
+.pill-icon { font-size: 1rem; flex-shrink: 0; }
+.pill-svg { flex-shrink: 0; opacity: 0.7; }
+.pill-label { font-weight: 500; }
+.pill-tag {
+  font-size: 0.65rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.pill-tag.required {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+.pill-tag.optional {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent-light);
+}
+.pill-asset-name {
+  font-size: 0.8rem;
+  color: var(--accent-light);
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pill-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 0.15rem;
+  line-height: 1;
+  transition: color var(--duration-fast);
+}
+.pill-clear:hover { color: var(--error); }
+
+/* Pill 已绑定状态：隐藏 label+tag，显示 asset-name+clear */
+.dock-pill.has-asset .pill-label,
+.dock-pill.has-asset .pill-tag { display: none; }
+.dock-pill:not(.has-asset) .pill-asset-name,
+.dock-pill:not(.has-asset) .pill-clear { display: none; }
+
+/* v19: Pill pending 状态 — 素材已绑定但尚未就绪（问卷未完成 / 造型未确认） */
+.dock-pill.has-asset.pending {
+  opacity: 0.6;
+}
+.dock-pill.has-asset.pending .pill-asset-name::after {
+  content: " \23F3";
+  animation: pulse-opacity 1.5s ease-in-out infinite;
+}
+.dock-pill.has-asset.pending .pill-clear { display: inline-flex; }
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Pill 内嵌 select */
+.dock-pill-select {
+  padding: 0 0 0 0.65rem;
+}
+.dock-pill-select select {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  padding: 0.4rem 0.5rem 0.4rem 0;
+  appearance: none; -webkit-appearance: none;
+  /* 保留一个小三角 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b8b9e'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 1.4rem;
+}
+.dock-pill-select:hover select { color: var(--text-primary); }
+.dock-pill-select select option {
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+/* 生成按钮（v20 subtle circle） */
+.dock-btn-gen {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0.65rem;
+  aspect-ratio: 1;
+  min-width: 44px;
+  min-height: 44px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+}
+.dock-btn-gen:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+  transform: none;
+}
+.dock-btn-gen:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.gen-arrow-svg { flex-shrink: 0; }
+.dock-btn-gen.loading .gen-arrow-svg { display: none; }
+.dock-btn-gen.loading::after {
+  content: ""; width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+
+/* (gen-hint removed in v19 UI refinement) */
+
+/* Dock 拖拽高亮（整个 dock） */
+.gen-dock.drag-highlight {
+  background: rgba(139, 92, 246, 0.12);
+  box-shadow: 0 -4px 24px rgba(139, 92, 246, 0.3);
+}
+
+/* 仅 view-home 时显示 */
+.gen-dock { display: none; }
+.gen-dock.dock-visible { display: flex; }
+
 /* ========== 快速生成区 ========== */
 .quick-gen { padding: 1.75rem; }
 
@@ -322,14 +555,7 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* v16 UX: 生成按钮下方条件提示 */
-.gen-hint {
-  text-align: center;
-  color: var(--warning);
-  font-size: 0.8rem;
-  margin-top: 0.5rem;
-  display: none;
-}
+/* (gen-hint removed in v19 UI refinement) */
 
 .btn-submit {
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
@@ -1683,6 +1909,8 @@ body {
   .pipeline-step span { font-size: 0.65rem; }
   .options-grid { grid-template-columns: repeat(2, 1fr); }
   .nav-link { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+
+  /* Dock 移动端暂不适配 */
 
   /* 渲染队列面板响应式 */
   .queue-list { max-height: 300px; }

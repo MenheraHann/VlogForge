@@ -185,6 +185,11 @@ VEO_FIXED_CAMERA_PREFIX = (
     "No exaggerated acting, no overly expressive gestures, no commercial-style presentation. "
     "No beauty filter, no skin smoothing, no overly perfect lighting. "
     "Raw realism, intimate atmosphere, imperfect beauty, authentic human moment.\n\n"
+    "IMPORTANT FRAMING INSTRUCTION: "
+    "Upper body only — frame the person from head to waist. "
+    "No legs, no knees, no full-body shots. "
+    "The person should NOT be shown using, applying, opening, or consuming any product. "
+    "Only hold, display, and show the sealed product packaging to the camera.\n\n"
 )
 
 

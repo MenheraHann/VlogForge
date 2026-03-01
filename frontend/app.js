@@ -153,6 +153,16 @@ function showView(viewId) {
   const view = $(`#view-${viewId}`);
   if (view) view.classList.add("active");
   window.scrollTo({ top: 0, behavior: "smooth" });
+
+  // 仅在主页时显示底部 Dock
+  const dock = $("#gen-dock");
+  if (dock) {
+    if (viewId === "home") {
+      dock.classList.add("dock-visible");
+    } else {
+      dock.classList.remove("dock-visible");
+    }
+  }
 }
 
 $("#nav-logo").addEventListener("click", () => { showView("home"); refreshAssets(); });
@@ -172,6 +182,18 @@ async function refreshAssets() {
 
     renderColumnList("items", assets.items, "#col-items");
     renderColumnList("models", assets.models, "#col-models");
+
+    // v19: 同步 slotAssets 引用，确保绑定的素材数据是最新的
+    if (slotAssets.item) {
+      const fresh = assets.items.find(a => a.id === slotAssets.item.id);
+      if (fresh) slotAssets.item = fresh;
+    }
+    if (slotAssets.model) {
+      const fresh = assets.models.find(a => a.id === slotAssets.model.id);
+      if (fresh) slotAssets.model = fresh;
+    }
+    updatePillStates();
+    updateGenButton();
 
     // v12: 检查是否需要启动/停止 generating 轮询
     startGeneratingPollIfNeeded();
@@ -693,7 +715,7 @@ $$(".btn-add").forEach((btn) => {
 
 // ========== 创建素材模态框 ==========
 
-function openCreateModal(type) {
+function openCreateModal(type, autoBindSlot) {
   const modal = $("#create-modal");
   const title = $("#modal-title");
   const body = $("#modal-body");
@@ -766,7 +788,7 @@ function openCreateModal(type) {
 
     if (type === "items") {
       // 物品走智能问卷流程
-      await handleItemCreate(desc, createFiles, submitBtn, type);
+      await handleItemCreate(desc, createFiles, autoBindSlot);
     } else {
       // v12: 人物 → 关闭模态框，发送请求，通过 refreshAssets 渲染 generating 卡片
       const formData = new FormData();
@@ -785,6 +807,11 @@ function openCreateModal(type) {
         // 刷新列表，后端已保存 generating/pending 状态的素材
         await refreshAssets();
 
+        // v19: 如果是从 pill 点击触发的，立即绑定到槽位（pending 状态，等 portrait 就绪）
+        if (autoBindSlot && data.asset) {
+          bindSlot(autoBindSlot, data.asset);
+        }
+
         // v16 UX: pending 状态直接提示去审核，否则显示创建成功
         if (data.asset && data.asset.status === "pending") {
           showToast(t('toast.modelReadyForReview', {name: data.asset.name}), "success");
@@ -801,34 +828,60 @@ function openCreateModal(type) {
   modal.style.display = "flex";
 }
 
-// 物品创建 → 走智能问卷
-async function handleItemCreate(desc, files, submitBtn, type) {
+// 物品创建 → 立即关闭模态框，显示分析中占位卡，analyze 完成后弹问卷
+async function handleItemCreate(desc, files, autoBindSlot) {
   const formData = new FormData();
   formData.append("description", desc);
   files.forEach((f) => formData.append("images", f));
 
+  // v20: 立即关闭模态框 + toast
+  closeCreateModal();
+  showToast(t('toast.itemAnalyzing') || "正在分析物品...", "info");
+
+  // 插入临时占位素材到列表，显示 generating 骨架卡
+  const tempId = "temp_item_" + Date.now();
+  const tempAsset = { id: tempId, name: desc.slice(0, 30) || t('asset.generatingName'), status: "generating" };
+  assets.items.unshift(tempAsset);
+  renderColumnList("items", assets.items, "#col-items");
+  $("#count-items").textContent = assets.items.length;
+
+  // v19: 如果是从 pill 点击触发的，立即绑定到槽位（pending 状态）
+  if (autoBindSlot) {
+    bindSlot(autoBindSlot, tempAsset);
+  }
+
   try {
-    // 第 1 步：analyze
+    // 后台 analyze
     const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
     if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.itemAnalyzeFailed', {error: ''})); }
     const data = await res.json();
 
+    // 移除临时占位
+    assets.items = assets.items.filter(a => a.id !== tempId);
+
     if (data.status === "rejected") {
       showToast(t('toast.itemRejected', {reason: data.reason}), "error");
-      closeCreateModal();
+      if (autoBindSlot) clearSlot(autoBindSlot);
+      refreshAssets();
       return;
     }
 
     showToast(t('toast.itemAnalyzed', {name: data.asset.name}), "success");
-    closeCreateModal();
 
-    // 打开问卷确认
+    // 更新绑定到真实素材
+    if (autoBindSlot) {
+      bindSlot(autoBindSlot, data.asset);
+    }
+
+    // 刷新列表 + 弹问卷
+    await refreshAssets();
     openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
-    refreshAssets();
   } catch (err) {
+    // 移除临时占位
+    assets.items = assets.items.filter(a => a.id !== tempId);
+    if (autoBindSlot) clearSlot(autoBindSlot);
     showToast(t('toast.itemAnalyzeFailed', {error: err.message}), "error");
-    submitBtn.disabled = false;
-    submitBtn.textContent = type === "items" ? t('create.createItem') : t('create.createModel');
+    refreshAssets();
   }
 }
 
@@ -1063,6 +1116,14 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       console.log(`[ItemConfirm] 成功: ${data.asset.name}`);
       // 刷新列表获取 confirmed 状态
       await refreshAssets();
+
+      // v19: 如果该物品已绑定到槽位，更新引用并刷新 pill 状态
+      if (slotAssets.item && slotAssets.item.id === asset.id && data.asset) {
+        slotAssets.item = data.asset;
+        updatePillStates();
+        updateGenButton();
+      }
+
       showToast(t('toast.itemConfirmSuccess', {name: data.asset.name || t('asset.items')}), "success");
     } catch (err) {
       showToast(t('toast.itemConfirmFailed', {error: err.message}), "error");
@@ -1146,6 +1207,15 @@ function openModelReviewModal(asset) {
       showToast(t('modelReview.confirmSuccess'), "success");
       closeReview();
       await refreshAssets();
+
+      // v19: 如果该人物已绑定到槽位，更新引用并刷新 pill 状态（pending → ready）
+      if (slotAssets.model && slotAssets.model.id === asset.id) {
+        // 从最新的 assets 列表中获取更新后的数据
+        const updated = assets.models.find(m => m.id === asset.id);
+        if (updated) slotAssets.model = updated;
+        updatePillStates();
+        updateGenButton();
+      }
     } catch (err) {
       showToast(t('modelReview.confirmFailedWith', {error: err.message}), "error");
       confirmBtn.disabled = false;
@@ -1292,6 +1362,14 @@ function openSelectModal(assetType, asset, options) {
       if (!res.ok) throw new Error(t('toast.selectFailed', {error: ''}));
       // v10: 选择后设置 portrait_image
       asset.portrait_image = options[selectedIndex];
+
+      // v19: 如果该人物已绑定到槽位，刷新 pill 状态（pending → ready）
+      if (slotAssets.model && slotAssets.model.id === asset.id) {
+        slotAssets.model = asset;
+        updatePillStates();
+        updateGenButton();
+      }
+
       showToast(t('toast.lookSelected', {label: label}), "success");
       closeSelectModal();
       refreshAssets();
@@ -1312,33 +1390,36 @@ $("#select-modal").addEventListener("click", (e) => { if (e.target === e.current
 // ========== 拖拽槽位 ==========
 
 function setupSlot(slotType) {
+  const pill = $(`#slot-${slotType}`);
   const slotBody = $(`#slot-${slotType}-body`);
   const clearBtn = $(`#slot-${slotType}-clear`);
   const fileInput = slotBody.querySelector(".slot-file-input");
 
-  // 点击上传
-  slotBody.addEventListener("click", () => {
-    if (slotAssets[slotType]) return; // 已绑定素材则不触发上传
-    fileInput.click();
+  // v19: 点击 pill → 打开创建素材模态框（未绑定时），创建后自动绑定
+  pill.addEventListener("click", (e) => {
+    if (e.target.closest(".pill-clear")) return; // 点击清空按钮时不触发
+    if (slotAssets[slotType]) return;
+    openCreateModal(slotType === "item" ? "items" : "models", slotType);
   });
 
   fileInput.addEventListener("change", () => {
     if (fileInput.files.length === 0) return;
-    // 临时上传 → 创建素材
     handleSlotUpload(slotType, Array.from(fileInput.files));
     fileInput.value = "";
   });
 
-  // 拖拽接收
-  slotBody.addEventListener("dragover", (e) => {
+  // v18: 拖拽接收在 pill 上（而非隐藏的 slotBody）
+  pill.addEventListener("dragover", (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    slotBody.classList.add("drag-over");
+    pill.classList.add("drag-highlight");
   });
-  slotBody.addEventListener("dragleave", () => slotBody.classList.remove("drag-over"));
-  slotBody.addEventListener("drop", (e) => {
+  pill.addEventListener("dragleave", (e) => {
+    if (!pill.contains(e.relatedTarget)) pill.classList.remove("drag-highlight");
+  });
+  pill.addEventListener("drop", (e) => {
     e.preventDefault();
-    slotBody.classList.remove("drag-over");
+    pill.classList.remove("drag-highlight");
 
     const raw = e.dataTransfer.getData("application/vlogforge-asset");
     if (!raw) return;
@@ -1350,12 +1431,10 @@ function setupSlot(slotType) {
         return;
       }
 
-      // 查找素材
       const listKey = type === "item" ? "items" : "models";
       const asset = assets[listKey].find((a) => a.id === id);
       if (!asset) { showToast(t('asset.notFound'), "error"); return; }
 
-      // 验证状态
       if (type === "model" && !asset.portrait_image) { showToast(t('slot.selectLookFirst'), "warning"); return; }
       if (type === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
 
@@ -1366,48 +1445,22 @@ function setupSlot(slotType) {
   });
 
   // 清空
-  clearBtn.addEventListener("click", () => clearSlot(slotType));
+  clearBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    clearSlot(slotType);
+  });
 }
 
 function bindSlot(slotType, asset) {
   slotAssets[slotType] = asset;
-  const slotBody = $(`#slot-${slotType}-body`);
-  const clearBtn = $(`#slot-${slotType}-clear`);
-
-  const thumbUrl = getAssetThumbUrl(asset);
-  slotBody.classList.remove("slot-empty");
-  slotBody.innerHTML = `
-    ${thumbUrl ? `<img src="${thumbUrl}" class="slot-thumb" onerror="this.style.display='none'">` : ""}
-    <div class="slot-asset-name">${escapeHtml(asset.name)}</div>
-  `;
-  clearBtn.style.display = "block";
   updateGenButton();
+  updatePillStates();
 }
 
 function clearSlot(slotType) {
   slotAssets[slotType] = null;
-  const slotBody = $(`#slot-${slotType}-body`);
-  const clearBtn = $(`#slot-${slotType}-clear`);
-  const icons = { item: "&#128230;", model: "&#128100;" };
-
-  slotBody.classList.add("slot-empty");
-  slotBody.innerHTML = `
-    <span class="slot-icon">${icons[slotType]}</span>
-    <span class="slot-hint">${t('slot.dragOrUpload')}</span>
-    <input type="file" class="slot-file-input" accept="image/*" ${slotType === "item" ? "multiple" : ""} hidden>
-  `;
-  clearBtn.style.display = "none";
-
-  // 重新绑定 file input
-  const fileInput = slotBody.querySelector(".slot-file-input");
-  slotBody.addEventListener("click", () => { if (!slotAssets[slotType]) fileInput.click(); });
-  fileInput.addEventListener("change", () => {
-    if (fileInput.files.length === 0) return;
-    handleSlotUpload(slotType, Array.from(fileInput.files));
-    fileInput.value = "";
-  });
-
   updateGenButton();
+  updatePillStates();
 }
 
 async function handleSlotUpload(slotType, files) {
@@ -1461,87 +1514,7 @@ async function handleSlotUpload(slotType, files) {
 setupSlot("item");
 setupSlot("model");
 
-// ========== 一句话快速创建素材 ==========
-
-$("#btn-quickstart").addEventListener("click", async () => {
-  const sentence = $("#gen-prompt").value.trim();
-  if (!sentence) {
-    showToast(t('toast.inputSentenceFirst'), "warning");
-    $("#gen-prompt").focus();
-    return;
-  }
-
-  const btn = $("#btn-quickstart");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="btn-quickstart-icon">⏳</span> ' + t('button.quickstartProcessing');
-
-  // v12: 通过 refreshAssets 渲染后端 generating 状态卡片，无需前端占位
-  try {
-    // 调用快速创建 API（拆解 + 创建两类素材）
-    const formData = new FormData();
-    formData.append("sentence", sentence);
-
-    // 如果物品槽位有临时上传的文件，一并发送
-    const itemSlotInput = document.querySelector("#slot-item-body .slot-file-input");
-    if (itemSlotInput && itemSlotInput.files && itemSlotInput.files.length > 0) {
-      Array.from(itemSlotInput.files).forEach(f => formData.append("images", f));
-    }
-
-    const res = await fetch("/api/quickstart/create", { method: "POST", body: formData });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.quickstartFailed', {error: ''})); }
-    const data = await res.json();
-
-    // 刷新列表，后端已保存 generating/pending 状态的素材
-    await refreshAssets();
-    showToast(t('toast.quickstartCreated'), "success");
-
-    // 处理物品：打开问卷确认
-    if (data.assets.item && data.assets.item.asset) {
-      const itemAsset = data.assets.item.asset;
-      if (data.assets.item.status !== "rejected") {
-        openQuestionnaireModal(itemAsset, data.assets.item.questionnaire, data.assets.item.selling_points);
-      } else {
-        showToast(t('toast.quickstartItemRejected', {reason: data.assets.item.reason}), "error");
-      }
-    }
-
-    // 处理人物：问卷关闭后弹出审核弹窗
-    if (data.assets.model && data.assets.model.asset) {
-      const modelData = data.assets.model;
-      window._pendingModelReview = modelData.asset;
-    }
-
-    // 监听问卷模态框关闭 → 弹出人物造型选择
-    setupQuickstartChain();
-
-  } catch (err) {
-    showToast(t('toast.quickstartFailed', {error: err.message}), "error");
-    await refreshAssets();
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span class="btn-quickstart-icon">&#9889;</span> ' + t('button.quickstart');
-  }
-});
-
-function setupQuickstartChain() {
-  // 监听问卷模态框关闭，弹出人物审核弹窗
-  const qModal = $("#questionnaire-modal");
-  const observer = new MutationObserver(() => {
-    if (qModal.style.display === "none" || qModal.style.display === "") {
-      observer.disconnect();
-      // 弹出人物审核弹窗
-      if (window._pendingModelReview) {
-        const asset = window._pendingModelReview;
-        window._pendingModelReview = null;
-        // v16 UX: 改为 Toast 通知，让用户主动点击卡片审核
-        if (asset.status === "pending") {
-          showToast(t('toast.modelReadyForReview', {name: asset.name}), "success");
-        }
-      }
-    }
-  });
-  observer.observe(qModal, { attributes: true, attributeFilter: ["style"] });
-}
+// ========== (v18: quickstart 按钮已移除) ==========
 
 // ========== 渲染队列面板 ==========
 
@@ -1865,20 +1838,13 @@ function initQueuePanel() {
 // ========== 生成按钮 ==========
 
 function updateGenButton() {
-  const hasItem = !!slotAssets.item;
-  $("#btn-generate").disabled = !hasItem;
-
-  // v16 UX: 动态提示缺少什么条件
-  const hint = $("#gen-hint");
-  if (hint) {
-    if (!hasItem) {
-      hint.textContent = t('form.genHintNoItem');
-      hint.style.display = "block";
-    } else {
-      hint.textContent = "";
-      hint.style.display = "none";
-    }
-  }
+  // v19: 不仅检查素材是否绑定，还检查是否"就绪"
+  const itemReady = slotAssets.item && slotAssets.item.questionnaire_status === "completed";
+  const modelReady = !slotAssets.model || !!slotAssets.model.portrait_image; // 人物可选，但绑定后必须就绪
+  const platform = document.getElementById('gen-platform').value;
+  const segments = document.getElementById('gen-segments').value;
+  // 物品就绪 + 人物就绪（或未绑定） + 平台 + 时长 → 启用生成按钮
+  $("#btn-generate").disabled = !(itemReady && modelReady && platform && segments);
 }
 
 $("#btn-generate").addEventListener("click", async () => {
@@ -2267,13 +2233,108 @@ async function restoreJobIfNeeded() {
   }
 }
 
-// 时长滑块联动
-function updateDurationLabel() {
-  const slider = $("#gen-segments");
-  if (!slider) return;
-  const n = parseInt(slider.value);
-  const label = $("#gen-duration-label");
-  if (label) label.textContent = t('form.durationLabel', {segments: n, seconds: n * 6});
+// 时长下拉选择：i18n 切换时更新 option 文本
+function updateDurationOptions() {
+  const sel = $("#gen-segments");
+  if (!sel) return;
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) return; // 跳过 "未选择" 占位项
+    const n = parseInt(opt.value);
+    opt.textContent = `${n * 6}s（${n}×6s）`;
+  });
+}
+
+// ========== v17: 底部生成 Dock ==========
+
+function initGenDock() {
+  const dock = $("#gen-dock");
+  if (!dock) return;
+
+  // 拖拽高亮
+  dock.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dock.classList.add("drag-highlight");
+  });
+  dock.addEventListener("dragleave", (e) => {
+    if (!dock.contains(e.relatedTarget)) {
+      dock.classList.remove("drag-highlight");
+    }
+  });
+  dock.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dock.classList.remove("drag-highlight");
+
+    // 整个 dock 区域接收拖放，根据素材 type 自动分配到对应 slot
+    const raw = e.dataTransfer.getData("application/vlogforge-asset");
+    if (!raw) return;
+    try {
+      const { type, id } = JSON.parse(raw);
+      const slotType = type; // "item" 或 "model"
+      if (slotType !== "item" && slotType !== "model") return;
+
+      const listKey = slotType === "item" ? "items" : "models";
+      const asset = assets[listKey].find((a) => a.id === id);
+      if (!asset) { showToast(t('asset.notFound'), "error"); return; }
+
+      if (slotType === "model" && !asset.portrait_image) { showToast(t('slot.selectLookFirst'), "warning"); return; }
+      if (slotType === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
+
+      bindSlot(slotType, asset);
+    } catch (err) {
+      console.error("[Dock Drop] 解析失败:", err);
+    }
+  });
+
+  // textarea 自动增高
+  const ta = $("#gen-prompt");
+  if (ta) {
+    const autoGrow = () => {
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight, 150) + "px";
+    };
+    ta.addEventListener("input", autoGrow);
+  }
+
+  // 初始显示 dock（主页默认可见）
+  dock.classList.add("dock-visible");
+
+  // 初始更新 pill 状态
+  updatePillStates();
+}
+
+// v18: 更新 pill 槽位的显示状态
+function updatePillStates() {
+  ["item", "model"].forEach(type => {
+    const pill = $(`#slot-${type}`);
+    const nameEl = $(`#slot-${type}-name`);
+    const clearBtn = $(`#slot-${type}-clear`);
+    if (!pill || !nameEl) return;
+    if (slotAssets[type]) {
+      pill.classList.add("has-asset");
+      nameEl.textContent = slotAssets[type].name;
+      if (clearBtn) clearBtn.style.display = "inline-flex";
+
+      // v19: 检查素材是否"就绪"，未就绪时显示 pending 状态
+      // 物品就绪条件：questionnaire_status === "completed"
+      // 人物就绪条件：portrait_image 存在（truthy）
+      let isReady = false;
+      if (type === "item") {
+        isReady = slotAssets[type].questionnaire_status === "completed";
+      } else {
+        isReady = !!slotAssets[type].portrait_image;
+      }
+
+      if (isReady) {
+        pill.classList.remove("pending");
+      } else {
+        pill.classList.add("pending");
+      }
+    } else {
+      pill.classList.remove("has-asset", "pending");
+      nameEl.textContent = "";
+      if (clearBtn) clearBtn.style.display = "none";
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -2282,15 +2343,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     await window.i18nPromise;
   }
 
-  // 初始化时长滑块
-  const slider = $("#gen-segments");
-  if (slider) {
-    slider.addEventListener("input", updateDurationLabel);
-    updateDurationLabel();
+  // 初始化时长下拉选择
+  const segSel = $("#gen-segments");
+  if (segSel) {
+    segSel.addEventListener("change", () => { updatePillStates(); updateGenButton(); });
+    updateDurationOptions();
+  }
+
+  // 初始化平台下拉选择：切换时更新生成按钮状态
+  const platSel = $("#gen-platform");
+  if (platSel) {
+    platSel.addEventListener("change", () => { updateGenButton(); });
   }
 
   // 初始化图片预览 Lightbox
   initLightbox();
+
+  // v17: 初始化底部生成 Dock
+  initGenDock();
 
   // 初始化素材库
   refreshAssets();
@@ -2301,7 +2371,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // v16 UX: 监听语言热切换，刷新动态内容
   window.addEventListener("i18n:langChanged", () => {
     refreshStageLabels();
-    updateDurationLabel();
+    updateDurationOptions();
     updateGenButton();
     refreshAssets();
     fetchJobQueue();

@@ -70,7 +70,8 @@
     "quickstartHint": "La IA divide automáticamente en producto + modelo y crea ambos tipos de material a la vez",
     "targetPlatform": "Plataforma objetivo",
     "videoDuration": "Duración del video",
-    "durationLabel": "{segments} segmentos · {seconds}s",
+    "durationLabel": "{seconds}s（{segments}×6s）",
+    "durationUnselected": "Sin seleccionar",
     "description": "Descripción",
     "referenceImages": "Imágenes de referencia (opcional)",
     "uploadRef": "Clic para subir imágenes de referencia",
@@ -187,6 +188,7 @@
     "modelCreating": "Creando material de modelo, por favor espera...",
     "modelCreateSuccess": "{name} creado exitosamente",
     "modelCreateFailed": "Error al crear: {error}",
+    "itemAnalyzing": "Analizando artículo...",
     "itemAnalyzed": "Análisis de {name} completado. Confirma la información del producto",
     "itemRejected": "Producto rechazado: {reason}",
     "itemAnalyzeFailed": "Error en el análisis: {error}",
@@ -266,11 +268,17 @@
   "platform": {
     "douyin": "Douyin (9:16 Vertical)",
     "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
-    "youtube": "YouTube (16:9 Horizontal)"
+    "youtube": "YouTube (16:9 Horizontal)",
+    "unselected": "Sin seleccionar"
   },
 
   "section": {
     "generateVideo": "Generar video"
+  },
+
+  "dock": {
+    "generateVideo": "▷ Generar video",
+    "dragHint": "Arrastra materiales aquí para generar"
   },
 
   "script": {

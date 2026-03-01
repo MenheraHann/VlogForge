@@ -70,7 +70,8 @@
     "quickstartHint": "AIが自動的に商品+モデルに分解し、両方の素材を一度に作成します",
     "targetPlatform": "ターゲットプラットフォーム",
     "videoDuration": "動画の長さ",
-    "durationLabel": "{segments}セグメント · {seconds}秒",
+    "durationLabel": "{seconds}s（{segments}×6s）",
+    "durationUnselected": "未選択",
     "description": "説明",
     "referenceImages": "参考画像（任意）",
     "uploadRef": "クリックして参考画像をアップロード",
@@ -187,6 +188,7 @@
     "modelCreating": "モデル素材を作成中、お待ちください...",
     "modelCreateSuccess": "{name}を作成しました",
     "modelCreateFailed": "作成に失敗: {error}",
+    "itemAnalyzing": "商品を分析中...",
     "itemAnalyzed": "{name}の分析が完了しました。商品情報を確認してください",
     "itemRejected": "商品が拒否されました: {reason}",
     "itemAnalyzeFailed": "分析に失敗: {error}",
@@ -266,11 +268,17 @@
   "platform": {
     "douyin": "Douyin (9:16 縦型)",
     "xiaohongshu": "Xiaohongshu (9:16 縦型)",
-    "youtube": "YouTube (16:9 横型)"
+    "youtube": "YouTube (16:9 横型)",
+    "unselected": "未選択"
   },
 
   "section": {
     "generateVideo": "動画を生成"
+  },
+
+  "dock": {
+    "generateVideo": "▷ 動画を生成",
+    "dragHint": "素材をここにドラッグして生成"
   },
 
   "script": {

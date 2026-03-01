@@ -70,7 +70,8 @@
     "quickstartHint": "AI automatically splits into Item + Model, creating both asset types at once",
     "targetPlatform": "Target Platform",
     "videoDuration": "Video Duration",
-    "durationLabel": "{segments} segments · {seconds}s",
+    "durationLabel": "{seconds}s（{segments}×6s）",
+    "durationUnselected": "Not selected",
     "description": "Description",
     "referenceImages": "Reference Images (optional)",
     "uploadRef": "Click to upload reference images",
@@ -187,6 +188,7 @@
     "modelCreating": "Creating model asset, please wait...",
     "modelCreateSuccess": "{name} created successfully",
     "modelCreateFailed": "Creation failed: {error}",
+    "itemAnalyzing": "Analyzing item...",
     "itemAnalyzed": "{name} analysis complete, please confirm product info",
     "itemRejected": "Item rejected: {reason}",
     "itemAnalyzeFailed": "Analysis failed: {error}",
@@ -266,11 +268,17 @@
   "platform": {
     "douyin": "Douyin (9:16 Vertical)",
     "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
-    "youtube": "YouTube (16:9 Horizontal)"
+    "youtube": "YouTube (16:9 Horizontal)",
+    "unselected": "Not selected"
   },
 
   "section": {
     "generateVideo": "Generate Video"
+  },
+
+  "dock": {
+    "generateVideo": "▷ Generate Video",
+    "dragHint": "Drag assets here to generate"
   },
 
   "script": {
