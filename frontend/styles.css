@@ -48,6 +48,13 @@ body {
   padding-top: var(--nav-height);
 }
 
+/* ========== 全局 SVG 图标 ========== */
+.icon-svg {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 /* ========== 背景 ========== */
 .bg-gradient {
   position: fixed; top: -40%; left: -20%; width: 80%; height: 80%;
@@ -189,11 +196,12 @@ body {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .asset-mini-actions {
-  display: flex; gap: 0.35rem; padding: 0 0.75rem 0.6rem;
+  display: flex; gap: 0.35rem; padding: 0 0.75rem 0.6rem; align-items: center;
 }
 
 .asset-mini-badge {
-  font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 999px;
+  font-size: 0.75rem; padding: 0.35rem 0.7rem; border-radius: var(--radius-sm);
+  line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
 .asset-mini-badge.success { background: rgba(34,197,94,0.15); color: var(--success); }
 .asset-mini-badge.warning { background: rgba(234,179,8,0.15); color: var(--warning); }
@@ -362,14 +370,21 @@ body {
   opacity: 0.6;
 }
 .dock-pill.has-asset.pending .pill-asset-name::after {
-  content: " \23F3";
-  animation: pulse-opacity 1.5s ease-in-out infinite;
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 6px;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-top-color: rgba(255,255,255,0.7);
+  border-radius: 50%;
+  animation: spin-loader 0.8s linear infinite;
+  vertical-align: middle;
 }
 .dock-pill.has-asset.pending .pill-clear { display: inline-flex; }
 
-@keyframes pulse-opacity {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+@keyframes spin-loader {
+  to { transform: rotate(360deg); }
 }
 
 /* Pill 内嵌 select */
@@ -519,6 +534,7 @@ body {
   padding: 0.35rem 0.7rem; border-radius: var(--radius-sm);
   font-size: 0.75rem; font-weight: 500; font-family: inherit; cursor: pointer;
   transition: all var(--duration-fast); border: none;
+  line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); }
 .btn-outline:hover { border-color: var(--text-secondary); color: var(--text-primary); }
