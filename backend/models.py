@@ -40,7 +40,8 @@ class JobStatus(str, Enum):
 
 class AssetType(str, Enum):
     """素材类型"""
-    ITEM = "item"       # 物品
+    ITEM = "item"       # 物品（保留向后兼容，后续移除）
+    GAME = "game"       # 游戏
     MODEL = "model"     # 人物
 
 
@@ -142,15 +143,54 @@ class ModelAsset(BaseModel):
     error_message: str = Field("", description="生成失败时的用户可见错误信息")
 
 
+class GameAsset(BaseModel):
+    """游戏素材档案（游戏推广视频的核心数据结构）"""
+    id: str = Field(..., description="素材 ID，如 game_001")
+    name: str = Field("", description="游戏名称")
+
+    # 卡片状态
+    status: AssetStatus = Field(AssetStatus.GENERATING, description="卡片状态: generating/pending/confirmed/failed")
+    error_message: Optional[str] = Field(None, description="生成失败时的用户可见错误信息")
+
+    # 基本信息
+    orientation: str = Field("portrait", description="屏幕方向: portrait（竖屏）/ landscape（横屏）")
+    genre: str = Field("", description="游戏类型，如 RPG、FPS、策略")
+    description: str = Field("", description="游戏简短描述")
+    features: str = Field("", description="ADA 问卷后整理的游戏特色/卖点")
+
+    # 卖点优先级
+    selling_points: dict = Field(
+        default_factory=lambda: {"P0": [], "P1": [], "P2": []},
+        description="按优先级分组的卖点列表",
+    )
+
+    # 推广台词
+    intro_line: Optional[str] = Field(None, description="游戏推广开场台词")
+
+    # 问卷状态
+    questionnaire_status: str = Field(
+        QuestionnaireStatus.PENDING, description="问卷收集进度"
+    )
+    questionnaire_fields: list[QuestionnaireField] = Field(
+        default_factory=list, description="问卷字段列表（analyze 返回，confirm 时回收）"
+    )
+
+    # 媒体素材
+    screenshot_path: Optional[str] = Field(None, description="游戏截图路径（供 UI 展示与 Agent 参考）")
+    gameplay_video_path: Optional[str] = Field(None, description="游戏实机录屏路径（供剪辑素材）")
+    original_images: list[str] = Field(default_factory=list, description="用户上传的原始图片路径")
+
+    # 完整描述
+    full_description: str = Field("", description="ADA 生成的完整游戏描述")
+
+
 # ========== 请求模型 ==========
 
 class VideoGenerateRequest(BaseModel):
-    """视频生成请求（v10：场景融入人物，不再需要 scene_id）"""
-    item_id: str = Field(..., description="选中的物品素材 ID")
-    model_id: str = Field(..., description="选中的人物素材 ID")
-    platform: Platform = Field(..., description="目标平台")
-    duration: Duration = Field(..., description="视频时长")
-    extra_requirements: str = Field("", description="用户额外要求（可选）")
+    """视频生成请求（游戏推广视频，平台/时长由系统固定）"""
+    game_id: str = Field(..., description="选中的游戏素材 ID")
+    model_id: Optional[str] = Field(None, description="选中的人物素材 ID（可选，部分游戏视频不需要真人出镜）")
+    extra_requirements: Optional[str] = Field(None, description="用户额外要求（可选）")
 
 
 class GenerateRequest(BaseModel):
@@ -173,6 +213,7 @@ class ScriptSegment(BaseModel):
     frame_end_prompt: str = Field(..., description="尾帧图片生成提示词")
     needs_product: bool = Field(False, description="该分段是否需要植入产品")
     veo_description: str = Field(..., description="Veo 视频生成描述词（动作 + 台词）")
+    is_compositor_segment: bool = Field(False, description="是否为合成器分段（游戏实机画面叠加，非 AI 生成）")
 
 
 class StyleGuide(BaseModel):

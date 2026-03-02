@@ -8,12 +8,12 @@ import logging
 import os
 from typing import Optional, Union
 
-from backend.models import AssetStatus, AssetType, ItemAsset, ModelAsset
+from backend.models import AssetStatus, AssetType, GameAsset, ItemAsset, ModelAsset
 from backend.services.storage_backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
-AssetUnion = Union[ItemAsset, ModelAsset]
+AssetUnion = Union[ItemAsset, ModelAsset, GameAsset]
 
 
 class AssetManager:
@@ -35,11 +35,11 @@ class AssetManager:
         self._storage: StorageBackend = storage_backend
 
         # 从持久层恢复数据（首次启动时为空）
-        self._items, self._models, self._counters = self._storage.load_all()
+        self._items, self._models, self._games, self._counters = self._storage.load_all()
 
         logger.info(
             f"[AssetManager] 初始化完成，已恢复: "
-            f"{len(self._items)} 个物品, {len(self._models)} 个人物"
+            f"{len(self._items)} 个物品, {len(self._models)} 个人物, {len(self._games)} 个游戏"
         )
 
         # 启动时修复残留的 generating 状态素材
@@ -125,6 +125,33 @@ class AssetManager:
                     f"仍为 generating 状态，无方案图，可能生成中途崩溃"
                 )
 
+        # 修复游戏
+        for asset_id, game in self._games.items():
+            if game.status != AssetStatus.GENERATING:
+                continue
+
+            screenshot_exists = game.screenshot_path and os.path.isfile(game.screenshot_path)
+            video_exists = game.gameplay_video_path and os.path.isfile(game.gameplay_video_path)
+
+            if screenshot_exists and video_exists:
+                # 截图和录屏都在磁盘上，说明之前生成成功但状态未更新，自动确认
+                game.status = AssetStatus.CONFIRMED
+                recovered_count += 1
+                logger.info(
+                    f"[AssetManager] 游戏 {asset_id} ({game.name}) "
+                    f"generating -> confirmed（截图+录屏文件已存在，自动恢复）"
+                )
+            else:
+                missing = []
+                if not screenshot_exists:
+                    missing.append("screenshot_path")
+                if not video_exists:
+                    missing.append("gameplay_video_path")
+                logger.warning(
+                    f"[AssetManager] 游戏 {asset_id} ({game.name}) "
+                    f"仍为 generating 状态，缺少: {', '.join(missing)}"
+                )
+
         if recovered_count > 0:
             logger.info(f"[AssetManager] 启动恢复完成，共修复 {recovered_count} 个素材")
             # 修复后立即持久化
@@ -135,7 +162,7 @@ class AssetManager:
     def _persist(self) -> None:
         """将当前内存数据同步写入持久层"""
         try:
-            self._storage.save_all(self._items, self._models, self._counters)
+            self._storage.save_all(self._items, self._models, self._games, self._counters)
         except Exception as e:
             logger.error(f"[AssetManager] 持久化失败: {e}")
 
@@ -146,6 +173,7 @@ class AssetManager:
         self._counters[asset_type] += 1
         prefix = {
             AssetType.ITEM: "item",
+            AssetType.GAME: "game",
             AssetType.MODEL: "model",
         }[asset_type]
         return f"{prefix}_{self._counters[asset_type]:03d}"
@@ -210,12 +238,39 @@ class AssetManager:
             return True
         return False
 
+    # ========== 游戏 ==========
+
+    def save_game(self, asset: GameAsset) -> None:
+        """保存游戏素材"""
+        self._games[asset.id] = asset
+        logger.info(f"[AssetManager] 游戏已保存: {asset.id} ({asset.name})")
+        self._persist()
+
+    def get_game(self, asset_id: str) -> Optional[GameAsset]:
+        """获取游戏素材"""
+        return self._games.get(asset_id)
+
+    def list_games(self) -> list[GameAsset]:
+        """列出所有游戏素材"""
+        return list(self._games.values())
+
+    def delete_game(self, asset_id: str) -> bool:
+        """删除游戏素材"""
+        if asset_id in self._games:
+            del self._games[asset_id]
+            logger.info(f"[AssetManager] 游戏已删除: {asset_id}")
+            self._persist()
+            return True
+        return False
+
     # ========== 通用 ==========
 
     def get_asset(self, asset_id: str) -> Optional[AssetUnion]:
         """根据 ID 前缀自动判断类型并获取素材"""
         if asset_id.startswith("item_"):
             return self.get_item(asset_id)
+        elif asset_id.startswith("game_"):
+            return self.get_game(asset_id)
         elif asset_id.startswith("model_"):
             return self.get_model(asset_id)
         return None
@@ -224,6 +279,7 @@ class AssetManager:
         """获取素材库统计"""
         return {
             "items": len(self._items),
+            "games": len(self._games),
             "models": len(self._models),
-            "total": len(self._items) + len(self._models),
+            "total": len(self._items) + len(self._games) + len(self._models),
         }
