@@ -350,7 +350,7 @@ function createMiniCard(type, asset) {
     }
     card.innerHTML = `
       <div class="asset-mini-card-inner">
-        <div class="asset-failed-icon">&#9888;</div>
+        <div class="asset-failed-icon"><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
         <div class="asset-mini-info">
           <div class="asset-mini-name">${escapeHtml(asset.name || t('asset.unknownAsset') || "未知素材")}</div>
           <div class="asset-failed-error">${escapeHtml(errorMsg)}</div>
@@ -411,7 +411,7 @@ function createMiniCard(type, asset) {
   if (thumbUrl) {
     thumbHtml = `<img class="asset-mini-thumb" src="${thumbUrl}" alt="${escapeHtml(asset.name)}" onerror="this.style.display='none'">`;
   } else {
-    const icons = { items: "&#128230;", models: "&#128100;" };
+    const icons = { items: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>', models: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' };
     thumbHtml = `<div class="asset-mini-thumb-placeholder">${icons[type]}</div>`;
   }
 
@@ -738,7 +738,7 @@ function openCreateModal(type, autoBindSlot) {
         <div class="upload-zone" id="create-upload-zone">
           <input type="file" id="create-file-input" accept="image/*" multiple hidden>
           <div class="upload-placeholder" id="create-upload-placeholder">
-            <span class="upload-icon">&#128247;</span>
+            <span class="upload-icon"><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
             <span>${t('form.uploadRef')}</span>
           </div>
           <div class="upload-preview-sm" id="create-upload-preview"></div>
@@ -987,12 +987,12 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
         </div>
 
         <div class="q-nav">
-          <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}>&#8592; ${t('questionnaire.prevQuestion')}</button>
+          <button class="q-nav-btn q-nav-prev" id="q-prev" ${index === 0 ? 'disabled' : ''}><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> ${t('questionnaire.prevQuestion')}</button>
           <div class="q-nav-center">
             ${isOptional ? '<button class="q-nav-btn q-nav-skip" id="q-skip">' + t('questionnaire.skip') + '</button>' : ''}
           </div>
           ${index < total - 1
-            ? '<button class="q-nav-btn q-nav-next" id="q-next">' + t('questionnaire.nextQuestion') + ' &#8594;</button>'
+            ? '<button class="q-nav-btn q-nav-next" id="q-next">' + t('questionnaire.nextQuestion') + ' <svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 7 7-7 7"/><path d="M5 12h14"/></svg></button>'
             : '<button class="q-nav-btn q-nav-submit" id="q-submit">' + t('questionnaire.submitAndCreate') + '</button>'
           }
         </div>
@@ -2113,7 +2113,7 @@ function showResult(data) {
       item.className = "result-frame-item";
       item.innerHTML = `
         <img src="${url}" alt="${t('result.frame', {index: i + 1})}" loading="lazy">
-        <a class="result-frame-download" href="${url}" download title="${t('result.download')}">&#11015;</a>
+        <a class="result-frame-download" href="${url}" download title="${t('result.download')}"><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
         <div class="result-frame-label">${t('result.frame', {index: i + 1})}</div>
       `;
       storyboardGrid.appendChild(item);
