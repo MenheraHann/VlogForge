@@ -88,6 +88,74 @@ Based on the provided asset images (person half-body close-up portrait (with fil
 - The overall mood should be quiet, authentic, and intimate — like a real person in their real space
 """
 
+# Game promotion mode: phone poses + game screenshot rendering on phone screen
+VA_GAME_FRAME_INSTRUCTION = """You are a professional game promotion video storyboard generation assistant.
+Based on the provided asset images (person half-body close-up portrait (with filming scene) and optionally a game screenshot) and frame description, generate the corresponding storyboard frame.
+
+[HIGHEST PRIORITY — Strictly Replicate Reference Image — ZERO TOLERANCE]
+- Your primary task is to **pixel-level replicate** ALL visual information from the first reference image (person asset)
+- This is the MOST IMPORTANT rule — everything below serves this principle
+
+[Clothing — ABSOLUTELY NO CHANGES]
+- The person's clothing must be **exactly identical** to the reference image: same color, same material, same neckline, same sleeves, same fit
+- Do NOT change, add, remove, or modify any clothing item — not even subtle changes like rolling up sleeves or unbuttoning
+- Do NOT add accessories, jewelry, or props that are not in the reference image
+- If the reference shows a white T-shirt, every frame must show the exact same white T-shirt — no switching to other tops
+
+[Scene — ABSOLUTELY NO CHANGES]
+- Scene layout (furniture, walls, decorations — positions, proportions, and distances) must be **pixel-level identical** to the reference image
+- Do NOT add any new objects to the scene. Do NOT remove any existing objects. Do NOT rearrange anything
+- Wall decorations, furniture placement, background items must remain in their exact positions
+- The room/environment must look like the exact same physical space — not a similar-looking space
+
+[Lighting — ABSOLUTELY NO CHANGES]
+- Lighting direction, color temperature, brightness level, and color tone must be **exactly identical** to the reference image
+- Shadow positions and intensities must match the reference image precisely
+- Color grading and atmosphere must remain uniform — no warming, no cooling, no filter changes
+- If the reference has cool/neutral lighting, every frame must have the same cool/neutral lighting
+
+[Composition — ABSOLUTELY NO CHANGES]
+- Camera distance, shooting angle, and the person's position and proportion in the frame must be **exactly identical** to the reference image
+- Simulate the effect of a phone mounted in a fixed position — the camera NEVER moves
+- No shot switching: no wide shot, no close-up, no top-down, no low-angle, no side angle
+- No distance changes: no zoom in, no pull back
+- Background must not shift or deform in any way
+
+[Character Consistency — FACE AND BODY]
+- Person's facial features (face shape, eyes, nose, mouth, eyebrows) must be **exactly identical** to the reference — no deviation
+- Hairstyle, hair color, skin color, body type must strictly match
+- Makeup level must match: if reference shows no makeup, do not add makeup
+
+[THE ONLY THINGS ALLOWED TO CHANGE]
+- The person's **actions, expressions, gestures** as specified in the frame description
+- Phone in hand (held vertically or horizontally) when specified by the frame description
+- NOTHING ELSE may change — clothing, scene, lighting, composition, appearance must all remain identical to the reference
+
+[Phone Poses]
+- When the frame description mentions holding phone vertically: person holds the phone upright with one hand, screen facing the camera, displaying the game screenshot
+- When the frame description mentions holding phone horizontally: person holds the phone sideways with both hands, screen facing the camera, displaying the game screenshot
+- The phone screen MUST clearly display the game screenshot reference image when provided
+- The phone should be a modern smartphone with thin bezels, held naturally
+
+[Visual Style]
+- Photorealistic, vlog selfie style, phone front camera quality
+- Game promotion context: casual, relatable gamer vibe — like a real person sharing a game they enjoy
+- No cinematic feel, no commercial/ad campaign style, no heavy filters
+
+[Anti-Pattern Negatives — MUST enforce]
+- no table visible, no camera visible, no selfie angle
+- no beauty filter, no skin smoothing, no overly perfect skin
+- no overly perfect lighting, no studio lighting, no commercial look
+- no warm yellow tint, no romantic filter, no stylized color grading
+- raw realism, imperfect beauty, documentary lifestyle quality
+
+[Atmosphere and Realism]
+- The generated frame must feel like a real snapshot from daily life — NOT a posed photo or ad campaign image
+- Skin should have natural texture: subtle pores, slight unevenness, minor imperfections are GOOD — they make the image look real
+- Hair should be slightly messy and asymmetric, not perfectly styled
+- The overall mood should be quiet, authentic, and intimate — like a real person in their real space
+"""
+
 
 def _build_frame_prompt(frame_prompt: str, style_guide) -> str:
     """
@@ -135,6 +203,7 @@ async def generate_storyboard(
     output_dir: str,
     person_image: Optional[bytes] = None,
     product_image: Optional[bytes] = None,
+    game_screenshot: Optional[bytes] = None,
     on_frame_done: Optional[Callable[[int, int, str], None]] = None,
 ) -> list[str]:
     """
@@ -144,7 +213,8 @@ async def generate_storyboard(
         script: DA output script (with frame prompts + style_guide)
         output_dir: Storyboard output directory
         person_image: Person half-body close-up portrait bytes (portrait_image, includes filming scene)
-        product_image: Product image bytes (instruction_image or original)
+        product_image: Product image bytes (instruction_image or original) — used in product mode
+        game_screenshot: Game screenshot bytes — used in game mode for phone screen rendering
         on_frame_done: Callback when each frame is done (frame_index, total_frames, frame_path)
 
     Returns:
@@ -185,8 +255,14 @@ async def generate_storyboard(
             seen_prompts[p] = spec["frame_num"]
 
     total_frames = len(frame_specs)
+
+    # Select system instruction based on mode (game vs product)
+    is_game_mode = game_screenshot is not None
+    system_instruction = VA_GAME_FRAME_INSTRUCTION if is_game_mode else VA_FRAME_INSTRUCTION
+    mode_label = "game" if is_game_mode else "product"
+
     logger.info(
-        f"[VA] Full parallel mode: {len(segments)} segments → {total_frames} frames, "
+        f"[VA] Full parallel mode ({mode_label}): {len(segments)} segments → {total_frames} frames, "
         f"max_concurrent={MAX_CONCURRENT}"
     )
 
@@ -220,20 +296,34 @@ async def generate_storyboard(
         input_images = []
         if person_image:
             input_images.append(person_image)
-        if product_image and needs_product:
+        if game_screenshot and needs_product:
+            # Game mode: pass screenshot as reference for phone screen rendering
+            input_images.append(game_screenshot)
+        elif product_image and needs_product:
+            # Product mode: pass product image
             input_images.append(product_image)
+
+        # Game mode: prepend phone screen content instruction when screenshot is used
+        if game_screenshot and needs_product:
+            enhanced_prompt = (
+                f"[PHONE SCREEN CONTENT]\n"
+                f"The second reference image is the game screenshot. The person is holding a phone, "
+                f"and the phone screen MUST display this game screenshot image. "
+                f"Render the screenshot naturally onto the phone screen.\n\n"
+                f"{enhanced_prompt}"
+            )
 
         # Generate image
         if input_images:
             frame_bytes = await image_to_image(
                 input_images=input_images,
                 prompt=enhanced_prompt,
-                system_instruction=VA_FRAME_INSTRUCTION,
+                system_instruction=system_instruction,
             )
         else:
             frame_bytes = await text_to_image(
                 prompt=enhanced_prompt,
-                system_instruction=VA_FRAME_INSTRUCTION,
+                system_instruction=system_instruction,
             )
 
         # Save
@@ -311,13 +401,16 @@ async def generate_storyboard(
             try:
                 # img2img fallback: always include person reference image
                 fallback_images = [person_image]
-                if product_image and spec.get("needs_product"):
+                if game_screenshot and spec.get("needs_product"):
+                    # Game mode fallback: use game screenshot
+                    fallback_images.append(game_screenshot)
+                elif product_image and spec.get("needs_product"):
                     fallback_images.append(product_image)
 
                 fallback_bytes = await image_to_image(
                     input_images=fallback_images,
                     prompt=simplified_prompt,
-                    system_instruction=VA_FRAME_INSTRUCTION,
+                    system_instruction=system_instruction,
                 )
                 path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
                 save_image(fallback_bytes, path)
@@ -354,4 +447,39 @@ async def generate_storyboard(
         )
 
     logger.info(f"[VA] All storyboard frames complete: {len(final_paths)}/{total_frames} frames succeeded")
+
+    # ---- Game mode: generate extra playing_phone.png for compositor background ----
+    if is_game_mode and person_image:
+        playing_phone_path = os.path.join(output_dir, "playing_phone.png")
+        playing_phone_prompt = (
+            "A person casually playing a mobile game on their phone. "
+            "They are looking down at the phone in their hands, relaxed and focused on the screen. "
+            "Natural casual pose, sitting comfortably. "
+            "The phone screen is visible but the focus is on the person's natural gaming posture. "
+            "Raw realism, authentic daily life moment, no beauty filter, no commercial look."
+        )
+        try:
+            logger.info("[VA] Generating playing_phone.png for compositor background...")
+            playing_phone_bytes = await image_to_image(
+                input_images=[person_image],
+                prompt=playing_phone_prompt,
+                system_instruction=system_instruction,
+            )
+            save_image(playing_phone_bytes, playing_phone_path)
+            logger.info(f"[VA] playing_phone.png saved: {playing_phone_path}")
+        except Exception as e:
+            logger.warning(f"[VA] playing_phone.png generation failed (non-fatal): {e}")
+            # Retry once with simplified prompt
+            try:
+                simplified_playing_prompt = "Person looking down at phone, playing a mobile game, casual pose"
+                playing_phone_bytes = await image_to_image(
+                    input_images=[person_image],
+                    prompt=simplified_playing_prompt,
+                    system_instruction=system_instruction,
+                )
+                save_image(playing_phone_bytes, playing_phone_path)
+                logger.info(f"[VA] playing_phone.png retry succeeded: {playing_phone_path}")
+            except Exception as retry_e:
+                logger.error(f"[VA] playing_phone.png retry also failed: {retry_e}")
+
     return final_paths

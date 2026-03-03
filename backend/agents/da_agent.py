@@ -497,10 +497,12 @@ async def run_pipeline(
         person_image = _load_asset_image(job, "model", "portrait_image")
 
         if job_mode == "v2_game":
-            # 游戏模式：用游戏截图作为 "product_image"（VA 会用它来生成手机展示帧）
-            product_image = _load_game_screenshot(job)
-            logger.info(f"[DA][Job {job_id}] Game mode: loaded game screenshot as product image")
+            # Game mode: pass game screenshot separately (VA uses it for phone screen rendering)
+            game_screenshot = _load_game_screenshot(job)
+            product_image = None  # No product in game mode
+            logger.info(f"[DA][Job {job_id}] Game mode: loaded game screenshot for phone screen rendering")
         else:
+            game_screenshot = None
             product_image = _load_first_product_image(job)
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
@@ -530,6 +532,7 @@ async def run_pipeline(
             output_dir=storyboard_dir,
             person_image=person_image,
             product_image=product_image,
+            game_screenshot=game_screenshot,
             on_frame_done=_on_frame_done,
         )
 
