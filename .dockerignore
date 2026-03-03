@@ -1,0 +1,15 @@
+venv/
+.venv/
+.git/
+.beads/
+.claude/
+.env
+*.log
+docs/
+artifacts/
+assets/
+__pycache__/
+*.pyc
+.DS_Store
+backend_server.log
+node_modules/

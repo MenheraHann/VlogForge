@@ -136,6 +136,7 @@ async def generate_storyboard(
     person_image: Optional[bytes] = None,
     product_image: Optional[bytes] = None,
     on_frame_done: Optional[Callable[[int, int, str], None]] = None,
+    aspect_ratio: str = "9:16",
 ) -> list[str]:
     """
     Fully parallel storyboard frame sequence generation: each frame generated independently from asset images.
@@ -146,6 +147,7 @@ async def generate_storyboard(
         person_image: Person half-body close-up portrait bytes (portrait_image, includes filming scene)
         product_image: Product image bytes (instruction_image or original)
         on_frame_done: Callback when each frame is done (frame_index, total_frames, frame_path)
+        aspect_ratio: Image aspect ratio (default 9:16, YouTube uses 16:9)
 
     Returns:
         List of storyboard frame paths (N+1 images, N = segment count)
@@ -229,11 +231,13 @@ async def generate_storyboard(
                 input_images=input_images,
                 prompt=enhanced_prompt,
                 system_instruction=VA_FRAME_INSTRUCTION,
+                aspect_ratio=aspect_ratio,
             )
         else:
             frame_bytes = await text_to_image(
                 prompt=enhanced_prompt,
                 system_instruction=VA_FRAME_INSTRUCTION,
+                aspect_ratio=aspect_ratio,
             )
 
         # Save
@@ -318,6 +322,7 @@ async def generate_storyboard(
                     input_images=fallback_images,
                     prompt=simplified_prompt,
                     system_instruction=VA_FRAME_INSTRUCTION,
+                    aspect_ratio=aspect_ratio,
                 )
                 path = os.path.join(output_dir, f"frame_{frame_num:03d}.png")
                 save_image(fallback_bytes, path)

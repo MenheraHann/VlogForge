@@ -6,13 +6,26 @@ v14：新增串行队列 + 取消功能
 """
 
 import asyncio
+import json
 import logging
+import os
 import time
 from typing import Optional, Callable, Coroutine, Any
 
+from backend.config import ARTIFACTS_DIR
 from backend.models import JobStatus, ProgressResponse
 
 logger = logging.getLogger(__name__)
+
+# 持久化文件路径
+JOBS_PERSIST_FILE = os.path.join(ARTIFACTS_DIR, "_jobs_data.json")
+
+# 非终态状态集合（重启后需标记为 FAILED）
+_NON_TERMINAL_STATUSES = {
+    JobStatus.QUEUED, JobStatus.PENDING,
+    JobStatus.SCRIPT_GENERATING, JobStatus.IMAGES_GENERATING,
+    JobStatus.VIDEOS_GENERATING, JobStatus.STITCHING,
+}
 
 
 class JobManager:
@@ -31,6 +44,61 @@ class JobManager:
         self._cancel_events: dict[str, asyncio.Event] = {}
         # 流水线启动回调，由 main.py 注入（避免循环导入）
         self._pipeline_runner: Optional[Callable[..., Coroutine[Any, Any, None]]] = None
+
+        # 启动时从磁盘恢复任务数据
+        self._load_from_disk()
+
+    # ========== 持久化 ==========
+
+    def _load_from_disk(self) -> None:
+        """启动时从磁盘恢复任务数据，非终态任务标记为 FAILED"""
+        if not os.path.exists(JOBS_PERSIST_FILE):
+            logger.info("[JobManager] 无历史任务数据文件，跳过恢复")
+            return
+        try:
+            with open(JOBS_PERSIST_FILE, "r", encoding="utf-8") as f:
+                raw_jobs = json.load(f)
+            recovered = 0
+            for job_id, job_data in raw_jobs.items():
+                # 将字符串状态恢复为 JobStatus 枚举
+                status_str = job_data.get("status", "")
+                try:
+                    job_data["status"] = JobStatus(status_str)
+                except ValueError:
+                    job_data["status"] = JobStatus.FAILED
+                # 非终态任务标记为 FAILED（重启后实际任务已丢失）
+                if job_data["status"] in _NON_TERMINAL_STATUSES:
+                    old_status = job_data["status"].value
+                    job_data["status"] = JobStatus.FAILED
+                    job_data["message"] = f"服务重启，任务未能完成（重启前状态: {old_status}）"
+                    logger.warning(f"[Job {job_id}] 重启恢复: {old_status} → failed")
+                    recovered += 1
+                self._jobs[job_id] = job_data
+            logger.info(f"[JobManager] 从磁盘恢复 {len(raw_jobs)} 个任务，{recovered} 个标记为 failed")
+            if recovered > 0:
+                self._save_to_disk()
+        except Exception as e:
+            logger.error(f"[JobManager] 恢复任务数据失败: {e}")
+
+    def _save_to_disk(self) -> None:
+        """将任务数据原子写入磁盘（tmp + os.replace）"""
+        try:
+            # 序列化：将 JobStatus 枚举转为字符串
+            serializable = {}
+            for job_id, job_data in self._jobs.items():
+                entry = {}
+                for k, v in job_data.items():
+                    if isinstance(v, JobStatus):
+                        entry[k] = v.value
+                    else:
+                        entry[k] = v
+                serializable[job_id] = entry
+            tmp_path = JOBS_PERSIST_FILE + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(serializable, f, ensure_ascii=False, indent=2, default=str)
+            os.replace(tmp_path, JOBS_PERSIST_FILE)
+        except Exception as e:
+            logger.error(f"[JobManager] 持久化任务数据失败: {e}")
 
     def set_pipeline_runner(self, runner: Callable[..., Coroutine[Any, Any, None]]) -> None:
         """
@@ -60,6 +128,7 @@ class JobManager:
         self._cancel_events[job_id] = asyncio.Event()
 
         logger.info(f"[Job {job_id}] 任务已创建（QUEUED）: 名称={data.get('task_name', '未命名')}")
+        self._save_to_disk()
 
     def enqueue_job(self, job_id: str) -> None:
         """
@@ -79,6 +148,7 @@ class JobManager:
         if queue_position > 1:
             job["message"] = f"排队中（第 {queue_position} 位），等待前面的任务完成"
 
+        self._save_to_disk()
         # 尝试启动下一个任务
         self._try_start_next()
 
@@ -119,6 +189,7 @@ class JobManager:
         job["status"] = JobStatus.PENDING
         job["message"] = "任务即将开始执行..."
         logger.info(f"[Job {next_job_id}] 出队，开始执行流水线")
+        self._save_to_disk()
 
         # 更新队列中剩余任务的排队位置消息
         for i, queued_id in enumerate(self._queue):
@@ -166,6 +237,7 @@ class JobManager:
 
         # 清理取消信号（可选，节省内存）
         self._cancel_events.pop(job_id, None)
+        self._save_to_disk()
 
     def cancel_job(self, job_id: str) -> dict:
         """
@@ -204,6 +276,7 @@ class JobManager:
                         queued_job["message"] = f"排队中（第 {i + 1} 位），等待前面的任务完成"
 
             self._cancel_events.pop(job_id, None)
+            self._save_to_disk()
             return {"status": "ok", "message": f"排队中的任务 {job_id} 已取消"}
 
         # 正在运行的任务：设置取消信号 + cancel asyncio.Task
@@ -230,6 +303,7 @@ class JobManager:
             return
         job.update(kwargs)
         logger.info(f"[Job {job_id}] 状态更新: {kwargs.get('status', '')} {kwargs.get('message', '')}")
+        self._save_to_disk()
 
     def get_progress(self, job_id: str) -> ProgressResponse:
         """获取任务进度"""

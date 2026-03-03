@@ -3,12 +3,10 @@
     "title": "VlogForge - AI Vlog 带货视频生成器",
     "name": "VlogForge"
   },
-
   "nav": {
     "items": "物品",
     "models": "人物"
   },
-
   "asset": {
     "items": "物品",
     "models": "人物",
@@ -43,7 +41,6 @@
     "undoDelete": "撤销",
     "deleteUndone": "已撤销删除"
   },
-
   "button": {
     "generate": "开始生成",
     "quickstart": "一句话快速创建素材",
@@ -63,7 +60,6 @@
     "regenerate": "重新生成",
     "regenerating": "重新生成中..."
   },
-
   "form": {
     "oneLineDesc": "一句话描述",
     "oneLineDescPlaceholder": "如：帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶 / 开场要搞笑一点",
@@ -81,7 +77,6 @@
     "autoModelDesc": "适合vlog带货的亲和女生，客厅拍摄",
     "genHintNoItem": "请先将物品素材拖入上方槽位"
   },
-
   "slot": {
     "item": "物品",
     "model": "人物",
@@ -94,7 +89,6 @@
     "selectLookFirst": "请先选择造型方案",
     "confirmInfoFirst": "请先完成产品信息确认"
   },
-
   "modal": {
     "createAsset": "创建素材",
     "createItem": "创建物品素材",
@@ -114,7 +108,6 @@
     "selectHint": "点击选择一个{label}：",
     "noLookImage": "暂无造型图"
   },
-
   "detail": {
     "thumbnail": "缩略图",
     "threeView": "三视图",
@@ -133,7 +126,6 @@
     "saved": "已保存",
     "saveFailed": "保存失败: {error}"
   },
-
   "questionnaire": {
     "levelQuestion": "{priority} 级问题",
     "counter": "{current} / {total}",
@@ -150,7 +142,6 @@
     "writeYourAnswer": "请填写你的回答",
     "answerRequired": "请回答必填项：{label}"
   },
-
   "modelReview": {
     "confirmBtn": "✓ 确认",
     "regenerateBtn": "↻ 重新生成",
@@ -168,7 +159,6 @@
     "adjustFailedWith": "提交失败: {error}",
     "generationFailed": "人物造型生成失败，请重试"
   },
-
   "pipeline": {
     "script": "脚本",
     "images": "分镜图",
@@ -183,7 +173,6 @@
     "videosEst": "~2min",
     "stitchingEst": "~15s"
   },
-
   "toast": {
     "modelCreating": "人物素材创建中，请稍候...",
     "modelCreateSuccess": "{name} 创建成功",
@@ -219,9 +208,9 @@
     "modelSlotCreating": "{name} {status}",
     "createFailed": "创建失败: {error}",
     "modelReadyForReview": "{name} 形象已生成，点击卡片查看",
-    "generationFailedAtStage": "{stage}阶段失败: {error}"
+    "generationFailedAtStage": "{stage}阶段失败: {error}",
+    "pollingTimeout": "连接超时，请检查网络后重试"
   },
-
   "status": {
     "queued": "排队中",
     "script": "生成脚本",
@@ -232,7 +221,6 @@
     "failed": "失败",
     "cancelled": "已取消"
   },
-
   "queue": {
     "title": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m16 3 2.2 2.2M21 3l-3 3\"/><rect x=\"2\" y=\"6\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M2 10h20\"/><path d=\"m7 6 1 4\"/><path d=\"m12 6 1 4\"/><path d=\"m17 6 1 4\"/></svg> 渲染队列",
     "toggleTooltip": "折叠/展开",
@@ -247,7 +235,6 @@
     "cancelConfirm": "确定要取消这个任务吗？",
     "cancelFailed": "取消失败: HTTP {status}"
   },
-
   "result": {
     "storyboard": "分镜图",
     "videoSegments": "视频片段",
@@ -259,35 +246,29 @@
     "productPlacement": "产品植入",
     "download": "下载"
   },
-
   "create": {
     "createItem": "创建物品",
     "createModel": "创建人物"
   },
-
   "platform": {
     "douyin": "抖音 (9:16 竖屏)",
     "xiaohongshu": "小红书 (9:16 竖屏)",
     "youtube": "YouTube (16:9 横屏)",
     "unselected": "未选择"
   },
-
   "section": {
     "generateVideo": "生成视频"
   },
-
   "dock": {
     "generateVideo": "▷ 生成视频",
     "dragHint": "将素材拖到这里开始生成"
   },
-
   "script": {
     "person": "人物",
     "scene": "场景",
     "style": "风格",
     "lighting": "光线"
   },
-
   "storyboard": {
     "title": "分镜图",
     "videoSegments": "视频片段预览"

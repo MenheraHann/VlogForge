@@ -148,6 +148,7 @@ async def text_to_image(
     prompt: str,
     system_instruction: str = "",
     model: str = "",
+    aspect_ratio: str = "9:16",
 ) -> bytes:
     """
     文本生成图片（text2img）。
@@ -156,17 +157,18 @@ async def text_to_image(
         prompt: 图片描述提示词
         system_instruction: 系统指令（可选）
         model: 指定模型（可选，默认使用 IMAGE_GEN_MODEL）
+        aspect_ratio: 画面比例（默认 9:16，YouTube 用 16:9）
 
     返回:
         图片 bytes（PNG 格式）
     """
     use_model = model or IMAGE_GEN_MODEL
     client = _get_client()
-    logger.info(f"[ImageGen] text2img ({use_model}): {prompt[:80]}...")
+    logger.info(f"[ImageGen] text2img ({use_model}, ratio={aspect_ratio}): {prompt[:80]}...")
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
-        image_config=types.ImageConfig(aspect_ratio="9:16"),
+        image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
     )
     if system_instruction:
         config.system_instruction = system_instruction
@@ -187,6 +189,7 @@ async def image_to_image(
     input_images: list[bytes],
     prompt: str,
     system_instruction: str = "",
+    aspect_ratio: str = "9:16",
 ) -> bytes:
     """
     图生图（img2img），基于输入图片和提示词生成新图片。
@@ -196,12 +199,13 @@ async def image_to_image(
         input_images: 输入图片 bytes 列表（可传多张，如素材图组合）
         prompt: 图片修改/生成提示词
         system_instruction: 系统指令（可选）
+        aspect_ratio: 画面比例（默认 9:16，YouTube 用 16:9）
 
     返回:
         生成的图片 bytes（PNG 格式）
     """
     client = _get_client()
-    logger.info(f"[ImageGen] img2img: {len(input_images)} 张输入图, prompt={prompt[:80]}...")
+    logger.info(f"[ImageGen] img2img (ratio={aspect_ratio}): {len(input_images)} 张输入图, prompt={prompt[:80]}...")
 
     # 构建多模态输入：参考图片在前（高优先级）+ 文本指令在后
     contents = []
@@ -213,7 +217,7 @@ async def image_to_image(
 
     config = types.GenerateContentConfig(
         response_modalities=["IMAGE", "TEXT"],
-        image_config=types.ImageConfig(aspect_ratio="9:16"),
+        image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
     )
     if system_instruction:
         config.system_instruction = system_instruction
@@ -234,6 +238,7 @@ async def generate_with_interleaved_output(
     prompt: str,
     input_images: Optional[list[bytes]] = None,
     system_instruction: str = "",
+    aspect_ratio: str = "9:16",
 ) -> tuple[str, list[bytes]]:
     """
     交错输出模式：返回文本 + 图片混合结果。
@@ -244,12 +249,13 @@ async def generate_with_interleaved_output(
         prompt: 提示词
         input_images: 输入图片（可选）
         system_instruction: 系统指令（可选）
+        aspect_ratio: 画面比例（默认 9:16，YouTube 用 16:9）
 
     返回:
         (text, images): 文本描述 + 图片列表
     """
     client = _get_client()
-    logger.info(f"[ImageGen] interleaved: prompt={prompt[:80]}...")
+    logger.info(f"[ImageGen] interleaved (ratio={aspect_ratio}): prompt={prompt[:80]}...")
 
     if input_images:
         contents = [prompt]
@@ -262,7 +268,7 @@ async def generate_with_interleaved_output(
 
     config = types.GenerateContentConfig(
         response_modalities=["TEXT", "IMAGE"],
-        image_config=types.ImageConfig(aspect_ratio="9:16"),
+        image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
     )
     if system_instruction:
         config.system_instruction = system_instruction

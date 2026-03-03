@@ -254,15 +254,18 @@ async def generate_script(
 
     for attempt in range(1, max_retries + 1):
         try:
-            response = await client.aio.models.generate_content(
-                model=DA_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=DA_SCRIPT_SYSTEM_PROMPT,
-                    temperature=0.8,
-                    response_mime_type="application/json",
-                    response_schema=_build_response_schema(),
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=DA_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=DA_SCRIPT_SYSTEM_PROMPT,
+                        temperature=0.8,
+                        response_mime_type="application/json",
+                        response_schema=_build_response_schema(),
+                    ),
                 ),
+                timeout=120,
             )
 
             raw_text = response.text
@@ -467,6 +470,7 @@ async def run_pipeline(
             person_image=person_image,
             product_image=product_image,
             on_frame_done=_on_frame_done,
+            aspect_ratio=job["aspect_ratio"],
         )
 
         # Convert to URLs for frontend display

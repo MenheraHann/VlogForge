@@ -83,15 +83,18 @@ async def _text_analysis(
     delay = 5
     for attempt in range(max_retries + 1):
         try:
-            response = await client.aio.models.generate_content(
-                model=TEXT_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.7,
-                    response_mime_type="application/json",
-                    response_schema=response_schema,
+            response = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=TEXT_MODEL,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        temperature=0.7,
+                        response_mime_type="application/json",
+                        response_schema=response_schema,
+                    ),
                 ),
+                timeout=120,
             )
 
             raw_text = response.text
@@ -480,29 +483,6 @@ async def create_model_asset(
     )
 
     return asset, look_paths
-
-
-# ========== 人物：选择方案后确认 portrait_image（v10） ==========
-
-async def confirm_model_selection(asset: ModelAsset) -> ModelAsset:
-    """
-    v10: 用户选定方案后，将选中的方案图设为 portrait_image，直接确认。
-    选中的图即为 portrait_image（一图多用：UI 缩略图 + 首帧参考 + 分镜参考）。
-    不再需要额外生成头像和三视图。
-    """
-    logger.info(f"[ADA] 人物方案确认: id={asset.id}, selected_look={asset.selected_look}")
-
-    # v10: 选中的方案图就是 portrait_image（一图多用）
-    asset.portrait_image = asset.selected_look
-    asset.status = AssetStatus.CONFIRMED
-    logger.info(f"[ADA] 人物素材已确认: {asset.name}, portrait_image={asset.portrait_image}")
-    return asset
-
-
-# 兼容旧版调用名（main.py 中可能引用 generate_model_images）
-async def generate_model_images(asset: ModelAsset) -> ModelAsset:
-    """兼容旧版：v10 中直接调用 confirm_model_selection"""
-    return await confirm_model_selection(asset)
 
 
 # ========== 一句话快速开始：拆解一句话为物品+人物（含场景）描述 ==========

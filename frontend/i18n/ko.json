@@ -3,12 +3,10 @@
     "title": "VlogForge - AI Vlog 상품 영상 생성기",
     "name": "VlogForge"
   },
-
   "nav": {
     "items": "상품",
     "models": "모델"
   },
-
   "asset": {
     "items": "상품",
     "models": "모델",
@@ -43,7 +41,6 @@
     "undoDelete": "실행 취소",
     "deleteUndone": "삭제가 취소되었습니다"
   },
-
   "button": {
     "generate": "영상 생성",
     "quickstart": "한 줄로 소재 빠른 생성",
@@ -63,7 +60,6 @@
     "regenerate": "다시 생성",
     "regenerating": "다시 생성 중..."
   },
-
   "form": {
     "oneLineDesc": "한 줄 설명",
     "oneLineDescPlaceholder": "예: 욕실에서 아미노산 클렌저를 추천하는 아시아 여성 / 오프닝은 재미있게",
@@ -81,7 +77,6 @@
     "autoModelDesc": "브이로그 상품 소개에 적합한 친근한 여성, 거실에서 촬영",
     "genHintNoItem": "위 슬롯에 상품 소재를 드래그해 주세요"
   },
-
   "slot": {
     "item": "상품",
     "model": "모델",
@@ -94,7 +89,6 @@
     "selectLookFirst": "먼저 룩을 선택해 주세요",
     "confirmInfoFirst": "먼저 상품 정보 확인을 완료해 주세요"
   },
-
   "modal": {
     "createAsset": "소재 생성",
     "createItem": "상품 소재 생성",
@@ -114,7 +108,6 @@
     "selectHint": "클릭하여 {label}를 선택하세요:",
     "noLookImage": "룩 이미지 없음"
   },
-
   "detail": {
     "thumbnail": "썸네일",
     "threeView": "3면도",
@@ -133,7 +126,6 @@
     "saved": "저장 완료",
     "saveFailed": "저장 실패: {error}"
   },
-
   "questionnaire": {
     "levelQuestion": "{priority} 레벨 질문",
     "counter": "{current} / {total}",
@@ -150,7 +142,6 @@
     "writeYourAnswer": "답변을 입력해 주세요",
     "answerRequired": "필수 항목에 답변해 주세요: {label}"
   },
-
   "modelReview": {
     "confirmBtn": "✓ 확인",
     "regenerateBtn": "↻ 다시 생성",
@@ -168,7 +159,6 @@
     "adjustFailedWith": "제출 실패: {error}",
     "generationFailed": "모델 룩 생성에 실패했습니다. 다시 시도해 주세요"
   },
-
   "pipeline": {
     "script": "스크립트",
     "images": "스토리보드",
@@ -183,7 +173,6 @@
     "videosEst": "~2분",
     "stitchingEst": "~15초"
   },
-
   "toast": {
     "modelCreating": "모델 소재 생성 중, 잠시 기다려 주세요...",
     "modelCreateSuccess": "{name} 생성 완료",
@@ -219,9 +208,9 @@
     "modelSlotCreating": "{name} {status}",
     "createFailed": "생성 실패: {error}",
     "modelReadyForReview": "{name} 초상화가 완성되었습니다. 카드를 클릭하여 확인해 주세요",
-    "generationFailedAtStage": "{stage} 단계에서 실패: {error}"
+    "generationFailedAtStage": "{stage} 단계에서 실패: {error}",
+    "pollingTimeout": "연결 시간 초과. 네트워크를 확인하고 다시 시도해 주세요"
   },
-
   "status": {
     "queued": "대기 중",
     "script": "스크립트 생성 중",
@@ -232,7 +221,6 @@
     "failed": "실패",
     "cancelled": "취소됨"
   },
-
   "queue": {
     "title": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m16 3 2.2 2.2M21 3l-3 3\"/><rect x=\"2\" y=\"6\" width=\"20\" height=\"16\" rx=\"2\"/><path d=\"M2 10h20\"/><path d=\"m7 6 1 4\"/><path d=\"m12 6 1 4\"/><path d=\"m17 6 1 4\"/></svg> 렌더 큐",
     "toggleTooltip": "접기/펼치기",
@@ -247,7 +235,6 @@
     "cancelConfirm": "이 작업을 취소하시겠습니까?",
     "cancelFailed": "취소 실패: HTTP {status}"
   },
-
   "result": {
     "storyboard": "스토리보드",
     "videoSegments": "영상 세그먼트",
@@ -259,35 +246,29 @@
     "productPlacement": "상품 배치",
     "download": "다운로드"
   },
-
   "create": {
     "createItem": "상품 생성",
     "createModel": "모델 생성"
   },
-
   "platform": {
     "douyin": "Douyin (9:16 세로)",
     "xiaohongshu": "Xiaohongshu (9:16 세로)",
     "youtube": "YouTube (16:9 가로)",
     "unselected": "미선택"
   },
-
   "section": {
     "generateVideo": "영상 생성"
   },
-
   "dock": {
     "generateVideo": "▷ 영상 생성",
     "dragHint": "소재를 여기에 드래그하여 생성"
   },
-
   "script": {
     "person": "인물",
     "scene": "장면",
     "style": "스타일",
     "lighting": "조명"
   },
-
   "storyboard": {
     "title": "스토리보드",
     "videoSegments": "영상 세그먼트 미리보기"

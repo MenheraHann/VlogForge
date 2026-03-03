@@ -766,6 +766,10 @@ function openCreateModal(type, autoBindSlot) {
   });
 
   function renderModalPreview() {
+    // W10: 清除前先释放已有的 blob URL，避免内存泄漏
+    preview.querySelectorAll("img").forEach((img) => {
+      if (img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+    });
     if (createFiles.length === 0) { placeholder.style.display = "flex"; preview.innerHTML = ""; return; }
     placeholder.style.display = "none";
     preview.innerHTML = "";
@@ -885,7 +889,16 @@ async function handleItemCreate(desc, files, autoBindSlot) {
   }
 }
 
-function closeCreateModal() { $("#create-modal").style.display = "none"; }
+function closeCreateModal() {
+  // W10: 关闭模态框时释放所有 blob URL，防止内存泄漏
+  const preview = $("#create-upload-preview");
+  if (preview) {
+    preview.querySelectorAll("img").forEach((img) => {
+      if (img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+    });
+  }
+  $("#create-modal").style.display = "none";
+}
 $("#modal-close").addEventListener("click", closeCreateModal);
 $("#create-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
 
@@ -1961,10 +1974,13 @@ function startSSE(jobId) {
 }
 
 function startPolling(jobId) {
+  const MAX_RETRIES = 30; // 最多重试 30 次（2s 间隔 = 60 秒）
+  let retryCount = 0;
   const interval = setInterval(async () => {
     try {
       const res = await fetch(`/api/status/${jobId}`);
       const data = await res.json();
+      retryCount = 0; // 成功响应时重置计数器
       updateProgress(data);
       if (data.status === "completed" || data.status === "failed") {
         clearInterval(interval);
@@ -1979,7 +1995,17 @@ function startPolling(jobId) {
           lastKnownStage = null;
         }
       }
-    } catch { /* 继续轮询 */ }
+    } catch {
+      retryCount++;
+      if (retryCount >= MAX_RETRIES) {
+        clearInterval(interval);
+        localStorage.removeItem('vlogforge_job_id');
+        fetchJobQueue();
+        showToast(t('toast.pollingTimeout') || "Connection lost. Please check your network and try again.", "error");
+        lastKnownStage = null;
+      }
+      /* 未达上限，继续轮询 */
+    }
   }, 2000);
 }
 

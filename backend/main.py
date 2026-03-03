@@ -9,6 +9,7 @@ import uuid
 import json
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -39,10 +40,35 @@ from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# 管理器（在 lifespan 之前初始化，供路由引用）
+job_manager = JobManager()
+asset_manager = AssetManager()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动注入 + 关闭清理"""
+    # === 启动 ===
+    job_manager.set_pipeline_runner(run_pipeline)
+    logger.info("[Startup] 流水线执行函数已注入 JobManager")
+    yield
+    # === 关闭 ===
+    logger.info("[Shutdown] 正在优雅关闭...")
+    if job_manager._current_task and not job_manager._current_task.done():
+        logger.info("[Shutdown] 取消当前运行的任务...")
+        job_manager._current_task.cancel()
+        try:
+            await asyncio.wait_for(job_manager._current_task, timeout=5)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+    logger.info("[Shutdown] 关闭完成")
+
+
 app = FastAPI(
     title="VlogForge",
     description="AI Vlog 带货视频生成器 - Gemini Live Agent Challenge",
     version="0.4.0",
+    lifespan=lifespan,
 )
 
 # 跨域（开发阶段允许所有来源）
@@ -53,17 +79,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 管理器
-job_manager = JobManager()
-asset_manager = AssetManager()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """应用启动时注入流水线执行函数到 JobManager，避免循环导入"""
-    job_manager.set_pipeline_runner(run_pipeline)
-    logger.info("[Startup] 流水线执行函数已注入 JobManager")
 
 
 # ========== 健康检查 ==========

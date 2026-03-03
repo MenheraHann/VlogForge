@@ -4,6 +4,7 @@
 通过 StorageBackend 接口实现数据持久化，默认使用 JSON 文件存储
 """
 
+import asyncio
 import logging
 import os
 from typing import Optional, Union
@@ -33,6 +34,8 @@ class AssetManager:
             storage_backend = JsonStorageBackend()
 
         self._storage: StorageBackend = storage_backend
+        # 并发写入保护锁
+        self._persist_lock = asyncio.Lock()
 
         # 从持久层恢复数据（首次启动时为空）
         self._items, self._models, self._counters = self._storage.load_all()
@@ -133,11 +136,31 @@ class AssetManager:
     # ========== 持久化 ==========
 
     def _persist(self) -> None:
-        """将当前内存数据同步写入持久层"""
+        """将当前内存数据同步写入持久层（同步版本，向后兼容）"""
         try:
             self._storage.save_all(self._items, self._models, self._counters)
         except Exception as e:
             logger.error(f"[AssetManager] 持久化失败: {e}")
+
+    async def _persist_async(self) -> None:
+        """将当前内存数据写入持久层（异步版本，带锁保护，防止并发覆盖）"""
+        async with self._persist_lock:
+            try:
+                self._storage.save_all(self._items, self._models, self._counters)
+            except Exception as e:
+                logger.error(f"[AssetManager] 持久化失败: {e}")
+
+    async def save_item_async(self, asset: ItemAsset) -> None:
+        """保存物品素材（异步版本，适用于后台任务并发场景）"""
+        self._items[asset.id] = asset
+        logger.info(f"[AssetManager] 物品已保存: {asset.id} ({asset.name})")
+        await self._persist_async()
+
+    async def save_model_async(self, asset: ModelAsset) -> None:
+        """保存人物素材（异步版本，适用于后台任务并发场景）"""
+        self._models[asset.id] = asset
+        logger.info(f"[AssetManager] 人物已保存: {asset.id} ({asset.name})")
+        await self._persist_async()
 
     # ========== ID 生成 ==========
 
