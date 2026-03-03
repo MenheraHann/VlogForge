@@ -8,7 +8,7 @@ import logging
 import os
 from typing import Optional, Union
 
-from backend.models import AssetStatus, AssetType, GameAsset, ItemAsset, ModelAsset
+from backend.models import AssetStatus, AssetType, GameAsset, ItemAsset, ModelAsset, QuestionnaireStatus
 from backend.services.storage_backend import StorageBackend
 
 logger = logging.getLogger(__name__)
