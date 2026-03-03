@@ -31,7 +31,7 @@ Based on the provided material information (item, person (including filming scen
 - Even if the person and scene remain the same, each frame must differ through distinct actions, expressions, composition, or prop positioning
 - BAD example: Frame 1 "girl sitting on sofa smiling" and Frame 3 "girl sitting on sofa smiling" → duplicate, FORBIDDEN
 - BAD example: Frame 1 "girl sitting on sofa smiling" and Frame 3 "girl sitting on sofa with a smile" → rephrased but visually identical, equally FORBIDDEN
-- CORRECT approach: every frame must have **specific and different actions** (e.g., picking up the product packaging, holding it up to show the camera, looking at the camera while talking, making a casual hand gesture, setting the product down to the side), ensuring that generated images are visually distinct from one another
+- CORRECT approach: every frame must have **specific and different actions** (e.g., picking up the product, holding it up to show the camera, rotating the product to show a different angle, looking at the camera while talking, making a casual hand gesture, setting the product down to the side). The product must appear exactly as provided in ADA material — never alter its form or state. Ensure generated images are visually distinct from one another
 
 ### Frame Prompt Requirements
 - Each frame prompt is a standalone image generation prompt and must be fully self-contained (never write "same as above" or "same as previous")
@@ -88,7 +88,7 @@ Based on the provided material information (item, person (including filming scen
 **Segment Narrative Structure**: Each veo_description must clearly describe:
 1. **Opening state**: What the person is doing at the very beginning of the segment (e.g., "She is sitting naturally, relaxed, as if about to start chatting")
 2. **Subsequent actions**: What actions unfold during the segment, described with micro-level detail (e.g., "She naturally reaches down and picks up the product from beside the bed, bringing it up into frame from below")
-3. **Synchronized dialogue**: Actions and speech happen simultaneously (e.g., "While speaking, she casually holds up the product packaging toward the camera")
+3. **Synchronized dialogue**: Actions and speech happen simultaneously (e.g., "While speaking, she casually holds up the product toward the camera")
 
 **Micro-Action Detail (MUST follow)**:
 - Describe the specific trajectory and manner of every action — not just "picks up the product", but "reaches down with one hand, naturally picks up the product, and brings it close to the camera"
@@ -127,15 +127,19 @@ Based on the provided material information (item, person (including filming scen
 - Vlog-style on-camera format, like a selfie video shot on a phone
 - Dialogue should be conversational, social-media-native, like chatting with a close friend
 - Opening must hook the viewer (question/pain point/relatable moment); ending must include a call to action
-- Product placement should feel natural and unforced — the person ONLY shows/displays the product packaging to the camera, like casually showing a friend what they bought
+- Product placement should feel natural and unforced — like casually showing a friend something cool they got
 
 ### Product Display Rule (STRICTLY ENFORCED)
-- The person must ONLY **display/show** the product packaging to the camera — hold it up, show different angles of the packaging
-- **ABSOLUTELY FORBIDDEN**: The person must NOT **use/apply/open/consume** the product on camera. No applying skincare, no opening bottles, no squeezing tubes, no eating food, no trying on accessories
-- Reason: AI-generated product usage scenes produce visual artifacts and look fake. Display-only scenes look natural and convincing
-- The product should appear as a sealed/intact package being shown to the viewer
-- Actions like "picks up the product", "holds it toward camera", "points at the label", "sets it down" are GOOD
-- Actions like "applies it to face", "opens the cap", "squeezes out product", "puts it on" are FORBIDDEN
+- **Faithful reproduction of physical form**: The product's physical appearance (shape, color, structure, packaging state) must match EXACTLY what ADA material provides — do NOT alter, unbox, disassemble, or transform it. If ADA shows a boxed item, show the box; if ADA shows an unboxed device, show the device as-is.
+- The person can: hold it in hand, show different angles, rotate it, point at details, bring it close to camera
+- **ABSOLUTELY FORBIDDEN**: The person must NOT **operate/use/apply/activate** the product on camera
+  - Electronics (game controllers, consoles, phones): hold and show, but do NOT press buttons, push joysticks, detach parts, or turn on the screen
+  - Cosmetics/skincare (bottles, tubes, compacts): hold and show, but do NOT open caps, squeeze out product, pour liquid, or apply to skin
+  - Food/drinks: hold and show, but do NOT eat, drink, open, or pour
+  - Accessories (jewelry, watches, bags): hold and show, but do NOT put on, wear, or try on
+- Reason: AI-generated product operation scenes produce visual artifacts and look fake. Display-only scenes look natural and convincing
+- Actions like "holds the product in hand showing it to camera", "rotates the product to show the label", "points at the product details" are GOOD
+- Actions like "presses the buttons on controller", "opens the cap and pours out", "puts it on her wrist", "plays the game" are FORBIDDEN
 
 ### Self-Check Scoring (self_check)
 - person_match: how well the person description in the script matches the material information (1-5)
@@ -206,8 +210,8 @@ def build_da_script_prompt(
 {extra_block}
 [REMINDERS]
 - segment_id ranges from 1 to {segment_count}
-- At least 2 segments must be marked needs_product=true (product display scenes — show packaging only, NEVER use/apply product on camera)
-- PRODUCT DISPLAY ONLY: The person must NEVER use/apply/open/consume the product on camera. Even if ADA's product info mentions usage methods or application tips, DA must NOT create any scene where the person tries or uses the product. Only hold, show, and point at the sealed packaging.
+- At least 2 segments must be marked needs_product=true (product display scenes — NEVER operate/use the product on camera)
+- PRODUCT DISPLAY ONLY: The product must appear EXACTLY as provided in ADA material — do NOT alter its appearance, shape, structure, or state. The person holds and displays it but must NEVER operate/use/apply/activate it. Even if ADA's product info mentions usage methods, DA must NOT create any scene where the person uses the product. Only hold, show, rotate, and point at it.
 - UPPER BODY ONLY: Every frame prompt must describe head-to-waist framing. No legs, knees, or full-body shots. No actions involving lower body (hugging knees, crossing legs, sitting cross-legged). Only hand gestures, facial expressions, and upper body movements.
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
@@ -256,7 +260,7 @@ def build_da_script_prompt_legacy(
 
 [REMINDERS]
 - segment_id ranges from 1 to {segment_count}
-- At least 2 segments must be marked needs_product=true (product display scenes — show packaging only, NEVER use/apply product on camera)
+- At least 2 segments must be marked needs_product=true (product display scenes — show the product EXACTLY as provided, do NOT alter its appearance/shape/structure, NEVER operate/use it on camera)
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
 - Dialogue length: each segment's dialogue must fit approximately 3 seconds of natural speech; remaining time is for action performance

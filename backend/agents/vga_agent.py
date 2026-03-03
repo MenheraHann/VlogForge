@@ -188,8 +188,9 @@ VEO_FIXED_CAMERA_PREFIX = (
     "IMPORTANT FRAMING INSTRUCTION: "
     "Upper body only — frame the person from head to waist. "
     "No legs, no knees, no full-body shots. "
-    "The person should NOT be shown using, applying, opening, or consuming any product. "
-    "Only hold, display, and show the sealed product packaging to the camera.\n\n"
+    "The person should NOT be shown operating, using, applying, or activating any product. "
+    "The product's physical form must match EXACTLY what ADA material provides — do NOT alter, unbox, disassemble, or transform it. "
+    "Only hold, display, rotate, and show the product to the camera.\n\n"
 )
 
 
