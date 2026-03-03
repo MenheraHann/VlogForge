@@ -13,7 +13,7 @@ from typing import Optional
 from PIL import Image
 from google.genai import types
 
-from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR, IMAGE_GEN_MODEL_PRO
+from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR
 from backend.models import (
     AssetType, AssetStatus, ItemAsset, ModelAsset, GameAsset,
     QuestionnaireStatus, QuestionnaireField,
