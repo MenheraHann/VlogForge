@@ -14,7 +14,7 @@ from google.genai import types
 
 from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR, IMAGE_GEN_MODEL_PRO
 from backend.models import (
-    AssetType, AssetStatus, ItemAsset, ModelAsset,
+    AssetType, AssetStatus, ItemAsset, ModelAsset, GameAsset,
     QuestionnaireStatus, QuestionnaireField,
 )
 from backend.tools.image_gen import (
@@ -30,6 +30,8 @@ from backend.prompts.ada_prompts import (
     ADA_MODEL_SYSTEM_PROMPT,
     ADA_MODEL_IMAGE_PROMPT,
     ADA_QUICKSTART_SYSTEM_PROMPT,
+    ADA_GAME_ANALYZE_SYSTEM_PROMPT,
+    ADA_GAME_CONFIRM_SYSTEM_PROMPT,
     build_item_analyze_prompt,
     build_item_confirm_prompt,
     get_item_analyze_schema,
@@ -38,6 +40,10 @@ from backend.prompts.ada_prompts import (
     get_model_response_schema,
     build_quickstart_prompt,
     get_quickstart_schema,
+    build_game_analyze_prompt,
+    get_game_analyze_schema,
+    build_game_confirm_prompt,
+    get_game_confirm_schema,
 )
 from backend.utils.age_guard import enforce_minimum_age
 
@@ -534,3 +540,152 @@ async def quickstart_parse(
     )
 
     return data
+
+
+# ========== 游戏：方向检测辅助函数 ==========
+
+def _detect_orientation(image_path: str) -> str:
+    """检测图片方向：宽>高=landscape，否则portrait"""
+    from PIL import Image
+    img = Image.open(image_path)
+    w, h = img.size
+    return "landscape" if w > h else "portrait"
+
+
+# ========== 游戏：第 1 步 — 分析 + 生成问卷 ==========
+
+async def analyze_game(
+    asset_id: str,
+    description: str,
+    screenshot: bytes,
+    gameplay_video_bytes: bytes,
+) -> GameAsset:
+    """
+    分析游戏，生成智能问卷（第 1 步）。
+
+    参数:
+        asset_id: 素材 ID
+        description: 用户提供的游戏简述
+        screenshot: 游戏截图 bytes
+        gameplay_video_bytes: 游戏实机录屏 bytes
+
+    返回:
+        带有 questionnaire_fields 的 GameAsset，questionnaire_status=pending。
+        前端根据 questionnaire_fields 渲染表单给用户确认。
+    """
+    logger.info(f"[ADA] 游戏分析: id={asset_id}, desc={description[:50]}...")
+
+    # 保存截图和录屏
+    asset_dir = os.path.join(ASSETS_DIR, asset_id)
+    os.makedirs(asset_dir, exist_ok=True)
+
+    screenshot_path = os.path.join(asset_dir, "screenshot.png")
+    with open(screenshot_path, "wb") as f:
+        f.write(screenshot)
+    logger.info(f"[ADA] 截图已保存: {screenshot_path}")
+
+    gameplay_path = os.path.join(asset_dir, "gameplay.mp4")
+    with open(gameplay_path, "wb") as f:
+        f.write(gameplay_video_bytes)
+    logger.info(f"[ADA] 录屏已保存: {gameplay_path}")
+
+    # 从截图检测屏幕方向
+    detected_orientation = _detect_orientation(screenshot_path)
+    logger.info(f"[ADA] 检测到屏幕方向: {detected_orientation}")
+
+    # 调用 Gemini 分析游戏（传入截图作为输入图片）
+    user_prompt = build_game_analyze_prompt(description)
+    data = await _text_analysis(
+        user_prompt=user_prompt,
+        system_prompt=ADA_GAME_ANALYZE_SYSTEM_PROMPT,
+        response_schema=get_game_analyze_schema(),
+        input_images=[screenshot],
+    )
+
+    logger.info(f"[ADA] 游戏分析完成: {data.get('name')}, 类型={data.get('genre')}")
+
+    # 使用 PIL 检测的方向作为最终结果（比 AI 判断更准确）
+    orientation = detected_orientation
+
+    # 解析问卷字段
+    questionnaire_fields = []
+    for q in data.get("questionnaire", []):
+        questionnaire_fields.append(QuestionnaireField(
+            key=q["key"],
+            label=q["label"],
+            option_a=q.get("option_a", ""),
+            option_b=q.get("option_b", ""),
+            value=q.get("value", ""),
+            priority=q.get("priority", "P1"),
+            source=q.get("source", "ai_generated"),
+            required=q.get("required", True),
+        ))
+
+    # 解析卖点
+    selling_points = data.get("selling_points", {"P0": [], "P1": [], "P2": []})
+
+    return GameAsset(
+        id=asset_id,
+        name=data.get("name", ""),
+        genre=data.get("genre", ""),
+        orientation=orientation,
+        description=description,
+        selling_points=selling_points,
+        questionnaire_status=QuestionnaireStatus.PENDING,
+        questionnaire_fields=questionnaire_fields,
+        full_description=data.get("full_description", ""),
+        screenshot_path=screenshot_path,
+        gameplay_video_path=gameplay_path,
+        original_images=[screenshot_path],
+        status=AssetStatus.PENDING,
+    )
+
+
+# ========== 游戏：第 2 步 — 确认问卷 + 生成最终档案 ==========
+
+async def confirm_game(
+    asset: GameAsset,
+    confirmed_fields: list[dict],
+) -> GameAsset:
+    """
+    用户确认问卷后，生成最终游戏档案（第 2 步）。
+
+    与 confirm_item 不同，游戏不需要生成图片（使用用户上传的截图）。
+
+    参数:
+        asset: 第 1 步返回的 GameAsset（含问卷）
+        confirmed_fields: 用户确认后的字段列表 [{key, label, value, priority, source}]
+
+    返回:
+        更新后的 GameAsset
+    """
+    logger.info(f"[ADA] 游戏确认: id={asset.id}, 字段数={len(confirmed_fields)}")
+
+    # 更新 selling_points（用户可能修改了卖点）
+    for f in confirmed_fields:
+        if f.get("priority") == "P0" and f.get("value"):
+            if f["value"] not in asset.selling_points.get("P0", []):
+                asset.selling_points.setdefault("P0", []).append(f["value"])
+
+    # 调用 Gemini 生成最终游戏档案
+    user_prompt = build_game_confirm_prompt(confirmed_fields, asset.selling_points)
+    data = await _text_analysis(
+        user_prompt=user_prompt,
+        system_prompt=ADA_GAME_CONFIRM_SYSTEM_PROMPT,
+        response_schema=get_game_confirm_schema(),
+    )
+
+    # 更新 asset 字段
+    asset.features = data.get("features", "")
+    asset.full_description = data.get("full_description", asset.full_description)
+    asset.intro_line = data.get("intro_line_suggestion", "")
+    asset.questionnaire_status = QuestionnaireStatus.COMPLETED
+    asset.status = AssetStatus.CONFIRMED
+
+    logger.info(
+        f"[ADA] 游戏档案完成: {asset.name}, "
+        f"features={asset.features[:60]}..., "
+        f"intro_line={asset.intro_line[:60]}..."
+    )
+
+    return asset

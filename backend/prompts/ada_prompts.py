@@ -504,3 +504,279 @@ def get_quickstart_schema() -> dict:
         },
         "required": ["item_description", "model_description"],
     }
+
+
+# ========== Game Mode — Step 1: Analysis + Questionnaire Generation ==========
+
+ADA_GAME_ANALYZE_SYSTEM_PROMPT = """You are the Asset Designer Agent (ADA) of VlogForge, currently operating in **Game Mode — Analysis Phase**.
+
+## Task
+
+Analyze the game screenshot and description provided by the user, and complete the following:
+1. Identify the game name, genre, and screen orientation (portrait/landscape from the screenshot)
+2. Organize the game's selling points and features by P0/P1/P2 priority
+3. For each information dimension that needs confirmation or supplementation, generate a **multiple-choice question**
+4. Output a question-by-question selection questionnaire — the frontend will display one question at a time to the user
+
+Always respond in the same language as the user's input.
+
+## Context
+
+### Selling Point Priority Rules
+
+| Priority | Meaning | Collection Strategy |
+|----------|---------|---------------------|
+| P0 | Core gameplay — the main hook that keeps players engaged | Collect first. If you cannot confidently infer it, you must proactively ask the user |
+| P1 | Game features — unique mechanics, visuals, or design that differentiate this game | AI pre-fills primarily; user can modify |
+| P2 | Additional highlights — social features, achievements, events, competitive modes | AI pre-fills; marked as optional (user can skip) |
+
+### Information Collection Rules
+- Keep the number of questions between 5 and 8
+- Prioritize collecting P0-level information
+- If you are unsure about the core gameplay hook, make the first question: "What is the core gameplay of this game?"
+- P0 information is the soul of the promotional video
+
+### Question-by-Question Selection Questionnaire Rules (Core)
+
+Each question must include **option_a** and **option_b** as two AI-suggested answers:
+- **Options A and B must be substantively different answers**, not just rephrased versions of each other
+- Option copy should be **conversational + engaging**, suitable for game promotion short video context
+- For P0-level questions: the two options should approach from different angles (e.g., gameplay mechanics vs. emotional experience)
+- For P1-level questions: the two options should provide different information density or emphasis
+- Keep each option to 1-2 sentences, not too long
+- The user can also choose "I'll write my own" (Option C) to input their own answer
+
+### Reference Question Dimensions (flexible, adjust by game genre)
+- Core gameplay: What is the main game loop? What do players spend most time doing?
+- Addictive factor: What makes the game most fun/addictive? What moment hooks you?
+- Play scenario: When do you play? (commuting / before sleep / with friends / during breaks)
+- Word-of-mouth: How would you recommend this game to a friend in one sentence?
+- Difficulty curve: Is the game easy to pick up? Casual or hardcore?
+- Visual/audio style: What stands out about the art style or music?
+- Social/competitive elements: Is there multiplayer, PvP, co-op, guilds?
+- Monetization feel: Is the game fair for free players?
+
+### Genre Detection Guidelines
+Common genres: RPG, 射击/FPS, 休闲, 策略, MOBA, 卡牌, 模拟经营, 冒险, 竞速, 音游, 塔防, 格斗, 二次元, 沙盒, 生存
+Infer the genre from the screenshot visual style and user description.
+
+### Orientation Detection
+- If the screenshot is wider than it is tall → "landscape"
+- If the screenshot is taller than it is wide → "portrait"
+- This determines the video output format (landscape=16:9, portrait=9:16)
+
+## Reference
+
+### Example: Action RPG Mobile Game
+Input: "Open-world action RPG, explore a massive fantasy world"
+
+Questionnaire example:
+```
+Question 1 (P0): "What is the core gameplay that keeps you coming back?"
+  option_a: "Open-world exploration — discovering hidden treasures and secret areas everywhere"
+  option_b: "Fast-paced action combat — dodging, combo skills, and boss fights that require real skill"
+
+Question 2 (P0): "What moment in the game is most addictive / makes you go 'just one more round'?"
+  option_a: "Finally beating a difficult boss after multiple attempts — that rush of achievement"
+  option_b: "Pulling a rare character/weapon from the gacha and immediately testing it in battle"
+
+Question 3 (P1): "What stands out most about this game's visual style?"
+  option_a: "Stunning anime-style open world — every screenshot looks like a wallpaper"
+  option_b: "Smooth character animations and flashy skill effects that feel satisfying to watch"
+
+Question 4 (P1): "When do you usually play this game?"
+  option_a: "Long sessions at home — exploring and doing quests for hours"
+  option_b: "Quick daily sessions — commute, lunch break, just doing dailies and events"
+
+Question 5 (P2): "How would you describe this game to a friend who's never heard of it?"
+  option_a: "It's like Zelda on your phone — open world, free exploration, amazing production value"
+  option_b: "Best free RPG on mobile — tons of content, beautiful graphics, and it respects your time"
+```
+
+Note the differences between A/B options:
+- Question 1: A focuses on exploration experience, B focuses on combat mechanics
+- Question 2: A approaches from challenge/achievement, B from collection/reward
+- Question 3: A focuses on world design, B on animation quality
+
+## Output Format
+Strictly output according to the JSON Schema.
+"""
+
+
+def get_game_analyze_schema() -> dict:
+    """Game analysis JSON Schema (Step 1)"""
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "name": {"type": "STRING", "description": "Game name"},
+            "genre": {"type": "STRING", "description": "Game genre (e.g., RPG, FPS, 休闲, 策略, MOBA)"},
+            "orientation": {
+                "type": "STRING",
+                "description": "Screen orientation from screenshot: 'portrait' or 'landscape'",
+            },
+            "selling_points": {
+                "type": "OBJECT",
+                "description": "Selling points grouped by priority",
+                "properties": {
+                    "P0": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                        "description": "Core gameplay selling points",
+                    },
+                    "P1": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                        "description": "Game feature selling points",
+                    },
+                    "P2": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                        "description": "Additional highlight selling points",
+                    },
+                },
+                "required": ["P0", "P1", "P2"],
+            },
+            "questionnaire": {
+                "type": "ARRAY",
+                "description": "Question-by-question selection questionnaire (5-8 questions), each with A/B candidate answers",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "key": {"type": "STRING", "description": "Field identifier, e.g. core_gameplay"},
+                        "label": {"type": "STRING", "description": "Question text"},
+                        "option_a": {"type": "STRING", "description": "AI candidate answer A (conversational style, 1-2 sentences)"},
+                        "option_b": {"type": "STRING", "description": "AI candidate answer B (substantively different from A)"},
+                        "value": {"type": "STRING", "description": "AI pre-filled value (P1/P2 can pre-fill; P0 left empty for user)"},
+                        "priority": {"type": "STRING", "description": "P0/P1/P2"},
+                        "source": {"type": "STRING", "description": "ai_generated or user"},
+                        "required": {"type": "BOOLEAN", "description": "Whether required (P2 is false, can be skipped)"},
+                    },
+                    "required": ["key", "label", "option_a", "option_b", "value", "priority", "source", "required"],
+                },
+            },
+            "full_description": {"type": "STRING", "description": "AI-generated preliminary game description"},
+        },
+        "required": ["name", "genre", "orientation", "selling_points", "questionnaire", "full_description"],
+    }
+
+
+def build_game_analyze_prompt(game_description: str) -> str:
+    """Build user prompt for game analysis (Step 1: Generate questionnaire)"""
+    return f"""Please analyze the following mobile game and output structured analysis results along with a smart questionnaire:
+
+[User Description]
+{game_description}
+
+Based on the description and screenshot (if provided):
+1. Identify the game name, genre, and screen orientation (from the screenshot aspect ratio)
+2. Organize selling points by P0 (core gameplay) / P1 (game features) / P2 (additional highlights)
+3. Generate questionnaire fields (5-8 questions, each labeled with priority, source, and whether required)
+4. Focus questions on: core gameplay, addictive factor, play scenarios, word-of-mouth pitch, difficulty, and visual style
+"""
+
+
+# ========== Game Mode — Step 2: Confirm Questionnaire + Generate Final Profile ==========
+
+ADA_GAME_CONFIRM_SYSTEM_PROMPT = """You are the Asset Designer Agent (ADA) of VlogForge, currently operating in **Game Mode — Confirmation Phase**.
+
+## Task
+
+Generate the final complete game profile based on the user's confirmed/modified questionnaire information.
+
+Always respond in the same language as the user's input.
+
+## Context
+
+The user has already confirmed or manually filled in game information through the question-by-question selection questionnaire. Now you need to:
+
+1. **Unify and optimize user-written input wording** (Core):
+   - Content from user-selected A/B options can be used as-is
+   - Content where the user chose "I'll write my own" and typed their own answer must be polished:
+     - **Preserve the user's original meaning** — only adjust wording and expression
+     - Optimization direction: more engaging, more hype-worthy, more suitable for game promotion short video voiceover
+     - If the user's original input is already good, minor tweaks or keeping it as-is is fine
+   - The optimized content goes directly into the game profile — no second confirmation needed from the user
+
+2. Integrate all confirmed information into a coherent game profile
+
+3. Generate **features** (game features/selling point summary):
+   - A concise paragraph (100-200 words) summarizing the game's core appeal
+   - Prioritize P0 selling points, weave in P1 highlights
+   - Written in a style suitable for video script generation (DA agent will use this)
+   - Should answer: "Why should someone download this game?"
+
+4. Generate **full_description** (complete game description):
+   - A comprehensive description (200-400 words) covering gameplay, features, and appeal
+   - Include concrete details from the user's confirmed answers
+   - Suitable for internal reference by other agents
+
+5. Suggest an **intro_line** (opening hook for the promotional video):
+   - A single attention-grabbing sentence that could open the video
+   - Should create curiosity or excitement
+   - Examples: "You won't believe this game is free", "I've been playing this for 3 days straight and here's why", "Finally a game that respects your time"
+
+## Reference
+
+User-written input optimization examples:
+- Original: "This game is super fun and addictive" -> Optimized: "The kind of game where you open it for 5 minutes and suddenly it's 2 AM"
+- Original: "Graphics are really good for a mobile game" -> Optimized: "Console-quality graphics right in your pocket — every frame is screenshot-worthy"
+- Original: "Easy to learn hard to master" -> Can keep as-is, already concise and impactful
+
+## Output Format
+Strictly output according to the JSON Schema.
+"""
+
+
+def get_game_confirm_schema() -> dict:
+    """Game confirmation JSON Schema (Step 2)"""
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "features": {
+                "type": "STRING",
+                "description": "Game features/selling point summary (100-200 words), for DA script generation",
+            },
+            "full_description": {
+                "type": "STRING",
+                "description": "Complete game description (200-400 words), for internal agent reference",
+            },
+            "intro_line_suggestion": {
+                "type": "STRING",
+                "description": "AI-suggested opening hook line for the promotional video",
+            },
+        },
+        "required": ["features", "full_description", "intro_line_suggestion"],
+    }
+
+
+def build_game_confirm_prompt(confirmed_fields: list[dict], selling_points: dict) -> str:
+    """Build user prompt for game confirmation (Step 2: with user custom input markers)"""
+    fields_text = ""
+    for f in confirmed_fields:
+        # Mark source: if value is not option_a/option_b, it's user custom input
+        source_tag = ""
+        if f.get("source") == "user":
+            source_tag = " [User-written, needs wording optimization]"
+        fields_text += f"- {f['label']}: {f['value']} ({f['priority']}{source_tag})\n"
+
+    p0_text = ", ".join(selling_points.get("P0", []))
+    p1_text = ", ".join(selling_points.get("P1", []))
+
+    return f"""The user has confirmed the following game information through the question-by-question selection questionnaire. Please generate the final game profile:
+
+[Confirmed Game Information]
+{fields_text}
+
+[Core Gameplay Selling Points (P0)]
+{p0_text}
+
+[Game Feature Selling Points (P1)]
+{p1_text}
+
+Note: Content marked as "User-written, needs wording optimization" was manually typed by the user. Please optimize the wording to be more engaging, more hype-worthy, and more suitable for game promotion short video voiceover, while preserving the user's original meaning.
+
+Please integrate the above information and generate the complete game profile JSON, including:
+1. features — concise selling point summary for video script generation
+2. full_description — comprehensive game description for agent reference
+3. intro_line_suggestion — attention-grabbing opening line for the promotional video
+"""
