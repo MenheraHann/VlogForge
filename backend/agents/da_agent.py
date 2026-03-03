@@ -23,8 +23,10 @@ from backend.agents import va_agent, vga_agent
 from backend.tools import ffmpeg_tools
 from backend.prompts.da_prompts import (
     DA_SCRIPT_SYSTEM_PROMPT,
+    DA_GAME_SCRIPT_SYSTEM_PROMPT,
     build_da_script_prompt,
     build_da_script_prompt_legacy,
+    build_da_game_script_prompt,
 )
 from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
 from backend.utils.age_guard import enforce_minimum_age
@@ -116,6 +118,10 @@ def _build_response_schema() -> dict:
                             "type": "STRING",
                             "description": "Veo video generation description: written in English, with spoken dialogue portions in the character's language (wrapped in quotes). Include opening state, micro-actions, emotional direction, and anti-pattern negatives.",
                         },
+                        "is_compositor_segment": {
+                            "type": "BOOLEAN",
+                            "description": "Whether this segment is a compositor segment (gameplay footage composited by FFmpeg, not AI-generated). Only Segment 3 in game mode should be true.",
+                        },
                     },
                     "required": [
                         "segment_id",
@@ -125,6 +131,7 @@ def _build_response_schema() -> dict:
                         "frame_end_prompt",
                         "needs_product",
                         "veo_description",
+                        "is_compositor_segment",
                     ],
                 },
             },
@@ -231,24 +238,33 @@ async def generate_script(
     segment_count: int,
     max_retries: int = 2,
     retry_feedback: str = "",
+    mode: str = "default",
 ) -> ScriptOutput:
     """
     Call Gemini to generate a vlog product promotion script (DA direct generation, former TA logic merged in).
 
     Args:
-        user_prompt: Complete user prompt (built by build_da_script_prompt or legacy version)
+        user_prompt: Complete user prompt (built by build_da_script_prompt, build_da_game_script_prompt, or legacy version)
         segment_count: Expected number of segments
         max_retries: Max retry count on JSON parse failure
         retry_feedback: Feedback from self_check failure for re-generation
+        mode: Generation mode — "default" for product promotion, "game" for game promotion (uses DA_GAME_SCRIPT_SYSTEM_PROMPT)
     """
     client = _get_client()
+
+    # 根据模式选择系统提示词
+    system_prompt = DA_GAME_SCRIPT_SYSTEM_PROMPT if mode == "game" else DA_SCRIPT_SYSTEM_PROMPT
+
+    # 游戏模式强制 4 段
+    if mode == "game":
+        segment_count = 4
 
     # If retry feedback exists, append it to the user prompt
     prompt = user_prompt
     if retry_feedback:
         prompt += f"\n\n[Retry Feedback]\n{retry_feedback}\nPlease improve the script based on the issues above."
 
-    logger.info(f"[DA] Starting script generation: segment_count={segment_count}")
+    logger.info(f"[DA] Starting script generation: segment_count={segment_count}, mode={mode}")
 
     last_error = None
 
@@ -258,7 +274,7 @@ async def generate_script(
                 model=DA_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=DA_SCRIPT_SYSTEM_PROMPT,
+                    system_instruction=system_prompt,
                     temperature=0.8,
                     response_mime_type="application/json",
                     response_schema=_build_response_schema(),
@@ -279,6 +295,20 @@ async def generate_script(
                 logger.warning(
                     f"[DA] Segment count mismatch: expected {segment_count}, got {len(script.segments)}"
                 )
+
+            # 游戏模式额外校验：必须恰好 4 段，且第 3 段是合成器分段
+            if mode == "game":
+                if len(script.segments) != 4:
+                    raise ValueError(
+                        f"[DA] Game mode requires exactly 4 segments, got {len(script.segments)}"
+                    )
+                # 确保第 3 段（index 2）标记为合成器分段
+                seg3 = script.segments[2]
+                if not seg3.is_compositor_segment:
+                    logger.warning(
+                        "[DA] Game mode: Segment 3 missing is_compositor_segment=true, forcing it"
+                    )
+                    seg3.is_compositor_segment = True
 
             # Validate frame chain + frame uniqueness (hard validation, retry on failure)
             chain_issues = _validate_frame_chain(script)
@@ -345,7 +375,33 @@ async def run_pipeline(
         )
 
         # Build user prompt (select based on job mode)
-        if job.get("mode") == "v2_assets":
+        job_mode = job.get("mode", "")
+        script_mode = "default"  # generate_script 的 mode 参数
+
+        if job_mode == "v2_game":
+            # v2 游戏推广模式：固定 4 段结构，DA_GAME_SCRIPT_SYSTEM_PROMPT
+            game = job["game"]
+            model = job.get("model") or {}
+            scene_context = model.get("scene_context", "")
+            model_language = model.get("language", "Mandarin Chinese")
+            safe_appearance = enforce_minimum_age(model.get("appearance", ""))
+            user_prompt = build_da_game_script_prompt(
+                game_name=game["name"],
+                game_features=game.get("features", ""),
+                game_genre=game.get("genre", ""),
+                game_orientation=game.get("orientation", "portrait"),
+                model_appearance=safe_appearance,
+                model_personality=model.get("personality", ""),
+                model_outfits=model.get("outfits", ""),
+                scene_context=scene_context,
+                model_language=model_language,
+                intro_line=game.get("intro_line", ""),
+                extra_requirements=job.get("extra_requirements", ""),
+            )
+            script_mode = "game"
+            logger.info(f"[DA][Job {job_id}] Game mode: {game['name']}, orientation={game.get('orientation', 'portrait')}")
+
+        elif job_mode == "v2_assets":
             # v2 mode: based on asset profiles (v10: scene sourced from model/talent assets)
             item = job["item"]
             model = job["model"]
@@ -385,6 +441,7 @@ async def run_pipeline(
         script = await generate_script(
             user_prompt=user_prompt,
             segment_count=job["segment_count"],
+            mode=script_mode,
         )
 
         # ---- self_check validation (D6 decision) ----
@@ -400,6 +457,7 @@ async def run_pipeline(
                 user_prompt=user_prompt,
                 segment_count=job["segment_count"],
                 retry_feedback=feedback,
+                mode=script_mode,
             )
             logger.info(
                 f"[DA][Job {job_id}] Re-run complete, self_check={script.self_check.overall_quality}/5"
@@ -437,7 +495,13 @@ async def run_pipeline(
 
         # Load asset images from job data (v10: person image changed to portrait_image, includes scene)
         person_image = _load_asset_image(job, "model", "portrait_image")
-        product_image = _load_first_product_image(job)
+
+        if job_mode == "v2_game":
+            # 游戏模式：用游戏截图作为 "product_image"（VA 会用它来生成手机展示帧）
+            product_image = _load_game_screenshot(job)
+            logger.info(f"[DA][Job {job_id}] Game mode: loaded game screenshot as product image")
+        else:
+            product_image = _load_first_product_image(job)
 
         storyboard_dir = os.path.join(ARTIFACTS_DIR, job_id, "storyboard")
 
@@ -518,6 +582,44 @@ async def run_pipeline(
 
         segment_dir = os.path.join(ARTIFACTS_DIR, job_id, "segments")
 
+        # 识别需要跳过 Veo 的合成器分段（游戏模式下，Segment 3 是 FFmpeg 合成的游戏画面）
+        compositor_segment_indices = set()
+        for i, seg in enumerate(script.segments):
+            if seg.is_compositor_segment:
+                compositor_segment_indices.add(i)
+                logger.info(
+                    f"[DA][Job {job_id}] Segment {seg.segment_id} (index {i}) is a compositor segment, "
+                    f"will skip Veo generation"
+                )
+
+        # 构建仅包含需要 Veo 生成的分段的脚本（跳过合成器分段）
+        # VGA 只处理非合成器分段；合成器分段的视频由 CompositorService 在 Task 10 中生成
+        veo_script = script
+        veo_storyboard_paths = storyboard_paths
+        if compositor_segment_indices:
+            # 创建一个仅包含 Veo 分段的 ScriptOutput 副本
+            veo_segments = [seg for i, seg in enumerate(script.segments) if i not in compositor_segment_indices]
+            veo_script = ScriptOutput(
+                title=script.title,
+                voice_anchor=script.voice_anchor,
+                style_guide=script.style_guide,
+                segments=veo_segments,
+                self_check=script.self_check,
+            )
+            # 对应的 storyboard 帧也需要筛选（每个分段对应 start_frame + end_frame，共享帧只算一次）
+            # 非合成器分段的帧索引：每个分段 i 使用 storyboard[i] (start) 和 storyboard[i+1] (end)
+            veo_frame_indices = set()
+            for i in range(len(script.segments)):
+                if i not in compositor_segment_indices:
+                    veo_frame_indices.add(i)
+                    veo_frame_indices.add(i + 1)
+            veo_storyboard_paths = [storyboard_paths[i] for i in sorted(veo_frame_indices)]
+            logger.info(
+                f"[DA][Job {job_id}] Veo generation: {len(veo_segments)} segments "
+                f"(skipped {len(compositor_segment_indices)} compositor segments), "
+                f"{len(veo_storyboard_paths)} storyboard frames"
+            )
+
         # Incrementally push video segment URLs to frontend
         segment_urls_so_far = []
 
@@ -533,26 +635,46 @@ async def run_pipeline(
                 segment_urls=list(segment_urls_so_far),
             )
 
-        segment_paths = await vga_agent.generate_segments(
-            script=script,
-            storyboard_paths=storyboard_paths,
+        veo_segment_paths = await vga_agent.generate_segments(
+            script=veo_script,
+            storyboard_paths=veo_storyboard_paths,
             output_dir=segment_dir,
             aspect_ratio=job["aspect_ratio"],
             voice_anchor=script.voice_anchor,
             on_segment_done=_on_segment_done,
         )
 
+        # 重组 segment_paths：将 Veo 生成的片段和合成器片段按原始顺序排列
+        # TODO(Task 10): CompositorService 会生成合成器分段的视频，届时此处需要将其插入正确位置
+        if compositor_segment_indices:
+            segment_paths = []
+            veo_idx = 0
+            for i in range(len(script.segments)):
+                if i in compositor_segment_indices:
+                    # 合成器分段：暂时用 None 占位，Task 10 实现 CompositorService 后替换
+                    segment_paths.append(None)
+                    logger.info(
+                        f"[DA][Job {job_id}] Segment {i+1} is compositor — placeholder (CompositorService TBD in Task 10)"
+                    )
+                else:
+                    segment_paths.append(veo_segment_paths[veo_idx])
+                    veo_idx += 1
+        else:
+            segment_paths = veo_segment_paths
+
+        # 过滤掉 None 占位（合成器分段），只统计已生成的视频
+        valid_segment_paths = [p for p in segment_paths if p is not None]
         segment_urls = [
             f"/artifacts/{job_id}/segments/{os.path.basename(p)}"
-            for p in segment_paths
+            for p in valid_segment_paths
         ]
         job_manager.update_job(
             job_id,
             progress=0.82,
-            message=f"All video segments complete: {len(segment_paths)} segments",
+            message=f"Video segments complete: {len(valid_segment_paths)} Veo + {len(compositor_segment_indices)} compositor",
             segment_urls=segment_urls,
         )
-        logger.info(f"[DA][Job {job_id}] VGA complete: {len(segment_paths)} segments")
+        logger.info(f"[DA][Job {job_id}] VGA complete: {len(valid_segment_paths)} Veo segments")
 
         # ---- Cancel checkpoint 3: After VGA video generation ----
         if _is_cancelled():
@@ -577,9 +699,18 @@ async def run_pipeline(
         final_dir = os.path.join(ARTIFACTS_DIR, job_id)
         final_path = os.path.join(final_dir, "final.mp4")
 
+        # 过滤掉 None 占位的合成器分段（Task 10 实现 CompositorService 后，这些占位会被真实路径替换）
+        # TODO(Task 10): 合成器分段视频生成后，segment_paths 中不再有 None，此处过滤可移除
+        stitch_paths = [p for p in segment_paths if p is not None]
+        if len(stitch_paths) < len(segment_paths):
+            logger.warning(
+                f"[DA][Job {job_id}] Stitching with {len(stitch_paths)}/{len(segment_paths)} segments "
+                f"({len(segment_paths) - len(stitch_paths)} compositor segments pending Task 10)"
+            )
+
         # Start/end frame mode: adjacent segments share one frame (prev end frame = next start frame), need to trim overlap
         await ffmpeg_tools.stitch_segments(
-            segment_paths=segment_paths,
+            segment_paths=stitch_paths,
             output_path=final_path,
             trim_overlap_frames=True,
         )
@@ -654,6 +785,43 @@ def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[b
     except Exception as e:
         logger.warning(f"[DA] Failed to load asset image ({asset_key}/{image_field}): {e}")
         return None
+
+
+def _load_game_screenshot(job: dict) -> Optional[bytes]:
+    """
+    Load game screenshot image from job data (used in v2_game mode as the "product image").
+    游戏截图用于 VA 生成手机展示帧（Segment 2 的手机屏幕内容）。
+
+    Args:
+        job: Job data dict (must contain "game" key with "screenshot_path")
+
+    Returns:
+        Image bytes, or None if file does not exist
+    """
+    game = job.get("game")
+    if not game:
+        return None
+
+    # 优先使用游戏截图
+    screenshot_path = game.get("screenshot_path")
+    if screenshot_path and os.path.exists(screenshot_path):
+        try:
+            with open(screenshot_path, "rb") as f:
+                return f.read()
+        except Exception as e:
+            logger.warning(f"[DA] Failed to load game screenshot: {e}")
+
+    # 回退到原始上传图片
+    originals = game.get("original_images", [])
+    for path in originals:
+        if path and os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    return f.read()
+            except Exception:
+                continue
+
+    return None
 
 
 def _load_first_product_image(job: dict) -> Optional[bytes]:
