@@ -131,7 +131,7 @@ def _build_response_schema() -> dict:
                         "frame_end_prompt",
                         "needs_product",
                         "veo_description",
-                        "is_compositor_segment",
+                        # is_compositor_segment intentionally NOT required — defaults to false in Pydantic
                     ],
                 },
             },
@@ -290,13 +290,13 @@ async def generate_script(
             raw_data = json.loads(raw_text)
             script = ScriptOutput(**raw_data)
 
-            # Validate segment count
-            if len(script.segments) != segment_count:
+            # Validate segment count (skip in game mode — game has its own stricter check below)
+            if mode != "game" and len(script.segments) != segment_count:
                 logger.warning(
                     f"[DA] Segment count mismatch: expected {segment_count}, got {len(script.segments)}"
                 )
 
-            # 游戏模式额外校验：必须恰好 4 段，且第 3 段是合成器分段
+            # Game mode: must be exactly 4 segments, segment 3 is compositor
             if mode == "game":
                 if len(script.segments) != 4:
                     raise ValueError(
@@ -595,36 +595,12 @@ async def run_pipeline(
                     f"will skip Veo generation"
                 )
 
-        # 构建仅包含需要 Veo 生成的分段的脚本（跳过合成器分段）
-        # VGA 只处理非合成器分段；合成器分段的视频由 CompositorService 在 Task 10 中生成
-        veo_script = script
-        veo_storyboard_paths = storyboard_paths
-        if compositor_segment_indices:
-            # 创建一个仅包含 Veo 分段的 ScriptOutput 副本
-            veo_segments = [seg for i, seg in enumerate(script.segments) if i not in compositor_segment_indices]
-            veo_script = ScriptOutput(
-                title=script.title,
-                voice_anchor=script.voice_anchor,
-                style_guide=script.style_guide,
-                segments=veo_segments,
-                self_check=script.self_check,
-            )
-            # 对应的 storyboard 帧也需要筛选（每个分段对应 start_frame + end_frame，共享帧只算一次）
-            # 非合成器分段的帧索引：每个分段 i 使用 storyboard[i] (start) 和 storyboard[i+1] (end)
-            veo_frame_indices = set()
-            for i in range(len(script.segments)):
-                if i not in compositor_segment_indices:
-                    veo_frame_indices.add(i)
-                    veo_frame_indices.add(i + 1)
-            veo_storyboard_paths = [storyboard_paths[i] for i in sorted(veo_frame_indices)]
-            logger.info(
-                f"[DA][Job {job_id}] Veo generation: {len(veo_segments)} segments "
-                f"(skipped {len(compositor_segment_indices)} compositor segments), "
-                f"{len(veo_storyboard_paths)} storyboard frames"
-            )
-
+        # Build VGA work plan: split non-compositor segments into contiguous chains
+        # VGA assumes shared-boundary frames (N+1 frames for N segments). When a compositor
+        # segment breaks the chain, we must call VGA separately for each contiguous group.
         # Incrementally push video segment URLs to frontend
         segment_urls_so_far = []
+        total_veo_segments = sum(1 for i in range(len(script.segments)) if i not in compositor_segment_indices)
 
         def _on_segment_done(i: int, total: int, segment_path: str = ""):
             """Update progress and incrementally push URLs when each VGA segment completes"""
@@ -633,36 +609,77 @@ async def run_pipeline(
                 segment_urls_so_far.append(url)
             job_manager.update_job(
                 job_id,
-                progress=0.40 + 0.40 * (i + 1) / total,
-                message=f"Generating video segments ({i + 1}/{total})...",
+                progress=0.40 + 0.40 * len(segment_urls_so_far) / max(total_veo_segments, 1),
+                message=f"Generating video segments ({len(segment_urls_so_far)}/{total_veo_segments})...",
                 segment_urls=list(segment_urls_so_far),
             )
 
-        veo_segment_paths = await vga_agent.generate_segments(
-            script=veo_script,
-            storyboard_paths=veo_storyboard_paths,
-            output_dir=segment_dir,
-            aspect_ratio=job["aspect_ratio"],
-            voice_anchor=script.voice_anchor,
-            on_segment_done=_on_segment_done,
-        )
-
-        # 重组 segment_paths：将 Veo 生成的片段和合成器片段按原始顺序排列
-        # TODO(Task 10): CompositorService 会生成合成器分段的视频，届时此处需要将其插入正确位置
         if compositor_segment_indices:
-            segment_paths = []
-            veo_idx = 0
-            for i in range(len(script.segments)):
+            # Split into contiguous chains of non-compositor segments
+            # e.g., segments [S0, S1, S2(comp), S3] → chains: [[S0,S1], [S3]]
+            chains = []  # list of (start_orig_idx, [segment_objects])
+            current_chain = []
+            current_start = 0
+            for i, seg in enumerate(script.segments):
                 if i in compositor_segment_indices:
-                    # 合成器分段：暂时用 None 占位，Task 10 实现 CompositorService 后替换
-                    segment_paths.append(None)
-                    logger.info(
-                        f"[DA][Job {job_id}] Segment {i+1} is compositor — placeholder (CompositorService TBD in Task 10)"
-                    )
+                    if current_chain:
+                        chains.append((current_start, current_chain))
+                        current_chain = []
                 else:
-                    segment_paths.append(veo_segment_paths[veo_idx])
-                    veo_idx += 1
+                    if not current_chain:
+                        current_start = i
+                    current_chain.append(seg)
+            if current_chain:
+                chains.append((current_start, current_chain))
+
+            logger.info(
+                f"[DA][Job {job_id}] Veo generation: {total_veo_segments} segments in "
+                f"{len(chains)} chain(s) (skipped {len(compositor_segment_indices)} compositor segments)"
+            )
+
+            # Generate each chain separately with correct frame mapping
+            # segment_paths: ordered by original segment index, None for compositor segments
+            segment_paths = [None] * len(script.segments)
+
+            for chain_start, chain_segs in chains:
+                chain_frames = storyboard_paths[chain_start: chain_start + len(chain_segs) + 1]
+                chain_script = ScriptOutput(
+                    title=script.title,
+                    voice_anchor=script.voice_anchor,
+                    style_guide=script.style_guide,
+                    segments=chain_segs,
+                    self_check=script.self_check,
+                )
+                logger.info(
+                    f"[DA][Job {job_id}] VGA chain: orig indices [{chain_start}..{chain_start + len(chain_segs) - 1}], "
+                    f"{len(chain_segs)} segments, {len(chain_frames)} frames"
+                )
+                chain_paths = await vga_agent.generate_segments(
+                    script=chain_script,
+                    storyboard_paths=chain_frames,
+                    output_dir=segment_dir,
+                    aspect_ratio=job["aspect_ratio"],
+                    voice_anchor=script.voice_anchor,
+                    on_segment_done=_on_segment_done,
+                )
+                # Map chain results back to original segment indices
+                for j, path in enumerate(chain_paths):
+                    segment_paths[chain_start + j] = path
+
+            for i in compositor_segment_indices:
+                logger.info(
+                    f"[DA][Job {job_id}] Segment {i+1} is compositor — placeholder (CompositorService TBD in Task 10)"
+                )
         else:
+            # No compositor segments: single VGA call with all segments
+            veo_segment_paths = await vga_agent.generate_segments(
+                script=script,
+                storyboard_paths=storyboard_paths,
+                output_dir=segment_dir,
+                aspect_ratio=job["aspect_ratio"],
+                voice_anchor=script.voice_anchor,
+                on_segment_done=_on_segment_done,
+            )
             segment_paths = veo_segment_paths
 
         # 过滤掉 None 占位（合成器分段），只统计已生成的视频
@@ -821,7 +838,8 @@ def _load_game_screenshot(job: dict) -> Optional[bytes]:
             try:
                 with open(path, "rb") as f:
                     return f.read()
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[DA] Failed to load fallback game image {path}: {e}")
                 continue
 
     return None
