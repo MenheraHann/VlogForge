@@ -140,6 +140,9 @@ let generationStartTime = null;
 let lastKnownStage = null;
 
 
+// v19.4: 待删除中的素材 ID 集合（防止 refreshAssets 重新显示尚未真删的素材）
+const pendingDeleteIds = new Set();
+
 // ========== 渲染队列状态 ==========
 let queuePollTimer = null;        // 队列轮询定时器
 let queueCollapsed = false;       // 队列面板是否折叠
@@ -213,6 +216,8 @@ function renderColumnList(type, list, containerSel) {
   }
 
   list.forEach((asset) => {
+    // v19.4: 跳过正在待删除倒计时中的素材，避免撤回时误恢复其他素材
+    if (pendingDeleteIds.has(asset.id)) return;
     const card = createMiniCard(type, asset);
     container.appendChild(card);
   });
@@ -372,18 +377,21 @@ function createMiniCard(type, asset) {
     // v16 UX: 绑定删除按钮（5秒可撤销）
     card.querySelector("[data-delete]").addEventListener("click", (e) => {
       e.stopPropagation();
+      pendingDeleteIds.add(asset.id);
       card.style.display = "none";
       showUndoToast(
         t('asset.deleted', {name: asset.name}),
         5000,
-        () => { card.style.display = ""; showToast(t('asset.deleteUndone'), "info"); refreshAssets(); },
+        () => { pendingDeleteIds.delete(asset.id); card.style.display = ""; showToast(t('asset.deleteUndone'), "info"); refreshAssets(); },
         async () => {
           try {
             const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
             if (!res.ok) throw new Error(t('asset.deleteFailed'));
-            refreshAssets();
           } catch (err) {
-            card.style.display = ""; showToast(t('asset.deleteFailedWith', {error: err.message}), "error"); refreshAssets();
+            card.style.display = ""; showToast(t('asset.deleteFailedWith', {error: err.message}), "error");
+          } finally {
+            pendingDeleteIds.delete(asset.id);
+            refreshAssets();
           }
         }
       );
@@ -488,6 +496,7 @@ function createMiniCard(type, asset) {
   // v16 UX: 点击删除（5秒可撤销）
   card.querySelector("[data-delete]").addEventListener("click", (e) => {
     e.stopPropagation();
+    pendingDeleteIds.add(asset.id);
     // 保存槽位状态以便恢复
     const wasInSlot = slotAssets[slotType] && slotAssets[slotType].id === asset.id;
     // 先从 UI 移除卡片（乐观操作）
@@ -499,6 +508,7 @@ function createMiniCard(type, asset) {
       5000,
       // 撤销：恢复卡片和槽位
       () => {
+        pendingDeleteIds.delete(asset.id);
         card.style.display = "";
         showToast(t('asset.deleteUndone'), "info");
         refreshAssets();
@@ -508,10 +518,11 @@ function createMiniCard(type, asset) {
         try {
           const res = await fetch(`/api/assets/${asset.id}`, { method: "DELETE" });
           if (!res.ok) throw new Error(t('asset.deleteFailed'));
-          refreshAssets();
         } catch (err) {
           card.style.display = "";
           showToast(t('asset.deleteFailedWith', {error: err.message}), "error");
+        } finally {
+          pendingDeleteIds.delete(asset.id);
           refreshAssets();
         }
       }
