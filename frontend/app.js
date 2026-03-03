@@ -654,28 +654,39 @@ function openDetailModal(type, asset) {
           return;
         }
 
-        // 物品：轮询等待图片更新
+        // 物品：状态驱动轮询（通过 image_regen_status 判断完成/失败）
         let retries = 0;
-        const maxRetries = 30;
+        const maxRetries = 60;
         const pollInterval = setInterval(async () => {
           retries++;
           try {
             const assetRes = await fetch(`/api/assets/${assetId}`);
             if (assetRes.ok) {
-              const assetData = await assetRes.json();
-              const newUrl = assetData[field];
-              if (newUrl) {
-                const img = imageItem.querySelector("img");
-                if (img) img.src = `/assets/${assetId}/${newUrl.split('/').pop()}?t=${Date.now()}`;
-              }
-              // 检查是否还在生成中（物品不改 status，用时间戳判断）
-              if (retries >= 3) {
+              const resp = await assetRes.json();
+              const regenStatus = resp.image_regen_status && resp.image_regen_status[imageType];
+
+              if (regenStatus && regenStatus.status === "done") {
                 clearInterval(pollInterval);
+                const newUrl = resp.asset ? resp.asset[field] : null;
+                if (newUrl) {
+                  const img = imageItem.querySelector("img");
+                  if (img) img.src = `/assets/${assetId}/${newUrl.split('/').pop()}?t=${Date.now()}`;
+                }
                 if (loadingOverlay) loadingOverlay.style.display = "none";
                 btn.disabled = false;
                 btn.textContent = t('button.regenerate') || '重新生成';
                 showToast(t('toast.imageRegenSuccess') || "图片已重新生成", "success");
                 await refreshAssets();
+                return;
+              }
+
+              if (regenStatus && regenStatus.status === "failed") {
+                clearInterval(pollInterval);
+                if (loadingOverlay) loadingOverlay.style.display = "none";
+                btn.disabled = false;
+                btn.textContent = t('button.regenerate') || '重新生成';
+                showToast(regenStatus.error || t('toast.imageRegenFailed') || "图片重新生成失败", "error");
+                return;
               }
             }
           } catch {}

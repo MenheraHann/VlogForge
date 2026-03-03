@@ -347,16 +347,48 @@ async def select_model_look(asset_id: str):
 
 # ========== 素材图片：单张重新生成（v19） ==========
 
+import time as _time
+
+# 轻量级 regen 追踪器：{f"{asset_id}:{image_type}": {"status": "generating"|"done"|"failed", "error"?: str, "ts": float}}
+_regen_tracker: dict[str, dict] = {}
+_REGEN_TTL = 300  # 5 分钟自动清理
+
+
+def _regen_key(asset_id: str, image_type: str) -> str:
+    return f"{asset_id}:{image_type}"
+
+
+def _regen_cleanup():
+    """清理过期的 regen 追踪条目"""
+    now = _time.time()
+    expired = [k for k, v in _regen_tracker.items() if now - v.get("ts", 0) > _REGEN_TTL]
+    for k in expired:
+        del _regen_tracker[k]
+
+
+def get_regen_status(asset_id: str) -> dict:
+    """获取某个素材所有正在进行 / 刚完成的重新生成状态"""
+    _regen_cleanup()
+    result = {}
+    for k, v in _regen_tracker.items():
+        if k.startswith(f"{asset_id}:"):
+            image_type = k.split(":", 1)[1]
+            result[image_type] = v
+    return result
+
+
 async def _regenerate_item_image_task(
     asset_id: str,
     image_type: str,
     asset_manager: AssetManager,
 ):
     """后台异步重新生成物品的单张图片"""
+    key = _regen_key(asset_id, image_type)
     try:
         asset = asset_manager.get_item(asset_id)
         if not asset:
             logger.error(f"[Item] {asset_id} 已被删除，重新生成结果丢弃")
+            _regen_tracker[key] = {"status": "failed", "error": "素材已被删除", "ts": _time.time()}
             return
 
         new_path = await regenerate_item_image(asset, image_type)
@@ -368,15 +400,17 @@ async def _regenerate_item_image_task(
             asset.three_view_image = new_path
 
         asset.status = AssetStatus.CONFIRMED
-        asset_manager.save_item(asset)
+        await asset_manager.save_item_async(asset)
+        _regen_tracker[key] = {"status": "done", "ts": _time.time()}
         logger.info(f"[Item] {asset_id} 图片 {image_type} 重新生成完成")
 
     except Exception as e:
         logger.error(f"[Item] {asset_id} 图片重新生成失败: {e}", exc_info=True)
+        _regen_tracker[key] = {"status": "failed", "error": str(e)[:200], "ts": _time.time()}
         asset = asset_manager.get_item(asset_id)
         if asset:
             asset.status = AssetStatus.CONFIRMED
-            asset_manager.save_item(asset)
+            await asset_manager.save_item_async(asset)
 
 
 @app.post("/api/assets/{asset_id}/regenerate-image")
@@ -397,6 +431,9 @@ async def regenerate_asset_image(
             raise HTTPException(status_code=400, detail=f"物品不支持的图片类型: {image_type}")
         if not item.full_description:
             raise HTTPException(status_code=400, detail="缺少 full_description，无法重新生成")
+
+        # W1: 标记 generating 状态
+        _regen_tracker[_regen_key(asset_id, image_type)] = {"status": "generating", "ts": _time.time()}
 
         asyncio.create_task(
             _regenerate_item_image_task(
@@ -625,7 +662,12 @@ async def get_asset(asset_id: str):
     asset = asset_manager.get_asset(asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail=f"素材 {asset_id} 不存在")
-    return {"status": "ok", "asset": asset.model_dump()}
+    resp = {"status": "ok", "asset": asset.model_dump()}
+    # v19: 注入图片重新生成进度
+    regen = get_regen_status(asset_id)
+    if regen:
+        resp["image_regen_status"] = regen
+    return resp
 
 
 @app.put("/api/assets/{asset_id}")
