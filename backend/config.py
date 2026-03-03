@@ -96,6 +96,23 @@ PLATFORM_ASPECT_MAP = {
     "youtube": "16:9",
 }
 
+# ========== 游戏推广视频固定参数 ==========
+
+# 固定 4 段结构
+GAME_SEGMENT_COUNT = 4
+
+# 固定 9:16 竖屏
+GAME_ASPECT_RATIO = "9:16"
+
+# Veo 生成的段索引（0-based）
+GAME_VEO_SEGMENTS = [0, 1, 3]
+
+# FFmpeg 合成的段索引（0-based）
+GAME_COMPOSITOR_SEGMENT = 2
+
+# 合成器高斯模糊强度
+COMPOSITOR_BLUR_SIGMA = 30
+
 # ========== self_check 阈值 ==========
 
 # 任一维度低于此值触发重跑（D6 决策）
