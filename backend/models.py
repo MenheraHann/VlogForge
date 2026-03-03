@@ -168,7 +168,7 @@ class GameAsset(BaseModel):
     intro_line: Optional[str] = Field(None, description="游戏推广开场台词")
 
     # 问卷状态
-    questionnaire_status: str = Field(
+    questionnaire_status: QuestionnaireStatus = Field(
         QuestionnaireStatus.PENDING, description="问卷收集进度"
     )
     questionnaire_fields: list[QuestionnaireField] = Field(

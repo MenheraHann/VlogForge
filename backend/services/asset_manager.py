@@ -134,12 +134,17 @@ class AssetManager:
             video_exists = game.gameplay_video_path and os.path.isfile(game.gameplay_video_path)
 
             if screenshot_exists and video_exists:
-                # 截图和录屏都在磁盘上，说明之前生成成功但状态未更新，自动确认
-                game.status = AssetStatus.CONFIRMED
+                # 截图和录屏都在磁盘上 → 根据问卷状态决定恢复目标
+                if game.questionnaire_status == QuestionnaireStatus.COMPLETED:
+                    game.status = AssetStatus.CONFIRMED
+                    target = "confirmed"
+                else:
+                    game.status = AssetStatus.PENDING
+                    target = "pending"
                 recovered_count += 1
                 logger.info(
                     f"[AssetManager] 游戏 {asset_id} ({game.name}) "
-                    f"generating -> confirmed（截图+录屏文件已存在，自动恢复）"
+                    f"generating -> {target}（截图+录屏文件已存在，自动恢复）"
                 )
             else:
                 missing = []
