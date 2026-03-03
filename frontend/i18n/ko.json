@@ -1,20 +1,20 @@
 {
   "app": {
-    "title": "VlogForge - AI Vlog 상품 영상 생성기",
+    "title": "VlogForge - AI 게임 프로모션 영상 생성기",
     "name": "VlogForge"
   },
 
   "nav": {
-    "items": "상품",
+    "games": "게임",
     "models": "모델"
   },
 
   "asset": {
-    "items": "상품",
+    "games": "게임",
     "models": "모델",
-    "itemsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z\"/><path d=\"m3.3 7 8.7 5 8.7-5\"/><path d=\"M12 22V12\"/></svg> 상품",
+    "gamesIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"6\" y1=\"11\" x2=\"10\" y2=\"11\"/><line x1=\"8\" y1=\"9\" x2=\"8\" y2=\"13\"/><line x1=\"15\" y1=\"12\" x2=\"15.01\" y2=\"12\"/><line x1=\"18\" y1=\"10\" x2=\"18.01\" y2=\"10\"/><path d=\"M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z\"/></svg> 게임",
     "modelsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg> 모델",
-    "addItem": "+ 상품 추가",
+    "addGame": "+ 게임 추가",
     "addModel": "+ 모델 추가",
     "noAssets": "아직 소재가 없습니다",
     "confirmed": "확인됨",
@@ -66,47 +66,50 @@
 
   "form": {
     "oneLineDesc": "한 줄 설명",
-    "oneLineDescPlaceholder": "예: 욕실에서 아미노산 클렌저를 추천하는 아시아 여성 / 오프닝은 재미있게",
-    "quickstartHint": "AI가 자동으로 상품+모델로 분해하여 두 가지 소재를 한 번에 생성합니다",
-    "targetPlatform": "대상 플랫폼",
-    "videoDuration": "영상 길이",
-    "durationLabel": "{seconds}s（{segments}×6s）",
-    "durationUnselected": "미선택",
+    "oneLineDescPlaceholder": "예: 원신의 세로형 프로모 영상을 만들어줘, 게임플레이 화면 포함",
+    "quickstartHint": "AI가 자동으로 게임+모델로 분해하여 두 가지 소재를 한 번에 생성합니다",
     "description": "설명",
     "referenceImages": "참고 이미지 (선택)",
     "uploadRef": "클릭하여 참고 이미지 업로드",
-    "itemPlaceholder": "상품 정보를 입력하세요. 예: 아미노산 클렌저, 순한 포뮬러, 민감성 피부용",
     "modelPlaceholder": "인물을 설명하세요. 예: 20대 아시아 여성, 단발, 거실에서 브이로그 촬영",
     "analyzeByImage": "이미지를 기반으로 분석해 주세요",
-    "autoModelDesc": "브이로그 상품 소개에 적합한 친근한 여성, 거실에서 촬영",
-    "genHintNoItem": "위 슬롯에 상품 소재를 드래그해 주세요"
+    "autoModelDesc": "게임 프로모션에 적합한 스트리머 스타일 캐릭터",
+    "genHintNoGame": "위 슬롯에 게임 소재를 드래그해 주세요",
+    "gameName": "게임 이름",
+    "gameNamePlaceholder": "예: 원신, 왕자영요",
+    "gameDescription": "게임 설명",
+    "gameDescPlaceholder": "이 게임의 플레이 방식과 특징을 간단히 설명해 주세요",
+    "gameScreenshot": "게임 스크린샷 *필수",
+    "gameVideo": "게임플레이 영상 *필수",
+    "uploadScreenshot": "클릭하여 스크린샷 업로드",
+    "uploadVideo": "클릭하여 플레이 영상 업로드"
   },
 
   "slot": {
-    "item": "상품",
+    "game": "게임",
     "model": "모델",
-    "itemRequired": "*필수",
+    "gameRequired": "*필수",
     "modelOptional": "선택",
     "dragOrUpload": "소재를 드래그하거나 클릭하여 업로드",
     "typeMismatch": "유형 불일치: {type} 소재가 필요합니다",
-    "typeItem": "상품",
+    "typeGame": "게임",
     "typeModel": "모델",
     "selectLookFirst": "먼저 룩을 선택해 주세요",
-    "confirmInfoFirst": "먼저 상품 정보 확인을 완료해 주세요"
+    "confirmInfoFirst": "먼저 게임 정보 확인을 완료해 주세요"
   },
 
   "modal": {
     "createAsset": "소재 생성",
-    "createItem": "상품 소재 생성",
+    "createGame": "게임 소재 생성",
     "createModel": "모델 소재 생성",
-    "createItemBtn": "상품 생성",
+    "createGameBtn": "게임 생성",
     "createModelBtn": "모델 생성",
     "selectPlan": "플랜 선택",
     "assetDetail": "소재 상세",
-    "itemDetail": "상품 상세 - {name}",
+    "gameDetail": "게임 상세 - {name}",
     "modelDetail": "모델 상세 - {name}",
-    "productInfoConfirm": "상품 정보 확인",
-    "productInfoConfirmWith": "상품 정보 확인 — {name}",
+    "gameInfoConfirm": "게임 정보 확인",
+    "gameInfoConfirmWith": "게임 정보 확인 — {name}",
     "modelReview": "모델 룩 검토 - {name}",
     "selectLook": "{label} 선택 - {name}",
     "lookPlan": "룩 플랜",
@@ -117,8 +120,13 @@
 
   "detail": {
     "thumbnail": "썸네일",
+    "screenshot": "게임 스크린샷",
     "threeView": "3면도",
     "portrait": "인물 이미지",
+    "genre": "장르",
+    "orientation": "화면 방향",
+    "features": "게임 특징",
+    "sellingPoints": "셀링 포인트",
     "p0SellingPoint": "P0 핵심 셀링 포인트",
     "p1SellingPoint": "P1 보조 셀링 포인트",
     "fullDescription": "상세 설명",
@@ -188,18 +196,15 @@
     "modelCreating": "모델 소재 생성 중, 잠시 기다려 주세요...",
     "modelCreateSuccess": "{name} 생성 완료",
     "modelCreateFailed": "생성 실패: {error}",
-    "itemAnalyzing": "상품 분석 중...",
-    "itemAnalyzed": "{name} 분석 완료, 상품 정보를 확인해 주세요",
-    "itemRejected": "상품 거부됨: {reason}",
-    "itemAnalyzeFailed": "분석 실패: {error}",
-    "itemConfirming": "상품 소재 확인 중, 잠시 기다려 주세요...",
-    "itemConfirmSuccess": "{name} 프로필 생성 완료",
-    "itemConfirmFailed": "확인 실패: {error}",
+    "gameAnalyzing": "게임 분석 중...",
+    "gameAnalyzed": "{name} 분석 완료, 게임 정보를 확인해 주세요",
+    "gameAnalyzeFailed": "분석 실패: {error}",
+    "gameConfirming": "게임 정보 확인 중...",
+    "gameConfirmSuccess": "{name} 게임 프로필 생성 완료",
+    "gameConfirmFailed": "확인 실패: {error}",
+    "gameUploadRequired": "게임 스크린샷과 플레이 영상을 업로드해 주세요",
     "quickstartFailed": "빠른 생성 실패: {error}",
     "quickstartCreated": "두 가지 소재 유형이 생성되었습니다. 순서대로 확인해 주세요",
-    "quickstartItemRejected": "상품 거부됨: {reason}",
-    "analyzingItem": "상품 분석 중...",
-    "itemAnalyzeComplete": "{name} 분석 완료",
     "autoCreatingModel": "모델 자동 생성 중...",
     "submittingVideo": "영상 생성 제출 중...",
     "videoTaskCreated": "영상 생성 작업이 생성되었습니다",
@@ -261,15 +266,8 @@
   },
 
   "create": {
-    "createItem": "상품 생성",
+    "createGame": "게임 생성",
     "createModel": "모델 생성"
-  },
-
-  "platform": {
-    "douyin": "Douyin (9:16 세로)",
-    "xiaohongshu": "Xiaohongshu (9:16 세로)",
-    "youtube": "YouTube (16:9 가로)",
-    "unselected": "미선택"
   },
 
   "section": {

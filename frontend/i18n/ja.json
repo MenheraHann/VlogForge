@@ -1,20 +1,20 @@
 {
   "app": {
-    "title": "VlogForge - AI Vlog商品紹介動画ジェネレーター",
+    "title": "VlogForge - AI ゲームプロモ動画ジェネレーター",
     "name": "VlogForge"
   },
 
   "nav": {
-    "items": "商品",
+    "games": "ゲーム",
     "models": "モデル"
   },
 
   "asset": {
-    "items": "商品",
+    "games": "ゲーム",
     "models": "モデル",
-    "itemsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z\"/><path d=\"m3.3 7 8.7 5 8.7-5\"/><path d=\"M12 22V12\"/></svg> 商品",
+    "gamesIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"6\" y1=\"11\" x2=\"10\" y2=\"11\"/><line x1=\"8\" y1=\"9\" x2=\"8\" y2=\"13\"/><line x1=\"15\" y1=\"12\" x2=\"15.01\" y2=\"12\"/><line x1=\"18\" y1=\"10\" x2=\"18.01\" y2=\"10\"/><path d=\"M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z\"/></svg> ゲーム",
     "modelsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg> モデル",
-    "addItem": "+ 商品を追加",
+    "addGame": "+ ゲームを追加",
     "addModel": "+ モデルを追加",
     "noAssets": "素材がありません",
     "confirmed": "確認済み",
@@ -66,47 +66,50 @@
 
   "form": {
     "oneLineDesc": "一行で説明",
-    "oneLineDescPlaceholder": "例：浴室でアミノ酸洗顔フォームを紹介するアジア女性 / オープニングは面白くして",
-    "quickstartHint": "AIが自動的に商品+モデルに分解し、両方の素材を一度に作成します",
-    "targetPlatform": "ターゲットプラットフォーム",
-    "videoDuration": "動画の長さ",
-    "durationLabel": "{seconds}s（{segments}×6s）",
-    "durationUnselected": "未選択",
+    "oneLineDescPlaceholder": "例：原神の縦型プロモ動画を作成して、ゲームプレイ映像を含めて",
+    "quickstartHint": "AIが自動的にゲーム+モデルに分解し、両方の素材を一度に作成します",
     "description": "説明",
     "referenceImages": "参考画像（任意）",
     "uploadRef": "クリックして参考画像をアップロード",
-    "itemPlaceholder": "商品情報を入力、例：アミノ酸洗顔フォーム、マイルド処方、敏感肌向け",
     "modelPlaceholder": "人物の説明を入力、例：20代のアジア女性、ショートヘア、リビングでVlog撮影",
     "analyzeByImage": "画像を基に分析してください",
-    "autoModelDesc": "Vlog商品紹介に適した親しみやすい女性、リビングで撮影",
-    "genHintNoItem": "上のスロットに商品素材をドラッグしてください"
+    "autoModelDesc": "ゲームプロモに適した配信者風のキャラクター",
+    "genHintNoGame": "上のスロットにゲーム素材をドラッグしてください",
+    "gameName": "ゲーム名",
+    "gameNamePlaceholder": "例：原神、崩壊スターレイル",
+    "gameDescription": "ゲーム説明",
+    "gameDescPlaceholder": "このゲームのプレイスタイルと特徴を簡単に説明してください",
+    "gameScreenshot": "ゲームスクリーンショット *必須",
+    "gameVideo": "ゲームプレイ動画 *必須",
+    "uploadScreenshot": "クリックしてスクリーンショットをアップロード",
+    "uploadVideo": "クリックしてプレイ動画をアップロード"
   },
 
   "slot": {
-    "item": "商品",
+    "game": "ゲーム",
     "model": "モデル",
-    "itemRequired": "*必須",
+    "gameRequired": "*必須",
     "modelOptional": "任意",
     "dragOrUpload": "素材をドラッグまたはクリックしてアップロード",
     "typeMismatch": "タイプ不一致：{type}素材が必要です",
-    "typeItem": "商品",
+    "typeGame": "ゲーム",
     "typeModel": "モデル",
     "selectLookFirst": "先にルックを選択してください",
-    "confirmInfoFirst": "先に商品情報の確認を完了してください"
+    "confirmInfoFirst": "先にゲーム情報の確認を完了してください"
   },
 
   "modal": {
     "createAsset": "素材を作成",
-    "createItem": "商品素材を作成",
+    "createGame": "ゲーム素材を作成",
     "createModel": "モデル素材を作成",
-    "createItemBtn": "商品を作成",
+    "createGameBtn": "ゲームを作成",
     "createModelBtn": "モデルを作成",
     "selectPlan": "プランを選択",
     "assetDetail": "素材の詳細",
-    "itemDetail": "商品詳細 - {name}",
+    "gameDetail": "ゲーム詳細 - {name}",
     "modelDetail": "モデル詳細 - {name}",
-    "productInfoConfirm": "商品情報の確認",
-    "productInfoConfirmWith": "商品情報の確認 — {name}",
+    "gameInfoConfirm": "ゲーム情報の確認",
+    "gameInfoConfirmWith": "ゲーム情報の確認 — {name}",
     "modelReview": "モデルルック確認 - {name}",
     "selectLook": "{label}を選択 - {name}",
     "lookPlan": "ルックプラン",
@@ -117,8 +120,13 @@
 
   "detail": {
     "thumbnail": "サムネイル",
+    "screenshot": "ゲームスクリーンショット",
     "threeView": "三面図",
     "portrait": "ポートレート",
+    "genre": "ジャンル",
+    "orientation": "画面方向",
+    "features": "ゲーム特徴",
+    "sellingPoints": "セールスポイント",
     "p0SellingPoint": "P0 コアセールスポイント",
     "p1SellingPoint": "P1 サブセールスポイント",
     "fullDescription": "詳細説明",
@@ -188,18 +196,15 @@
     "modelCreating": "モデル素材を作成中、お待ちください...",
     "modelCreateSuccess": "{name}を作成しました",
     "modelCreateFailed": "作成に失敗: {error}",
-    "itemAnalyzing": "商品を分析中...",
-    "itemAnalyzed": "{name}の分析が完了しました。商品情報を確認してください",
-    "itemRejected": "商品が拒否されました: {reason}",
-    "itemAnalyzeFailed": "分析に失敗: {error}",
-    "itemConfirming": "商品素材を確認中、お待ちください...",
-    "itemConfirmSuccess": "{name}のプロファイルを作成しました",
-    "itemConfirmFailed": "確認に失敗: {error}",
+    "gameAnalyzing": "ゲームを分析中...",
+    "gameAnalyzed": "{name}の分析が完了しました。ゲーム情報を確認してください",
+    "gameAnalyzeFailed": "分析に失敗: {error}",
+    "gameConfirming": "ゲーム情報を確認中...",
+    "gameConfirmSuccess": "{name}のゲームプロファイルを作成しました",
+    "gameConfirmFailed": "確認に失敗: {error}",
+    "gameUploadRequired": "ゲームのスクリーンショットとプレイ動画をアップロードしてください",
     "quickstartFailed": "クイック作成に失敗: {error}",
     "quickstartCreated": "両方の素材タイプを作成しました。順番に確認してください",
-    "quickstartItemRejected": "商品が拒否されました: {reason}",
-    "analyzingItem": "商品を分析中...",
-    "itemAnalyzeComplete": "{name}の分析が完了しました",
     "autoCreatingModel": "モデルを自動作成中...",
     "submittingVideo": "動画生成を送信中...",
     "videoTaskCreated": "動画生成タスクを作成しました",
@@ -261,15 +266,8 @@
   },
 
   "create": {
-    "createItem": "商品を作成",
+    "createGame": "ゲームを作成",
     "createModel": "モデルを作成"
-  },
-
-  "platform": {
-    "douyin": "Douyin (9:16 縦型)",
-    "xiaohongshu": "Xiaohongshu (9:16 縦型)",
-    "youtube": "YouTube (16:9 横型)",
-    "unselected": "未選択"
   },
 
   "section": {

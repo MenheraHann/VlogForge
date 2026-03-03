@@ -1,20 +1,20 @@
 {
   "app": {
-    "title": "VlogForge - AI Vlog 带货视频生成器",
+    "title": "VlogForge - AI 游戏推广视频生成器",
     "name": "VlogForge"
   },
 
   "nav": {
-    "items": "物品",
+    "games": "游戏",
     "models": "人物"
   },
 
   "asset": {
-    "items": "物品",
+    "games": "游戏",
     "models": "人物",
-    "itemsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z\"/><path d=\"m3.3 7 8.7 5 8.7-5\"/><path d=\"M12 22V12\"/></svg> 物品",
+    "gamesIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"6\" y1=\"11\" x2=\"10\" y2=\"11\"/><line x1=\"8\" y1=\"9\" x2=\"8\" y2=\"13\"/><line x1=\"15\" y1=\"12\" x2=\"15.01\" y2=\"12\"/><line x1=\"18\" y1=\"10\" x2=\"18.01\" y2=\"10\"/><path d=\"M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z\"/></svg> 游戏",
     "modelsIcon": "<svg class=\"icon-svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg> 人物",
-    "addItem": "+ 添加物品",
+    "addGame": "+ 添加游戏",
     "addModel": "+ 添加人物",
     "noAssets": "暂无素材",
     "confirmed": "已确认",
@@ -66,47 +66,50 @@
 
   "form": {
     "oneLineDesc": "一句话描述",
-    "oneLineDescPlaceholder": "如：帮我拍一个亚洲女生在浴室推荐氨基酸洗面奶 / 开场要搞笑一点",
-    "quickstartHint": "AI 自动拆解为物品+人物，一次创建两类素材",
-    "targetPlatform": "目标平台",
-    "videoDuration": "视频时长",
-    "durationLabel": "{seconds}s（{segments}×6s）",
-    "durationUnselected": "未选择",
+    "oneLineDescPlaceholder": "如：帮我做一个《原神》的竖屏推广视频，要有游戏实录画面",
+    "quickstartHint": "AI 自动拆解为游戏+人物，一次创建两类素材",
     "description": "描述",
     "referenceImages": "参考图片（可选）",
     "uploadRef": "点击上传参考图",
-    "itemPlaceholder": "描述产品信息，如：一瓶氨基酸洗面奶，温和配方不紧绷，适合敏感肌",
     "modelPlaceholder": "描述人物形象，如：20多岁亚洲女生，短发，在客厅拍摄vlog",
     "analyzeByImage": "请根据图片分析",
-    "autoModelDesc": "适合vlog带货的亲和女生，客厅拍摄",
-    "genHintNoItem": "请先将物品素材拖入上方槽位"
+    "autoModelDesc": "适合游戏推广的主播风格人物",
+    "genHintNoGame": "请先将游戏素材拖入上方槽位",
+    "gameName": "游戏名称",
+    "gameNamePlaceholder": "如：原神、王者荣耀",
+    "gameDescription": "游戏描述",
+    "gameDescPlaceholder": "简单描述这款游戏的玩法和特色",
+    "gameScreenshot": "游戏截图 *必填",
+    "gameVideo": "游戏录屏 *必填",
+    "uploadScreenshot": "点击上传截图",
+    "uploadVideo": "点击上传录屏"
   },
 
   "slot": {
-    "item": "物品",
+    "game": "游戏",
     "model": "人物",
-    "itemRequired": "*必填",
+    "gameRequired": "*必填",
     "modelOptional": "可选",
     "dragOrUpload": "拖入素材 或 点击上传",
     "typeMismatch": "类型不匹配：需要{type}素材",
-    "typeItem": "物品",
+    "typeGame": "游戏",
     "typeModel": "人物",
     "selectLookFirst": "请先选择造型方案",
-    "confirmInfoFirst": "请先完成产品信息确认"
+    "confirmInfoFirst": "请先完成游戏信息确认"
   },
 
   "modal": {
     "createAsset": "创建素材",
-    "createItem": "创建物品素材",
+    "createGame": "创建游戏素材",
     "createModel": "创建人物素材",
-    "createItemBtn": "创建物品",
+    "createGameBtn": "创建游戏",
     "createModelBtn": "创建人物",
     "selectPlan": "选择方案",
     "assetDetail": "素材详情",
-    "itemDetail": "物品详情 - {name}",
+    "gameDetail": "游戏详情 - {name}",
     "modelDetail": "人物详情 - {name}",
-    "productInfoConfirm": "产品信息确认",
-    "productInfoConfirmWith": "产品信息确认 — {name}",
+    "gameInfoConfirm": "游戏信息确认",
+    "gameInfoConfirmWith": "游戏信息确认 — {name}",
     "modelReview": "人物造型审核 - {name}",
     "selectLook": "选择{label} - {name}",
     "lookPlan": "造型方案",
@@ -117,8 +120,13 @@
 
   "detail": {
     "thumbnail": "缩略图",
+    "screenshot": "游戏截图",
     "threeView": "三视图",
     "portrait": "人物形象",
+    "genre": "游戏类型",
+    "orientation": "屏幕方向",
+    "features": "游戏特色",
+    "sellingPoints": "推广卖点",
     "p0SellingPoint": "P0 核心卖点",
     "p1SellingPoint": "P1 辅助卖点",
     "fullDescription": "完整描述",
@@ -188,18 +196,15 @@
     "modelCreating": "人物素材创建中，请稍候...",
     "modelCreateSuccess": "{name} 创建成功",
     "modelCreateFailed": "创建失败: {error}",
-    "itemAnalyzing": "正在分析物品...",
-    "itemAnalyzed": "{name} 分析完成，请确认产品信息",
-    "itemRejected": "物品被拒绝: {reason}",
-    "itemAnalyzeFailed": "分析失败: {error}",
-    "itemConfirming": "物品素材确认中，请稍候...",
-    "itemConfirmSuccess": "{name} 档案创建完成",
-    "itemConfirmFailed": "确认失败: {error}",
+    "gameAnalyzing": "正在分析游戏...",
+    "gameAnalyzed": "{name} 分析完成，请确认游戏信息",
+    "gameAnalyzeFailed": "分析失败: {error}",
+    "gameConfirming": "游戏信息确认中...",
+    "gameConfirmSuccess": "{name} 游戏档案创建完成",
+    "gameConfirmFailed": "确认失败: {error}",
+    "gameUploadRequired": "请上传游戏截图和录屏视频",
     "quickstartFailed": "快速创建失败: {error}",
     "quickstartCreated": "两类素材已创建，请依次确认",
-    "quickstartItemRejected": "物品被拒绝: {reason}",
-    "analyzingItem": "正在分析物品...",
-    "itemAnalyzeComplete": "{name} 分析完成",
     "autoCreatingModel": "正在自动创建人物...",
     "submittingVideo": "正在提交视频生成...",
     "videoTaskCreated": "视频生成任务已创建",
@@ -261,15 +266,8 @@
   },
 
   "create": {
-    "createItem": "创建物品",
+    "createGame": "创建游戏",
     "createModel": "创建人物"
-  },
-
-  "platform": {
-    "douyin": "抖音 (9:16 竖屏)",
-    "xiaohongshu": "小红书 (9:16 竖屏)",
-    "youtube": "YouTube (16:9 横屏)",
-    "unselected": "未选择"
   },
 
   "section": {
