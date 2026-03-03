@@ -1929,27 +1929,25 @@ $("#btn-generate").addEventListener("click", async () => {
   btn.disabled = true;
   btn.classList.add("loading");
 
-  const platform = $("#gen-platform").value;
-  const segmentCount = $("#gen-segments").value;
   const extra = $("#gen-prompt").value.trim();
 
   try {
-    // 提交生成（JSON body，匹配后端 /api/generate/v2）
+    // 提交生成（FormData，匹配后端 Form(...) 参数）
     showToast(t('toast.submittingVideo'), "info");
-    const payload = {
-      game_id: slotAssets.game.id,
-      model_id: slotAssets.model ? slotAssets.model.id : null,
-      platform: platform,
-      segment_count: parseInt(segmentCount),
-      extra_requirements: extra,
-    };
+    const genForm = new FormData();
+    genForm.append("game_id", slotAssets.game.id);
+    if (slotAssets.model) genForm.append("model_id", slotAssets.model.id);
+    genForm.append("extra_requirements", extra);
 
     const genRes = await fetch("/api/generate/v2", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: genForm,
     });
-    if (!genRes.ok) { const err = await genRes.json(); throw new Error(err.detail || t('toast.generateFailed', {error: ''})); }
+    if (!genRes.ok) {
+      const err = await genRes.json();
+      const msg = typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail);
+      throw new Error(msg || t('toast.generateFailed', {error: ''}));
+    }
     const genData = await genRes.json();
 
     currentJobId = genData.job_id;
