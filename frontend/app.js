@@ -1915,8 +1915,10 @@ function updateGenButton() {
   // 检查素材是否绑定且"就绪"
   const gameReady = slotAssets.game && slotAssets.game.questionnaire_status === "completed";
   const modelReady = !slotAssets.model || !!slotAssets.model.portrait_image; // 人物可选，但绑定后必须就绪
-  // 游戏就绪 + 人物就绪（或未绑定） → 启用生成按钮
-  $("#btn-generate").disabled = !(gameReady && modelReady);
+  const platform = document.getElementById('gen-platform').value;
+  const segments = document.getElementById('gen-segments').value;
+  // 游戏就绪 + 人物就绪（或未绑定） + 平台 + 时长 → 启用生成按钮
+  $("#btn-generate").disabled = !(gameReady && modelReady && platform && segments);
 }
 
 $("#btn-generate").addEventListener("click", async () => {
@@ -1926,6 +1928,8 @@ $("#btn-generate").addEventListener("click", async () => {
   btn.disabled = true;
   btn.classList.add("loading");
 
+  const platform = $("#gen-platform").value;
+  const segmentCount = $("#gen-segments").value;
   const extra = $("#gen-prompt").value.trim();
 
   try {
@@ -1934,6 +1938,8 @@ $("#btn-generate").addEventListener("click", async () => {
     const payload = {
       game_id: slotAssets.game.id,
       model_id: slotAssets.model ? slotAssets.model.id : null,
+      platform: platform,
+      segment_count: parseInt(segmentCount),
       extra_requirements: extra,
     };
 
@@ -2292,6 +2298,17 @@ async function restoreJobIfNeeded() {
   }
 }
 
+// 时长下拉选择：i18n 切换时更新 option 文本
+function updateDurationOptions() {
+  const sel = $("#gen-segments");
+  if (!sel) return;
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) return; // 跳过 "未选择" 占位项
+    const n = parseInt(opt.value);
+    opt.textContent = `${n * 6}s（${n}×6s）`;
+  });
+}
+
 // ========== v17: 底部生成 Dock ==========
 
 function initGenDock() {
@@ -2391,6 +2408,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     await window.i18nPromise;
   }
 
+  // 初始化时长下拉选择
+  const segSel = $("#gen-segments");
+  if (segSel) {
+    segSel.addEventListener("change", () => { updatePillStates(); updateGenButton(); });
+    updateDurationOptions();
+  }
+
+  // 初始化平台下拉选择：切换时更新生成按钮状态
+  const platSel = $("#gen-platform");
+  if (platSel) {
+    platSel.addEventListener("change", () => { updateGenButton(); });
+  }
+
   // 初始化图片预览 Lightbox
   initLightbox();
 
@@ -2406,6 +2436,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // v16 UX: 监听语言热切换，刷新动态内容
   window.addEventListener("i18n:langChanged", () => {
     refreshStageLabels();
+    updateDurationOptions();
     updateGenButton();
     refreshAssets();
     fetchJobQueue();

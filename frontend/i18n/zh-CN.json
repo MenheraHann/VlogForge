@@ -98,6 +98,13 @@
     "confirmInfoFirst": "请先完成游戏信息确认"
   },
 
+  "platform": {
+    "douyin": "抖音 (9:16 竖屏)",
+    "xiaohongshu": "小红书 (9:16 竖屏)",
+    "youtube": "YouTube (16:9 横屏)",
+    "unselected": "未选择"
+  },
+
   "modal": {
     "createAsset": "创建素材",
     "createGame": "创建游戏素材",

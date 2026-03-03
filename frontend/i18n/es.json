@@ -98,6 +98,13 @@
     "confirmInfoFirst": "Primero completa la confirmacion de la informacion del juego"
   },
 
+  "platform": {
+    "douyin": "Douyin (9:16 Vertical)",
+    "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
+    "youtube": "YouTube (16:9 Horizontal)",
+    "unselected": "Sin seleccionar"
+  },
+
   "modal": {
     "createAsset": "Crear material",
     "createGame": "Crear material de juego",

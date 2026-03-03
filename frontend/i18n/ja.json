@@ -98,6 +98,13 @@
     "confirmInfoFirst": "先にゲーム情報の確認を完了してください"
   },
 
+  "platform": {
+    "douyin": "Douyin (9:16 縦型)",
+    "xiaohongshu": "Xiaohongshu (9:16 縦型)",
+    "youtube": "YouTube (16:9 横型)",
+    "unselected": "未選択"
+  },
+
   "modal": {
     "createAsset": "素材を作成",
     "createGame": "ゲーム素材を作成",

@@ -98,6 +98,13 @@
     "confirmInfoFirst": "먼저 게임 정보 확인을 완료해 주세요"
   },
 
+  "platform": {
+    "douyin": "Douyin (9:16 세로)",
+    "xiaohongshu": "Xiaohongshu (9:16 세로)",
+    "youtube": "YouTube (16:9 가로)",
+    "unselected": "미선택"
+  },
+
   "modal": {
     "createAsset": "소재 생성",
     "createGame": "게임 소재 생성",
