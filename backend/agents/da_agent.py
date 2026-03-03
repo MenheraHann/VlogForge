@@ -501,7 +501,13 @@ async def run_pipeline(
             # Game mode: pass game screenshot separately (VA uses it for phone screen rendering)
             game_screenshot = _load_game_screenshot(job)
             product_image = None  # No product in game mode
-            logger.info(f"[DA][Job {job_id}] Game mode: loaded game screenshot for phone screen rendering")
+            if game_screenshot is None:
+                logger.warning(
+                    f"[DA][Job {job_id}] Game mode but no screenshot loaded — "
+                    f"VA will fall back to product mode behavior (no phone screen rendering)"
+                )
+            else:
+                logger.info(f"[DA][Job {job_id}] Game mode: loaded game screenshot for phone screen rendering")
         else:
             game_screenshot = None
             product_image = _load_first_product_image(job)
