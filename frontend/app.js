@@ -949,17 +949,17 @@ async function handleGameCreate(screenshotFile, videoFile, description, autoBind
     // 移除临时占位
     assets.games = assets.games.filter(a => a.id !== tempId);
 
-    showToast(t('toast.gameAnalyzed', {name: data.name}), "success");
+    showToast(t('toast.gameAnalyzed', {name: data.asset.name}), "success");
 
     // 更新绑定到真实素材
-    if (autoBindSlot && data) {
-      bindSlot(autoBindSlot, data);
+    if (autoBindSlot && data.asset) {
+      bindSlot(autoBindSlot, data.asset);
     }
 
     // 刷新列表 + 弹问卷（如果有问卷字段）
     await refreshAssets();
-    if (data.questionnaire_fields && data.questionnaire_fields.length > 0) {
-      openQuestionnaireModal(data, null, null);
+    if (data.questionnaire && data.questionnaire.length > 0) {
+      openQuestionnaireModal(data.asset, data.questionnaire, null);
     }
   } catch (err) {
     // 移除临时占位
@@ -1191,10 +1191,11 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
     await refreshAssets();
 
     try {
-      const formData = new FormData();
-      formData.append("confirmed_fields", JSON.stringify(confirmed));
-
-      const res = await fetch(`/api/assets/game/${asset.id}/confirm`, { method: "POST", body: formData });
+      const res = await fetch(`/api/assets/game/${asset.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed_fields: confirmed }),
+      });
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.gameConfirmFailed', {error: ''})); }
 
       const data = await res.json();
