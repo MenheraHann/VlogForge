@@ -118,13 +118,13 @@ function initLightbox() {
 }
 
 // ========== 状态 ==========
-let assets = { items: [], models: [] };
+let assets = { games: [], models: [] };
 let currentJobId = null;
 let eventSource = null;
 let currentScript = null;
 
 // 生成区槽位绑定的素材
-let slotAssets = { item: null, model: null };
+let slotAssets = { game: null, model: null };
 
 // v12: generating 状态轮询定时器（后端驱动状态，无需前端占位卡片）
 let generatingPollTimer = null;
@@ -174,19 +174,19 @@ async function refreshAssets() {
     const res = await fetch("/api/assets");
     if (!res.ok) throw new Error(t('asset.loadFailed'));
     const data = await res.json();
-    assets.items = data.items || [];
+    assets.games = data.games || [];
     assets.models = data.models || [];
 
-    $("#count-items").textContent = assets.items.length;
+    $("#count-games").textContent = assets.games.length;
     $("#count-models").textContent = assets.models.length;
 
-    renderColumnList("items", assets.items, "#col-items");
+    renderColumnList("games", assets.games, "#col-games");
     renderColumnList("models", assets.models, "#col-models");
 
     // v19: 同步 slotAssets 引用，确保绑定的素材数据是最新的
-    if (slotAssets.item) {
-      const fresh = assets.items.find(a => a.id === slotAssets.item.id);
-      if (fresh) slotAssets.item = fresh;
+    if (slotAssets.game) {
+      const fresh = assets.games.find(a => a.id === slotAssets.game.id);
+      if (fresh) slotAssets.game = fresh;
     }
     if (slotAssets.model) {
       const fresh = assets.models.find(a => a.id === slotAssets.model.id);
@@ -225,12 +225,12 @@ function renderColumnList(type, list, containerSel) {
  * 每 5 秒刷新一次素材列表，直到没有 generating 状态的素材为止
  */
 function startGeneratingPollIfNeeded() {
-  const hasGenerating = [...assets.items, ...assets.models].some(a => a.status === "generating");
+  const hasGenerating = [...assets.games, ...assets.models].some(a => a.status === "generating");
   if (hasGenerating && !generatingPollTimer) {
     console.log("[Poll] 检测到 generating 状态素材，启动轮询");
     generatingPollTimer = setInterval(async () => {
       await refreshAssets();
-      const stillGenerating = [...assets.items, ...assets.models].some(a => a.status === "generating");
+      const stillGenerating = [...assets.games, ...assets.models].some(a => a.status === "generating");
       if (!stillGenerating) {
         console.log("[Poll] 所有素材已完成生成，停止轮询");
         clearInterval(generatingPollTimer);
@@ -284,9 +284,9 @@ function formatETA(seconds) {
 }
 
 function getAssetThumbUrl(asset) {
-  // v10: 优先使用新字段（人物用 portrait_image）
+  // v10: 优先使用新字段（人物用 portrait_image，游戏用 screenshot_path）
   const imgPath =
-    asset.thumbnail_image || asset.portrait_image ||
+    asset.thumbnail_image || asset.screenshot_path || asset.portrait_image ||
     asset.avatar_image || asset.selected_look ||
     asset.instruction_image;
   if (!imgPath) return null;
@@ -304,7 +304,7 @@ function getAssetImageUrl(asset, field) {
 // v12: 根据 asset.status 渲染不同 UI（generating / pending / confirmed）
 function createMiniCard(type, asset) {
   const card = document.createElement("div");
-  const slotType = type === "items" ? "item" : "model";
+  const slotType = type === "games" ? "game" : "model";
   const isGenerating = asset.status === "generating";
   const isConfirmed = asset.status === "confirmed";
 
@@ -411,13 +411,13 @@ function createMiniCard(type, asset) {
   if (thumbUrl) {
     thumbHtml = `<img class="asset-mini-thumb" src="${thumbUrl}" alt="${escapeHtml(asset.name)}" onerror="this.style.display='none'">`;
   } else {
-    const icons = { items: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>', models: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' };
+    const icons = { games: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>', models: '<svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' };
     thumbHtml = `<div class="asset-mini-thumb-placeholder">${icons[type]}</div>`;
   }
 
   // 元数据
   let meta = "";
-  if (type === "items") meta = asset.selling_point || asset.category || "";
+  if (type === "games") meta = asset.genre || asset.description || "";
   else if (type === "models") meta = asset.scene_context || asset.personality || "";
 
   // v12: 状态标签（generating 已提前 return，这里只有 pending / confirmed）
@@ -473,7 +473,7 @@ function createMiniCard(type, asset) {
   if (editBtn) {
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (type === "items" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
+      if (type === "games" && asset.questionnaire_fields && asset.questionnaire_fields.length > 0) {
         openQuestionnaireModal(asset);
       } else if (type === "models" && (asset.status === "pending" || asset.status === "failed" || asset.status === "confirmed")) {
         openModelReviewModal(asset);
@@ -560,30 +560,28 @@ function openDetailModal(type, asset) {
   const title = $("#detail-modal-title");
   const body = $("#detail-modal-body");
 
-  const detailTitleKey = type === "items" ? 'modal.itemDetail' : 'modal.modelDetail';
+  const detailTitleKey = type === "games" ? 'modal.gameDetail' : 'modal.modelDetail';
   title.textContent = t(detailTitleKey, {name: asset.name});
 
   let content = "";
 
-  if (type === "items") {
-    // v7: 三张产品图
+  if (type === "games") {
+    // 游戏截图
     content += renderImagesRow(asset, [
-      { field: "thumbnail_image", label: t('detail.thumbnail') },
-      { field: "three_view_image", label: t('detail.threeView') },
+      { field: "screenshot_path", label: t('detail.screenshot') || "Screenshot" },
     ]);
 
-    // v7: tag 分区展示 + 编辑
-    const pi = asset.product_info || {};
-    for (const [key, value] of Object.entries(pi)) {
-      if (value) content += renderTagSection(`item-${key}`, key, value, asset.id, `product_info.${key}`);
-    }
+    // 游戏信息展示
+    if (asset.genre) content += renderTagSection("game-genre", t('detail.genre') || "Genre", asset.genre, asset.id, "genre");
+    if (asset.orientation) content += renderTagSection("game-orientation", t('detail.orientation') || "Orientation", asset.orientation, asset.id, "orientation");
 
-    // 卖点
-    const sp = asset.selling_points || {};
-    if (sp.P0 && sp.P0.length) content += renderTagSection("sp-p0", t('detail.p0SellingPoint'), sp.P0.join("、"), asset.id, "selling_points.P0");
-    if (sp.P1 && sp.P1.length) content += renderTagSection("sp-p1", t('detail.p1SellingPoint'), sp.P1.join("、"), asset.id, "selling_points.P1");
+    // 特色 & 卖点
+    const features = asset.features || [];
+    if (features.length) content += renderTagSection("game-features", t('detail.features') || "Features", features.join("、"), asset.id, "features");
+    const sp = asset.selling_points || [];
+    if (sp.length) content += renderTagSection("game-sp", t('detail.sellingPoints') || "Selling Points", sp.join("、"), asset.id, "selling_points");
 
-    content += `<div class="detail-section"><h4>${t('detail.fullDescription')}</h4><p class="detail-desc">${escapeHtml(asset.full_description)}</p></div>`;
+    if (asset.description) content += `<div class="detail-section"><h4>${t('detail.fullDescription')}</h4><p class="detail-desc">${escapeHtml(asset.description)}</p></div>`;
 
   } else if (type === "models") {
     // v10: 一张大图（portrait_image，人在场景中的半身近景照）
@@ -719,11 +717,101 @@ function openCreateModal(type, autoBindSlot) {
   const modal = $("#create-modal");
   const title = $("#modal-title");
   const body = $("#modal-body");
-  const createTitleKey = type === "items" ? 'modal.createItem' : 'modal.createModel';
+  const createTitleKey = type === "games" ? 'modal.createGame' : 'modal.createModel';
   title.textContent = t(createTitleKey);
 
+  // 游戏创建使用专用表单
+  if (type === "games") {
+    body.innerHTML = `
+      <form id="create-asset-form">
+        <div class="form-group">
+          <label>${t('form.gameDescription') || '游戏描述'}</label>
+          <textarea id="create-desc" name="description" rows="3" placeholder="${t('form.gameDescPlaceholder') || '简单描述这款游戏的玩法和特色'}"></textarea>
+        </div>
+        <div class="form-group">
+          <label>${t('form.gameScreenshot') || '游戏截图 *必填'}</label>
+          <div class="upload-zone" id="create-screenshot-zone">
+            <input type="file" id="create-screenshot-input" name="screenshot" accept="image/*" hidden>
+            <div class="upload-placeholder" id="create-screenshot-placeholder">
+              <span class="upload-icon"><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>
+              <span>${t('form.uploadScreenshot') || '点击上传截图'}</span>
+            </div>
+            <div class="upload-preview-sm" id="create-screenshot-preview"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>${t('form.gameVideo') || '游戏录屏 *必填'}</label>
+          <div class="upload-zone" id="create-video-zone">
+            <input type="file" id="create-video-input" name="gameplay_video" accept="video/*" hidden>
+            <div class="upload-placeholder" id="create-video-placeholder">
+              <span class="upload-icon"><svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></span>
+              <span>${t('form.uploadVideo') || '点击上传录屏'}</span>
+            </div>
+            <div class="upload-preview-sm" id="create-video-preview"></div>
+          </div>
+        </div>
+        <button type="submit" class="btn-submit" id="create-submit-btn">${t('create.createGame') || '创建游戏'}</button>
+      </form>
+    `;
+
+    // 截图上传处理
+    const ssZone = $("#create-screenshot-zone");
+    const ssInput = $("#create-screenshot-input");
+    const ssPlaceholder = $("#create-screenshot-placeholder");
+    const ssPreview = $("#create-screenshot-preview");
+    let screenshotFile = null;
+
+    ssZone.addEventListener("click", (e) => {
+      if (e.target.closest(".remove-img")) return;
+      ssInput.click();
+    });
+    ssInput.addEventListener("change", () => {
+      if (ssInput.files[0]) {
+        screenshotFile = ssInput.files[0];
+        ssPlaceholder.style.display = "none";
+        ssPreview.innerHTML = "";
+        const w = document.createElement("div"); w.className = "img-wrapper";
+        const img = document.createElement("img"); img.src = URL.createObjectURL(screenshotFile);
+        const btn = document.createElement("button"); btn.className = "remove-img"; btn.textContent = "\u00D7";
+        btn.addEventListener("click", (e) => { e.stopPropagation(); screenshotFile = null; ssPreview.innerHTML = ""; ssPlaceholder.style.display = "flex"; });
+        w.appendChild(img); w.appendChild(btn); ssPreview.appendChild(w);
+      }
+    });
+
+    // 视频上传处理
+    const vidZone = $("#create-video-zone");
+    const vidInput = $("#create-video-input");
+    const vidPlaceholder = $("#create-video-placeholder");
+    const vidPreview = $("#create-video-preview");
+    let videoFile = null;
+
+    vidZone.addEventListener("click", (e) => {
+      if (e.target.closest(".remove-img")) return;
+      vidInput.click();
+    });
+    vidInput.addEventListener("change", () => {
+      if (vidInput.files[0]) {
+        videoFile = vidInput.files[0];
+        vidPlaceholder.style.display = "none";
+        vidPreview.innerHTML = `<div class="img-wrapper"><span style="color:var(--text-secondary);font-size:0.85rem;">${escapeHtml(videoFile.name)}</span></div>`;
+      }
+    });
+
+    // 提交
+    $("#create-asset-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = $("#create-submit-btn");
+      submitBtn.disabled = true;
+      submitBtn.textContent = t('button.creating');
+      await handleGameCreate(screenshotFile, videoFile, $("#create-desc").value.trim(), autoBindSlot);
+    });
+
+    modal.style.display = "flex";
+    return;
+  }
+
+  // 人物创建保持原有逻辑
   const placeholders = {
-    items: t('form.itemPlaceholder'),
     models: t('form.modelPlaceholder'),
   };
 
@@ -731,7 +819,7 @@ function openCreateModal(type, autoBindSlot) {
     <form id="create-asset-form">
       <div class="form-group">
         <label>${t('form.description')}</label>
-        <textarea id="create-desc" rows="3" placeholder="${placeholders[type]}" required></textarea>
+        <textarea id="create-desc" rows="3" placeholder="${placeholders[type] || ''}" required></textarea>
       </div>
       <div class="form-group">
         <label>${t('form.referenceImages')}</label>
@@ -744,7 +832,7 @@ function openCreateModal(type, autoBindSlot) {
           <div class="upload-preview-sm" id="create-upload-preview"></div>
         </div>
       </div>
-      <button type="submit" class="btn-submit" id="create-submit-btn">${type === "items" ? t('create.createItem') : t('create.createModel')}</button>
+      <button type="submit" class="btn-submit" id="create-submit-btn">${t('create.createModel')}</button>
     </form>
   `;
 
@@ -786,10 +874,7 @@ function openCreateModal(type, autoBindSlot) {
 
     const desc = $("#create-desc").value.trim();
 
-    if (type === "items") {
-      // 物品走智能问卷流程
-      await handleItemCreate(desc, createFiles, autoBindSlot);
-    } else {
+    {
       // v12: 人物 → 关闭模态框，发送请求，通过 refreshAssets 渲染 generating 卡片
       const formData = new FormData();
       formData.append("description", desc);
@@ -828,59 +913,59 @@ function openCreateModal(type, autoBindSlot) {
   modal.style.display = "flex";
 }
 
-// 物品创建 → 立即关闭模态框，显示分析中占位卡，analyze 完成后弹问卷
-async function handleItemCreate(desc, files, autoBindSlot) {
-  const formData = new FormData();
-  formData.append("description", desc);
-  files.forEach((f) => formData.append("images", f));
+// 游戏创建 → 立即关闭模态框，显示分析中占位卡，analyze 完成后弹问卷
+async function handleGameCreate(screenshotFile, videoFile, description, autoBindSlot) {
+  if (!screenshotFile || !videoFile) {
+    showToast(t('toast.gameUploadRequired') || "请上传游戏截图和录屏视频", "error");
+    return;
+  }
 
-  // v20: 立即关闭模态框 + toast
+  const fd = new FormData();
+  fd.append("description", description);
+  fd.append("screenshot", screenshotFile);
+  fd.append("gameplay_video", videoFile);
+
+  // 立即关闭模态框 + toast
   closeCreateModal();
-  showToast(t('toast.itemAnalyzing') || "正在分析物品...", "info");
+  showToast(t('toast.gameAnalyzing') || "正在分析游戏...", "info");
 
   // 插入临时占位素材到列表，显示 generating 骨架卡
-  const tempId = "temp_item_" + Date.now();
-  const tempAsset = { id: tempId, name: desc.slice(0, 30) || t('asset.generatingName'), status: "generating" };
-  assets.items.unshift(tempAsset);
-  renderColumnList("items", assets.items, "#col-items");
-  $("#count-items").textContent = assets.items.length;
+  const tempId = "temp_game_" + Date.now();
+  const tempAsset = { id: tempId, name: description.slice(0, 30) || t('asset.generatingName'), status: "generating" };
+  assets.games.unshift(tempAsset);
+  renderColumnList("games", assets.games, "#col-games");
+  $("#count-games").textContent = assets.games.length;
 
-  // v19: 如果是从 pill 点击触发的，立即绑定到槽位（pending 状态）
+  // 如果是从 pill 点击触发的，立即绑定到槽位
   if (autoBindSlot) {
     bindSlot(autoBindSlot, tempAsset);
   }
 
   try {
-    // 后台 analyze
-    const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
-    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.itemAnalyzeFailed', {error: ''})); }
+    const res = await fetch("/api/assets/game/analyze", { method: "POST", body: fd });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.gameAnalyzeFailed', {error: ''})); }
     const data = await res.json();
 
     // 移除临时占位
-    assets.items = assets.items.filter(a => a.id !== tempId);
+    assets.games = assets.games.filter(a => a.id !== tempId);
 
-    if (data.status === "rejected") {
-      showToast(t('toast.itemRejected', {reason: data.reason}), "error");
-      if (autoBindSlot) clearSlot(autoBindSlot);
-      refreshAssets();
-      return;
-    }
-
-    showToast(t('toast.itemAnalyzed', {name: data.asset.name}), "success");
+    showToast(t('toast.gameAnalyzed', {name: data.name}), "success");
 
     // 更新绑定到真实素材
-    if (autoBindSlot) {
-      bindSlot(autoBindSlot, data.asset);
+    if (autoBindSlot && data) {
+      bindSlot(autoBindSlot, data);
     }
 
-    // 刷新列表 + 弹问卷
+    // 刷新列表 + 弹问卷（如果有问卷字段）
     await refreshAssets();
-    openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
+    if (data.questionnaire_fields && data.questionnaire_fields.length > 0) {
+      openQuestionnaireModal(data, null, null);
+    }
   } catch (err) {
     // 移除临时占位
-    assets.items = assets.items.filter(a => a.id !== tempId);
+    assets.games = assets.games.filter(a => a.id !== tempId);
     if (autoBindSlot) clearSlot(autoBindSlot);
-    showToast(t('toast.itemAnalyzeFailed', {error: err.message}), "error");
+    showToast(t('toast.gameAnalyzeFailed', {error: err.message}), "error");
     refreshAssets();
   }
 }
@@ -903,7 +988,7 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
     return;
   }
 
-  title.textContent = t('modal.productInfoConfirmWith', {name: asset.name});
+  title.textContent = t('modal.gameInfoConfirmWith', {name: asset.name});
 
   // 存储用户的回答
   const answers = questions.map(q => ({
@@ -1098,9 +1183,9 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       }
     }
 
-    // v12: 关闭问卷模态框，发送确认请求，通过 refreshAssets 渲染 generating 卡片
+    // 关闭问卷模态框，发送确认请求，通过 refreshAssets 渲染 generating 卡片
     modal.style.display = "none";
-    showToast(t('toast.itemConfirming'), "info");
+    showToast(t('toast.gameConfirming') || "游戏信息确认中...", "info");
 
     // 立即刷新一次，显示后端刚创建的 generating 状态卡片
     await refreshAssets();
@@ -1109,24 +1194,24 @@ function openQuestionnaireModal(asset, questionnaire, sellingPoints) {
       const formData = new FormData();
       formData.append("confirmed_fields", JSON.stringify(confirmed));
 
-      const res = await fetch(`/api/assets/item/${asset.id}/confirm`, { method: "POST", body: formData });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.itemConfirmFailed', {error: ''})); }
+      const res = await fetch(`/api/assets/game/${asset.id}/confirm`, { method: "POST", body: formData });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || t('toast.gameConfirmFailed', {error: ''})); }
 
       const data = await res.json();
-      console.log(`[ItemConfirm] 成功: ${data.asset.name}`);
+      console.log(`[GameConfirm] 成功: ${data.asset.name}`);
       // 刷新列表获取 confirmed 状态
       await refreshAssets();
 
-      // v19: 如果该物品已绑定到槽位，更新引用并刷新 pill 状态
-      if (slotAssets.item && slotAssets.item.id === asset.id && data.asset) {
-        slotAssets.item = data.asset;
+      // 如果该游戏已绑定到槽位，更新引用并刷新 pill 状态
+      if (slotAssets.game && slotAssets.game.id === asset.id && data.asset) {
+        slotAssets.game = data.asset;
         updatePillStates();
         updateGenButton();
       }
 
-      showToast(t('toast.itemConfirmSuccess', {name: data.asset.name || t('asset.items')}), "success");
+      showToast(t('toast.gameConfirmSuccess', {name: data.asset.name || t('asset.games')}), "success");
     } catch (err) {
-      showToast(t('toast.itemConfirmFailed', {error: err.message}), "error");
+      showToast(t('toast.gameConfirmFailed', {error: err.message}), "error");
       await refreshAssets();
     }
   }
@@ -1292,9 +1377,9 @@ function startModelReviewPoll(assetId) {
       if (model.status === "pending") {
         clearInterval(pollInterval);
         // 刷新列表 UI
-        assets.items = data.items || [];
+        assets.games = data.games || [];
         assets.models = data.models || [];
-        renderColumnList("items", assets.items, "#col-items");
+        renderColumnList("games", assets.games, "#col-games");
         renderColumnList("models", assets.models, "#col-models");
         // v16 UX: 改为 Toast 通知，不再自动弹窗打断用户
         showToast(t('toast.modelReadyForReview', {name: model.name}), "success");
@@ -1399,7 +1484,7 @@ function setupSlot(slotType) {
   pill.addEventListener("click", (e) => {
     if (e.target.closest(".pill-clear")) return; // 点击清空按钮时不触发
     if (slotAssets[slotType]) return;
-    openCreateModal(slotType === "item" ? "items" : "models", slotType);
+    openCreateModal(slotType === "game" ? "games" : "models", slotType);
   });
 
   fileInput.addEventListener("change", () => {
@@ -1427,16 +1512,16 @@ function setupSlot(slotType) {
     try {
       const { type, id } = JSON.parse(raw);
       if (type !== slotType) {
-        showToast(t('slot.typeMismatch', {type: slotType === "item" ? t('slot.typeItem') : t('slot.typeModel')}), "warning");
+        showToast(t('slot.typeMismatch', {type: slotType === "game" ? t('slot.typeGame') : t('slot.typeModel')}), "warning");
         return;
       }
 
-      const listKey = type === "item" ? "items" : "models";
+      const listKey = type === "game" ? "games" : "models";
       const asset = assets[listKey].find((a) => a.id === id);
       if (!asset) { showToast(t('asset.notFound'), "error"); return; }
 
       if (type === "model" && !asset.portrait_image) { showToast(t('slot.selectLookFirst'), "warning"); return; }
-      if (type === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
+      if (type === "game" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
 
       bindSlot(slotType, asset);
     } catch (err) {
@@ -1468,20 +1553,9 @@ async function handleSlotUpload(slotType, files) {
   formData.append("description", t('form.analyzeByImage'));
   files.forEach((f) => formData.append("images", f));
 
-  if (slotType === "item") {
-    // 走问卷流程（analyze 较快，不需要占位卡片）
-    try {
-      showToast(t('toast.analyzingItem'), "info");
-      const res = await fetch("/api/assets/item/analyze", { method: "POST", body: formData });
-      if (!res.ok) throw new Error(t('toast.itemAnalyzeFailed', {error: ''}));
-      const data = await res.json();
-      if (data.status === "rejected") { showToast(data.reason, "error"); return; }
-      showToast(t('toast.itemAnalyzeComplete', {name: data.asset.name}), "success");
-      openQuestionnaireModal(data.asset, data.questionnaire, data.selling_points);
-      refreshAssets();
-    } catch (err) {
-      showToast(t('toast.itemAnalyzeFailed', {error: err.message}), "error");
-    }
+  if (slotType === "game") {
+    // 游戏需要截图+视频，slot上传不适用，引导用户用创建表单
+    openCreateModal("games", slotType);
   } else {
     // v12: 人物 → 发送请求，通过 refreshAssets 渲染后端状态卡片
     showToast(t('toast.modelCreating'), "info");
@@ -1511,7 +1585,7 @@ async function handleSlotUpload(slotType, files) {
 }
 
 // 初始化两个槽位
-setupSlot("item");
+setupSlot("game");
 setupSlot("model");
 
 // ========== (v18: quickstart 按钮已移除) ==========
@@ -1838,51 +1912,36 @@ function initQueuePanel() {
 // ========== 生成按钮 ==========
 
 function updateGenButton() {
-  // v19: 不仅检查素材是否绑定，还检查是否"就绪"
-  const itemReady = slotAssets.item && slotAssets.item.questionnaire_status === "completed";
+  // 检查素材是否绑定且"就绪"
+  const gameReady = slotAssets.game && slotAssets.game.questionnaire_status === "completed";
   const modelReady = !slotAssets.model || !!slotAssets.model.portrait_image; // 人物可选，但绑定后必须就绪
-  const platform = document.getElementById('gen-platform').value;
-  const segments = document.getElementById('gen-segments').value;
-  // 物品就绪 + 人物就绪（或未绑定） + 平台 + 时长 → 启用生成按钮
-  $("#btn-generate").disabled = !(itemReady && modelReady && platform && segments);
+  // 游戏就绪 + 人物就绪（或未绑定） → 启用生成按钮
+  $("#btn-generate").disabled = !(gameReady && modelReady);
 }
 
 $("#btn-generate").addEventListener("click", async () => {
-  if (!slotAssets.item) return;
+  if (!slotAssets.game) return;
 
   const btn = $("#btn-generate");
   btn.disabled = true;
   btn.classList.add("loading");
 
-  const platform = $("#gen-platform").value;
-  const segmentCount = $("#gen-segments").value;
   const extra = $("#gen-prompt").value.trim();
 
   try {
-    // 如果人物槽位为空，先自动创建并确认
-    if (!slotAssets.model) {
-      showToast(t('toast.autoCreatingModel'), "info");
-      const fd = new FormData();
-      fd.append("description", extra || t('form.autoModelDesc'));
-      const res = await fetch("/api/assets/model", { method: "POST", body: fd });
-      const data = await res.json();
-      // v15: 后端自动设置 portrait_image，直接调 select 确认
-      if (data.asset && data.asset.portrait_image) {
-        await fetch(`/api/assets/model/${data.asset.id}/select`, { method: "POST" });
-      }
-      slotAssets.model = data.asset;
-    }
-
-    // 提交生成
+    // 提交生成（JSON body，匹配后端 /api/generate/v2）
     showToast(t('toast.submittingVideo'), "info");
-    const genForm = new FormData();
-    genForm.append("item_id", slotAssets.item.id);
-    genForm.append("model_id", slotAssets.model.id);
-    genForm.append("platform", platform);
-    genForm.append("segment_count", segmentCount);
-    genForm.append("extra_requirements", extra);
+    const payload = {
+      game_id: slotAssets.game.id,
+      model_id: slotAssets.model ? slotAssets.model.id : null,
+      extra_requirements: extra,
+    };
 
-    const genRes = await fetch("/api/generate/v2", { method: "POST", body: genForm });
+    const genRes = await fetch("/api/generate/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
     if (!genRes.ok) { const err = await genRes.json(); throw new Error(err.detail || t('toast.generateFailed', {error: ''})); }
     const genData = await genRes.json();
 
@@ -2179,8 +2238,8 @@ $("#btn-new-task").addEventListener("click", () => {
   currentJobId = null;
   localStorage.removeItem('vlogforge_job_id');
   currentScript = null;
-  slotAssets = { item: null, model: null };
-  clearSlot("item");
+  slotAssets = { game: null, model: null };
+  clearSlot("game");
   clearSlot("model");
   showView("home");
   refreshAssets();
@@ -2269,15 +2328,15 @@ function initGenDock() {
     if (!raw) return;
     try {
       const { type, id } = JSON.parse(raw);
-      const slotType = type; // "item" 或 "model"
-      if (slotType !== "item" && slotType !== "model") return;
+      const slotType = type; // "game" 或 "model"
+      if (slotType !== "game" && slotType !== "model") return;
 
-      const listKey = slotType === "item" ? "items" : "models";
+      const listKey = slotType === "game" ? "games" : "models";
       const asset = assets[listKey].find((a) => a.id === id);
       if (!asset) { showToast(t('asset.notFound'), "error"); return; }
 
       if (slotType === "model" && !asset.portrait_image) { showToast(t('slot.selectLookFirst'), "warning"); return; }
-      if (slotType === "item" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
+      if (slotType === "game" && asset.questionnaire_status && asset.questionnaire_status !== "completed") { showToast(t('slot.confirmInfoFirst'), "warning"); return; }
 
       bindSlot(slotType, asset);
     } catch (err) {
@@ -2304,7 +2363,7 @@ function initGenDock() {
 
 // v18: 更新 pill 槽位的显示状态
 function updatePillStates() {
-  ["item", "model"].forEach(type => {
+  ["game", "model"].forEach(type => {
     const pill = $(`#slot-${type}`);
     const nameEl = $(`#slot-${type}-name`);
     const clearBtn = $(`#slot-${type}-clear`);
@@ -2314,11 +2373,11 @@ function updatePillStates() {
       nameEl.textContent = slotAssets[type].name;
       if (clearBtn) clearBtn.style.display = "inline-flex";
 
-      // v19: 检查素材是否"就绪"，未就绪时显示 pending 状态
-      // 物品就绪条件：questionnaire_status === "completed"
+      // 检查素材是否"就绪"，未就绪时显示 pending 状态
+      // 游戏就绪条件：questionnaire_status === "completed"
       // 人物就绪条件：portrait_image 存在（truthy）
       let isReady = false;
-      if (type === "item") {
+      if (type === "game") {
         isReady = slotAssets[type].questionnaire_status === "completed";
       } else {
         isReady = !!slotAssets[type].portrait_image;
@@ -2343,19 +2402,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await window.i18nPromise;
   }
 
-  // 初始化时长下拉选择
-  const segSel = $("#gen-segments");
-  if (segSel) {
-    segSel.addEventListener("change", () => { updatePillStates(); updateGenButton(); });
-    updateDurationOptions();
-  }
-
-  // 初始化平台下拉选择：切换时更新生成按钮状态
-  const platSel = $("#gen-platform");
-  if (platSel) {
-    platSel.addEventListener("change", () => { updateGenButton(); });
-  }
-
   // 初始化图片预览 Lightbox
   initLightbox();
 
@@ -2371,7 +2417,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // v16 UX: 监听语言热切换，刷新动态内容
   window.addEventListener("i18n:langChanged", () => {
     refreshStageLabels();
-    updateDurationOptions();
     updateGenButton();
     refreshAssets();
     fetchJobQueue();
