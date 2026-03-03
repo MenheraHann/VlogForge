@@ -254,9 +254,9 @@ async def confirm_item(
                 name=asset.name, full_description=asset.full_description,
             )
             if ref_images:
-                img_bytes = await image_to_image(ref_images, prompt)
+                img_bytes = await image_to_image(ref_images, prompt, aspect_ratio="1:1")
             else:
-                img_bytes = await text_to_image(prompt)
+                img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
             path = os.path.join(asset_dir, "thumbnail.png")
             save_image(img_bytes, path)
             asset.thumbnail_image = path
@@ -274,9 +274,9 @@ async def confirm_item(
                 name=asset.name, full_description=asset.full_description,
             )
             if ref_images:
-                img_bytes = await image_to_image(ref_images, prompt)
+                img_bytes = await image_to_image(ref_images, prompt, aspect_ratio="1:1")
             else:
-                img_bytes = await text_to_image(prompt)
+                img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
             path = os.path.join(asset_dir, "three_view.png")
             save_image(img_bytes, path)
             asset.three_view_image = path
@@ -300,12 +300,12 @@ async def confirm_item(
                         # 优先 img2img，失败则降级 text2img
                         try:
                             if ref_images:
-                                img_bytes = await image_to_image(ref_images, prompt)
+                                img_bytes = await image_to_image(ref_images, prompt, aspect_ratio="1:1")
                             else:
-                                img_bytes = await text_to_image(prompt)
+                                img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
                         except Exception:
                             logger.info("[ADA] 缩略图 img2img 重试失败，降级 text2img")
-                            img_bytes = await text_to_image(prompt)
+                            img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
                         path = os.path.join(asset_dir, "thumbnail.png")
                         save_image(img_bytes, path)
                         asset.thumbnail_image = path
@@ -319,12 +319,12 @@ async def confirm_item(
                         # 优先 img2img，失败则降级 text2img
                         try:
                             if ref_images:
-                                img_bytes = await image_to_image(ref_images, prompt)
+                                img_bytes = await image_to_image(ref_images, prompt, aspect_ratio="1:1")
                             else:
-                                img_bytes = await text_to_image(prompt)
+                                img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
                         except Exception:
                             logger.info("[ADA] 三视图 img2img 重试失败，降级 text2img")
-                            img_bytes = await text_to_image(prompt)
+                            img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
                         path = os.path.join(asset_dir, "three_view.png")
                         save_image(img_bytes, path)
                         asset.three_view_image = path
@@ -363,6 +363,51 @@ def _load_original_images(asset: ItemAsset) -> list[bytes]:
             except Exception as e:
                 logger.warning(f"[ADA] 读取原始图片失败 ({path}): {e}")
     return images
+
+
+async def regenerate_item_image(
+    asset: ItemAsset,
+    image_type: str,  # "thumbnail" | "three_view"
+) -> str:
+    """
+    重新生成物品的单张图片（缩略图或三视图）。
+    使用原始产品图做 img2img 参考，失败则降级为 text2img。
+    返回新图片路径。
+    """
+    asset_dir = os.path.join(ASSETS_DIR, asset.id)
+    os.makedirs(asset_dir, exist_ok=True)
+
+    ref_images = _load_original_images(asset)
+
+    if image_type == "thumbnail":
+        prompt = ADA_ITEM_THUMBNAIL_PROMPT.format(
+            name=asset.name, full_description=asset.full_description,
+        )
+        filename = "thumbnail.png"
+    elif image_type == "three_view":
+        prompt = ADA_ITEM_THREE_VIEW_PROMPT.format(
+            name=asset.name, full_description=asset.full_description,
+        )
+        filename = "three_view.png"
+    else:
+        raise ValueError(f"未知的图片类型: {image_type}")
+
+    logger.info(f"[ADA] 重新生成物品图片: {asset.id}, type={image_type}")
+
+    # 优先 img2img，降级 text2img
+    try:
+        if ref_images:
+            img_bytes = await image_to_image(ref_images, prompt, aspect_ratio="1:1")
+        else:
+            img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
+    except Exception:
+        logger.warning(f"[ADA] {image_type} img2img 失败，降级 text2img")
+        img_bytes = await text_to_image(prompt, aspect_ratio="1:1")
+
+    path = os.path.join(asset_dir, filename)
+    save_image(img_bytes, path)
+    logger.info(f"[ADA] 物品图片重新生成完成: {path}")
+    return path
 
 
 # ========== 兼容旧版：一步完成的 create_item_asset ==========

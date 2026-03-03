@@ -200,8 +200,8 @@ body {
 }
 
 .asset-mini-badge {
-  font-size: 0.75rem; padding: 0.35rem 0.7rem; border-radius: var(--radius-sm);
-  line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; padding: 0 0.7rem; border-radius: 999px;
+  height: 26px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
 .asset-mini-badge.success { background: rgba(34,197,94,0.15); color: var(--success); }
 .asset-mini-badge.warning { background: rgba(234,179,8,0.15); color: var(--warning); }
@@ -531,8 +531,8 @@ body {
 
 /* ========== 按钮 ========== */
 .btn-sm {
-  padding: 0.35rem 0.7rem; border-radius: var(--radius-sm);
-  font-size: 0.75rem; font-weight: 500; font-family: inherit; cursor: pointer;
+  padding: 0 0.7rem; height: 26px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 500; font-family: inherit; cursor: pointer;
   transition: all var(--duration-fast); border: none;
   line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
@@ -968,12 +968,6 @@ body {
 .btn-detail {
   background: var(--accent);
   color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 0.2rem 0.5rem;
-  font-size: 0.7rem;
-  cursor: pointer;
-  transition: background var(--duration-fast);
 }
 .btn-detail:hover { background: var(--accent-light); }
 
@@ -1330,6 +1324,29 @@ body {
 }
 .detail-image-label {
   font-size: 0.7rem; color: var(--text-muted); text-align: center;
+}
+
+/* v19: 图片重新生成按钮 */
+.detail-image-wrapper {
+  position: relative;
+}
+.detail-image-loading {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); border-radius: var(--radius-sm);
+}
+.btn-regen-image {
+  width: 100%; padding: 0.3rem 0; margin-top: 0.25rem;
+  font-size: 0.7rem; color: var(--error);
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 999px; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-regen-image:hover {
+  background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4);
+}
+.btn-regen-image:disabled {
+  opacity: 0.5; cursor: not-allowed;
 }
 
 /* ========== 图片预览 Lightbox ========== */

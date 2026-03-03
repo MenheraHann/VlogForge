@@ -33,6 +33,7 @@ from backend.agents.ada_agent import (
     create_item_asset,
     create_model_asset,
     quickstart_parse,
+    regenerate_item_image,
 )
 from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
 
@@ -342,6 +343,107 @@ async def select_model_look(asset_id: str):
         "asset_status": model.status.value,
         "asset": model.model_dump(),
     }
+
+
+# ========== 素材图片：单张重新生成（v19） ==========
+
+async def _regenerate_item_image_task(
+    asset_id: str,
+    image_type: str,
+    asset_manager: AssetManager,
+):
+    """后台异步重新生成物品的单张图片"""
+    try:
+        asset = asset_manager.get_item(asset_id)
+        if not asset:
+            logger.error(f"[Item] {asset_id} 已被删除，重新生成结果丢弃")
+            return
+
+        new_path = await regenerate_item_image(asset, image_type)
+
+        # 更新对应字段
+        if image_type == "thumbnail":
+            asset.thumbnail_image = new_path
+        elif image_type == "three_view":
+            asset.three_view_image = new_path
+
+        asset.status = AssetStatus.CONFIRMED
+        asset_manager.save_item(asset)
+        logger.info(f"[Item] {asset_id} 图片 {image_type} 重新生成完成")
+
+    except Exception as e:
+        logger.error(f"[Item] {asset_id} 图片重新生成失败: {e}", exc_info=True)
+        asset = asset_manager.get_item(asset_id)
+        if asset:
+            asset.status = AssetStatus.CONFIRMED
+            asset_manager.save_item(asset)
+
+
+@app.post("/api/assets/{asset_id}/regenerate-image")
+async def regenerate_asset_image(
+    asset_id: str,
+    image_type: str = Form(..., description="要重新生成的图片类型: thumbnail / three_view / portrait"),
+):
+    """
+    v19: 单张图片重新生成。
+    物品：thumbnail / three_view（使用原始产品图做 img2img 参考）
+    人物：portrait（生成新的 look 选项让用户选择）
+    """
+    if asset_id.startswith("item_"):
+        item = asset_manager.get_item(asset_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"物品素材 {asset_id} 不存在")
+        if image_type not in ("thumbnail", "three_view"):
+            raise HTTPException(status_code=400, detail=f"物品不支持的图片类型: {image_type}")
+        if not item.full_description:
+            raise HTTPException(status_code=400, detail="缺少 full_description，无法重新生成")
+
+        asyncio.create_task(
+            _regenerate_item_image_task(
+                asset_id=asset_id,
+                image_type=image_type,
+                asset_manager=asset_manager,
+            )
+        )
+
+        return {
+            "status": "ok",
+            "asset_id": asset_id,
+            "image_type": image_type,
+            "message": f"正在重新生成{image_type}，请稍候",
+        }
+
+    elif asset_id.startswith("model_"):
+        model = asset_manager.get_model(asset_id)
+        if not model:
+            raise HTTPException(status_code=404, detail=f"人物素材 {asset_id} 不存在")
+        if image_type != "portrait":
+            raise HTTPException(status_code=400, detail=f"人物不支持的图片类型: {image_type}")
+        if not model.full_description:
+            raise HTTPException(status_code=400, detail="缺少 full_description，无法重新生成")
+
+        model.status = AssetStatus.GENERATING
+        asset_manager.save_model(model)
+
+        ref_images = _load_model_reference_images(model)
+        asyncio.create_task(
+            _regenerate_model_task(
+                model_id=asset_id,
+                description=model.full_description,
+                reference_images=ref_images if ref_images else None,
+                asset_manager=asset_manager,
+            )
+        )
+
+        return {
+            "status": "ok",
+            "asset_id": asset_id,
+            "image_type": image_type,
+            "message": "正在重新生成人物形象，请稍候",
+        }
+
+    else:
+        raise HTTPException(status_code=400, detail=f"未知的素材 ID 格式: {asset_id}")
 
 
 # ========== 人物：重新生成 / 调整意见（v15 新增） ==========

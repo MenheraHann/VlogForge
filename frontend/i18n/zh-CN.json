@@ -209,7 +209,9 @@
     "createFailed": "创建失败: {error}",
     "modelReadyForReview": "{name} 形象已生成，点击卡片查看",
     "generationFailedAtStage": "{stage}阶段失败: {error}",
-    "pollingTimeout": "连接超时，请检查网络后重试"
+    "pollingTimeout": "连接超时，请检查网络后重试",
+    "imageRegenSuccess": "图片已重新生成",
+    "imageRegenFailed": "图片重新生成超时"
   },
   "status": {
     "queued": "排队中",

@@ -547,8 +547,22 @@ function renderImagesRow(asset, fields) {
   let html = '<div class="detail-images-row">';
   for (const { field, label } of fields) {
     const url = getAssetImageUrl(asset, field);
+    // 映射 field → image_type 参数
+    const imageTypeMap = {
+      "thumbnail_image": "thumbnail",
+      "three_view_image": "three_view",
+      "portrait_image": "portrait",
+    };
+    const imageType = imageTypeMap[field] || "";
     if (url) {
-      html += `<div class="detail-image-item"><img src="${url}" alt="${label}" onerror="this.parentElement.style.display='none'"><div class="detail-image-label">${escapeHtml(label)}</div></div>`;
+      html += `<div class="detail-image-item" data-asset-id="${asset.id}" data-image-type="${imageType}" data-field="${field}">
+        <div class="detail-image-wrapper">
+          <img src="${url}" alt="${escapeHtml(label)}" onerror="this.parentElement.style.display='none'">
+          <div class="detail-image-loading" style="display:none;"><span class="spinner-inline"></span></div>
+        </div>
+        <div class="detail-image-label">${escapeHtml(label)}</div>
+        ${imageType ? `<button class="btn-regen-image" data-asset-id="${asset.id}" data-image-type="${imageType}" data-field="${field}">${t('button.regenerate') || '重新生成'}</button>` : ''}
+      </div>`;
     }
   }
   html += '</div>';
@@ -601,6 +615,88 @@ function openDetailModal(type, asset) {
   }
 
   body.innerHTML = content;
+
+  // v19: 绑定图片重新生成按钮
+  body.querySelectorAll(".btn-regen-image").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const assetId = btn.dataset.assetId;
+      const imageType = btn.dataset.imageType;
+      const field = btn.dataset.field;
+      const imageItem = btn.closest(".detail-image-item");
+      const loadingOverlay = imageItem.querySelector(".detail-image-loading");
+
+      // 显示 loading 蒙层，禁用按钮
+      if (loadingOverlay) loadingOverlay.style.display = "flex";
+      btn.disabled = true;
+      btn.textContent = t('button.regenerating') || '重新生成中...';
+
+      try {
+        const formData = new FormData();
+        formData.append("image_type", imageType);
+        const res = await fetch(`/api/assets/${assetId}/regenerate-image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "重新生成失败");
+        }
+
+        // 人物：关闭详情弹窗，打开审核弹窗让用户选择
+        if (assetId.startsWith("model_")) {
+          modal.style.display = "none";
+          showToast(t('modelReview.regenerateSuccess') || "正在重新生成，请稍候...", "info");
+          await refreshAssets();
+          startGeneratingPollIfNeeded();
+          // 轮询等待人物生成完成后自动弹出审核弹窗
+          startModelReviewPoll(assetId);
+          return;
+        }
+
+        // 物品：轮询等待图片更新
+        let retries = 0;
+        const maxRetries = 30;
+        const pollInterval = setInterval(async () => {
+          retries++;
+          try {
+            const assetRes = await fetch(`/api/assets/${assetId}`);
+            if (assetRes.ok) {
+              const assetData = await assetRes.json();
+              const newUrl = assetData[field];
+              if (newUrl) {
+                const img = imageItem.querySelector("img");
+                if (img) img.src = `/assets/${assetId}/${newUrl.split('/').pop()}?t=${Date.now()}`;
+              }
+              // 检查是否还在生成中（物品不改 status，用时间戳判断）
+              if (retries >= 3) {
+                clearInterval(pollInterval);
+                if (loadingOverlay) loadingOverlay.style.display = "none";
+                btn.disabled = false;
+                btn.textContent = t('button.regenerate') || '重新生成';
+                showToast(t('toast.imageRegenSuccess') || "图片已重新生成", "success");
+                await refreshAssets();
+              }
+            }
+          } catch {}
+          if (retries >= maxRetries) {
+            clearInterval(pollInterval);
+            if (loadingOverlay) loadingOverlay.style.display = "none";
+            btn.disabled = false;
+            btn.textContent = t('button.regenerate') || '重新生成';
+            showToast(t('toast.imageRegenFailed') || "图片重新生成超时", "error");
+          }
+        }, 2000);
+
+      } catch (err) {
+        if (loadingOverlay) loadingOverlay.style.display = "none";
+        btn.disabled = false;
+        btn.textContent = t('button.regenerate') || '重新生成';
+        showToast(err.message, "error");
+      }
+    });
+  });
+
   modal.style.display = "flex";
 
   // v7: 绑定分区编辑按钮

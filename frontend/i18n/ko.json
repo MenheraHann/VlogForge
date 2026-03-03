@@ -209,7 +209,9 @@
     "createFailed": "생성 실패: {error}",
     "modelReadyForReview": "{name} 초상화가 완성되었습니다. 카드를 클릭하여 확인해 주세요",
     "generationFailedAtStage": "{stage} 단계에서 실패: {error}",
-    "pollingTimeout": "연결 시간 초과. 네트워크를 확인하고 다시 시도해 주세요"
+    "pollingTimeout": "연결 시간 초과. 네트워크를 확인하고 다시 시도해 주세요",
+    "imageRegenSuccess": "이미지가 재생성되었습니다",
+    "imageRegenFailed": "이미지 재생성 시간 초과"
   },
   "status": {
     "queued": "대기 중",

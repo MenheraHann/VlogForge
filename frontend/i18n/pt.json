@@ -209,7 +209,9 @@
     "createFailed": "Falha ao criar: {error}",
     "modelReadyForReview": "Retrato de {name} pronto, clique no cartão para revisar",
     "generationFailedAtStage": "Falha em {stage}: {error}",
-    "pollingTimeout": "Conexão perdida. Verifique sua rede e tente novamente."
+    "pollingTimeout": "Conexão perdida. Verifique sua rede e tente novamente.",
+    "imageRegenSuccess": "Imagem regenerada",
+    "imageRegenFailed": "Regeneração de imagem expirou"
   },
   "status": {
     "queued": "Na fila",

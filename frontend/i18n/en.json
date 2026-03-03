@@ -209,7 +209,9 @@
     "createFailed": "Creation failed: {error}",
     "modelReadyForReview": "{name} portrait ready, click the card to review",
     "generationFailedAtStage": "Failed at {stage}: {error}",
-    "pollingTimeout": "Connection lost. Please check your network and try again."
+    "pollingTimeout": "Connection lost. Please check your network and try again.",
+    "imageRegenSuccess": "Image regenerated",
+    "imageRegenFailed": "Image regeneration timed out"
   },
   "status": {
     "queued": "Queued",

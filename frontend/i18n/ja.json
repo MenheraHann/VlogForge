@@ -209,7 +209,9 @@
     "createFailed": "作成に失敗: {error}",
     "modelReadyForReview": "{name} の肖像が完成しました。カードをクリックして確認してください",
     "generationFailedAtStage": "{stage}段階で失敗: {error}",
-    "pollingTimeout": "接続がタイムアウトしました。ネットワークを確認して再試行してください"
+    "pollingTimeout": "接続がタイムアウトしました。ネットワークを確認して再試行してください",
+    "imageRegenSuccess": "画像を再生成しました",
+    "imageRegenFailed": "画像の再生成がタイムアウトしました"
   },
   "status": {
     "queued": "待機中",
