@@ -10,6 +10,7 @@ import os
 import logging
 from typing import Optional
 
+from PIL import Image
 from google.genai import types
 
 from backend.config import get_genai_client, TEXT_MODEL, ASSETS_DIR, IMAGE_GEN_MODEL_PRO
@@ -546,9 +547,8 @@ async def quickstart_parse(
 
 def _detect_orientation(image_path: str) -> str:
     """检测图片方向：宽>高=landscape，否则portrait"""
-    from PIL import Image
-    img = Image.open(image_path)
-    w, h = img.size
+    with Image.open(image_path) as img:
+        w, h = img.size
     return "landscape" if w > h else "portrait"
 
 
