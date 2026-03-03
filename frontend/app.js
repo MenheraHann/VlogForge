@@ -2292,17 +2292,6 @@ async function restoreJobIfNeeded() {
   }
 }
 
-// 时长下拉选择：i18n 切换时更新 option 文本
-function updateDurationOptions() {
-  const sel = $("#gen-segments");
-  if (!sel) return;
-  Array.from(sel.options).forEach(opt => {
-    if (!opt.value) return; // 跳过 "未选择" 占位项
-    const n = parseInt(opt.value);
-    opt.textContent = `${n * 6}s（${n}×6s）`;
-  });
-}
-
 // ========== v17: 底部生成 Dock ==========
 
 function initGenDock() {
