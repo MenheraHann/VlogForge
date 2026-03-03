@@ -11,7 +11,7 @@ import asyncio
 import logging
 from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Body, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, PLATFORM_ASPECT_MAP, MIN_SEGMENTS, MAX_SEGMENTS
 from backend.models import (
     Platform, JobStatus, AssetType,
-    ItemAsset, ModelAsset,
+    ItemAsset, ModelAsset, GameAsset,
     JobResponse, ProgressResponse,
 )
 from backend.services.job_manager import JobManager
@@ -29,6 +29,8 @@ from backend.models import AssetStatus
 from backend.agents.ada_agent import (
     analyze_item,
     confirm_item,
+    analyze_game,
+    confirm_game,
     create_item_asset,
     create_model_asset,
     quickstart_parse,
@@ -250,6 +252,71 @@ async def confirm_item_asset(
         "image_results": image_results,
         "images_generated": success_count,
         "message": f"产品档案已完成，{success_count}/2 张图片已生成",
+    }
+
+
+# ========== 游戏智能问卷 API（两步流程） ==========
+
+@app.post("/api/assets/game/analyze")
+async def analyze_game_asset(
+    description: str = Form(..., description="游戏描述"),
+    screenshot: UploadFile = File(..., description="游戏截图"),
+    gameplay_video: UploadFile = File(..., description="游戏实机录屏"),
+):
+    """
+    游戏分析（第 1 步）：ADA 分析游戏截图+录屏 → 返回智能问卷。
+    前端根据返回的 questionnaire_fields 渲染表单给用户确认。
+    """
+    asset_id = asset_manager.generate_id(AssetType.GAME)
+    logger.info(f"[API] 游戏分析: {asset_id}")
+
+    screenshot_bytes = await screenshot.read()
+    video_bytes = await gameplay_video.read()
+
+    asset = await analyze_game(
+        asset_id=asset_id,
+        description=description,
+        screenshot=screenshot_bytes,
+        gameplay_video_bytes=video_bytes,
+    )
+
+    # 暂存到素材库（generating 状态，前端刷新可恢复占位卡片）
+    asset.status = AssetStatus.GENERATING
+    asset_manager.save_game(asset)
+
+    return {
+        "status": "ok",
+        "asset_id": asset.id,
+        "asset": asset.model_dump(),
+        "questionnaire": [f.model_dump() for f in asset.questionnaire_fields],
+        "selling_points": asset.selling_points,
+        "message": "请确认或修改以下游戏信息",
+    }
+
+
+@app.post("/api/assets/game/{asset_id}/confirm")
+async def confirm_game_asset(asset_id: str, body: dict = Body(...)):
+    """
+    游戏确认（第 2 步）：用户确认问卷 → ADA 生成最终游戏档案。
+    body 中需包含 confirmed_fields: [{key, label, value, priority, source}]
+    """
+    asset = asset_manager.get_game(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail=f"游戏素材 {asset_id} 不存在")
+
+    confirmed_fields = body.get("confirmed_fields", [])
+    if not confirmed_fields:
+        raise HTTPException(status_code=400, detail="confirmed_fields 不能为空")
+
+    logger.info(f"[API] 游戏确认: {asset_id}, 字段数={len(confirmed_fields)}")
+
+    updated_asset = await confirm_game(asset, confirmed_fields)
+    asset_manager.save_game(updated_asset)
+
+    return {
+        "status": "ok",
+        "asset": updated_asset.model_dump(),
+        "message": "游戏档案已完成",
     }
 
 
@@ -497,6 +564,7 @@ async def list_assets():
     """列出所有素材"""
     return {
         "items": [a.model_dump() for a in asset_manager.list_items()],
+        "games": [a.model_dump() for a in asset_manager.list_games()],
         "models": [a.model_dump() for a in asset_manager.list_models()],
         "stats": asset_manager.get_stats(),
     }
@@ -531,6 +599,8 @@ async def update_asset(asset_id: str, updates: str = Form(..., description="更�
     # 重新保存
     if asset_id.startswith("item_"):
         asset_manager.save_item(asset)
+    elif asset_id.startswith("game_"):
+        asset_manager.save_game(asset)
     elif asset_id.startswith("model_"):
         asset_manager.save_model(asset)
 
@@ -543,6 +613,8 @@ async def delete_asset(asset_id: str):
     """删除素材"""
     if asset_id.startswith("item_"):
         ok = asset_manager.delete_item(asset_id)
+    elif asset_id.startswith("game_"):
+        ok = asset_manager.delete_game(asset_id)
     elif asset_id.startswith("model_"):
         ok = asset_manager.delete_model(asset_id)
     else:
@@ -727,55 +799,51 @@ async def generate_video(
 
 @app.post("/api/generate/v2", response_model=JobResponse)
 async def generate_video_v2(
-    item_id: str = Form(..., description="物品素材 ID"),
-    model_id: str = Form(..., description="人物素材 ID"),
-    platform: Platform = Form(..., description="目标平台"),
-    segment_count: int = Form(..., description="视频分段数（3~10）"),
+    game_id: str = Form(..., description="游戏素材 ID"),
+    model_id: Optional[str] = Form(None, description="人物素材 ID（可选，部分游戏视频不需要真人出镜）"),
     extra_requirements: str = Form("", description="额外要求"),
 ):
     """
-    创建视频生成任务（v2：基于素材库选择）
-    用户从素材库选择 1 物品 + 1 人物，组合生成视频
+    创建视频生成任务（v2：基于游戏素材库）
+    用户选择 1 个游戏 + 可选 1 个人物，生成游戏推广视频。
+    平台固定 9:16 竖屏，分段固定 4 段。
     """
-    segment_count = max(MIN_SEGMENTS, min(MAX_SEGMENTS, segment_count))
+    # 验证游戏素材存在
+    game = asset_manager.get_game(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail=f"游戏素材 {game_id} 不存在")
 
-    # 验证素材存在
-    item = asset_manager.get_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail=f"物品素材 {item_id} 不存在")
-
-    model = asset_manager.get_model(model_id)
-    if not model:
-        raise HTTPException(status_code=404, detail=f"人物素材 {model_id} 不存在")
+    # 人物素材可选
+    model = None
+    if model_id:
+        model = asset_manager.get_model(model_id)
+        if not model:
+            raise HTTPException(status_code=404, detail=f"人物素材 {model_id} 不存在")
 
     job_id = str(uuid.uuid4())[:8]
+    segment_count = 4  # 游戏推广视频固定 4 段
     logger.info(
-        f"[Job {job_id}] v2 生成请求: "
-        f"物品={item.name}, 人物={model.name}, 分段={segment_count}"
+        f"[Job {job_id}] v2 游戏生成请求: "
+        f"游戏={game.name}, 人物={model.name if model else '无'}, 分段={segment_count}"
     )
 
-    aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
-
     # 创建任务
-    task_name = f"{item.name} {segment_count * 6}s"
     job_data = {
         "job_id": job_id,
-        "task_name": task_name,
-        "mode": "v2_assets",
-        "item": item.model_dump(),
-        "model": model.model_dump(),
-        "platform": platform.value,
-        "duration": f"{segment_count * 6}s",
-        "extra_requirements": extra_requirements,
+        "task_name": f"Game: {game.name}",
+        "mode": "v2_game",
+        "game": game.model_dump(mode="json"),
+        "model": model.model_dump(mode="json") if model else None,
+        "aspect_ratio": "9:16",
         "segment_count": segment_count,
-        "frame_count": segment_count + 1,
-        "aspect_ratio": aspect_ratio,
+        "frame_count": segment_count + 2,  # 4 segments + extra frames
+        "extra_requirements": extra_requirements or "",
     }
     job_manager.create_job(job_id, job_data)
 
-    # v14：加入队列，由 JobManager 串行调度执行
+    # 加入队列，由 JobManager 串行调度执行
     job_manager.enqueue_job(job_id)
-    logger.info(f"[Job {job_id}] v2 已加入渲染队列")
+    logger.info(f"[Job {job_id}] v2 游戏任务已加入渲染队列")
 
     return JobResponse(job_id=job_id, status=JobStatus.QUEUED, message="任务已加入队列")
 
