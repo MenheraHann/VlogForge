@@ -16,6 +16,7 @@ COPY . .
 # 创建产物目录
 RUN mkdir -p artifacts
 
-EXPOSE 8000
+ENV PORT=8000
+EXPOSE $PORT
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn backend.main:app --host 0.0.0.0 --port $PORT

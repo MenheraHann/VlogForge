@@ -41,9 +41,27 @@ from backend.tools.image_gen import SAFETY_FILTER_ERROR_TAG
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# 文件上传限制
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20MB per file
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+async def _validate_upload(file: UploadFile) -> bytes:
+    """验证上传文件大小和类型"""
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f"文件过大，最大允许 {MAX_UPLOAD_SIZE // 1024 // 1024}MB")
+    if file.content_type and file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail=f"不支持的文件类型: {file.content_type}")
+    return content
+
+
 # 管理器（在 lifespan 之前初始化，供路由引用）
 job_manager = JobManager()
 asset_manager = AssetManager()
+
+# 保持后台任务引用，防止 GC 回收（C2 修复）
+_background_tasks: set[asyncio.Task] = set()
 
 
 @asynccontextmanager
@@ -72,11 +90,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 跨域（开发阶段允许所有来源）
+# 跨域（通过环境变量 CORS_ORIGINS 配置允许的来源，默认允许所有）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -169,7 +187,7 @@ async def create_item(
     image_bytes_list = []
     if images:
         for img in images:
-            image_bytes_list.append(await img.read())
+            image_bytes_list.append(await _validate_upload(img))
 
     asset = await create_item_asset(
         asset_id=asset_id,
@@ -206,7 +224,7 @@ async def analyze_item_asset(
     image_bytes_list = []
     if images:
         for img in images:
-            image_bytes_list.append(await img.read())
+            image_bytes_list.append(await _validate_upload(img))
 
     asset = await analyze_item(
         asset_id=asset_id,
@@ -286,7 +304,7 @@ async def create_model(
     image_bytes_list = []
     if images:
         for img in images:
-            image_bytes_list.append(await img.read())
+            image_bytes_list.append(await _validate_upload(img))
 
     # 1. 立即创建占位 ModelAsset（status=generating），保存到素材库
     model = ModelAsset(
@@ -299,7 +317,7 @@ async def create_model(
     asset_manager.save_model(model)
 
     # 2. 后台异步生成造型方案图（不阻塞 API 返回）
-    asyncio.create_task(
+    task = asyncio.create_task(
         _generate_model_looks(
             model_id=asset_id,
             description=description,
@@ -307,6 +325,8 @@ async def create_model(
             asset_manager=asset_manager,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     # 3. 立即返回，前端可立即显示 generating 占位卡片
     return {
@@ -435,13 +455,15 @@ async def regenerate_asset_image(
         # W1: 标记 generating 状态
         _regen_tracker[_regen_key(asset_id, image_type)] = {"status": "generating", "ts": _time.time()}
 
-        asyncio.create_task(
+        task = asyncio.create_task(
             _regenerate_item_image_task(
                 asset_id=asset_id,
                 image_type=image_type,
                 asset_manager=asset_manager,
             )
         )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
         return {
             "status": "ok",
@@ -463,7 +485,7 @@ async def regenerate_asset_image(
         asset_manager.save_model(model)
 
         ref_images = _load_model_reference_images(model)
-        asyncio.create_task(
+        task = asyncio.create_task(
             _regenerate_model_task(
                 model_id=asset_id,
                 description=model.full_description,
@@ -471,6 +493,8 @@ async def regenerate_asset_image(
                 asset_manager=asset_manager,
             )
         )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
         return {
             "status": "ok",
@@ -564,7 +588,7 @@ async def regenerate_model_look(asset_id: str):
     ref_images = _load_model_reference_images(model)
 
     # 后台异步重新生成
-    asyncio.create_task(
+    task = asyncio.create_task(
         _regenerate_model_task(
             model_id=asset_id,
             description=model.full_description,
@@ -572,6 +596,8 @@ async def regenerate_model_look(asset_id: str):
             asset_manager=asset_manager,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     logger.info(f"[API] 人物重新生成已启动: {asset_id}")
     return {
@@ -615,7 +641,7 @@ async def adjust_model_look(
     ref_images = _load_model_reference_images(model)
 
     # 后台异步重新生成（用合并后的描述）
-    asyncio.create_task(
+    task = asyncio.create_task(
         _regenerate_model_task(
             model_id=asset_id,
             description=merged_description,
@@ -623,6 +649,8 @@ async def adjust_model_look(
             asset_manager=asset_manager,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return {
         "status": "ok",
@@ -682,10 +710,16 @@ async def update_asset(asset_id: str, updates: str = Form(..., description="更�
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="updates 格式错误，需为 JSON")
 
-    # 按类型更新允许的字段
+    # 白名单：仅允许更新的字段
+    ITEM_EDITABLE = {"name", "usage", "selling_points", "full_description"}
+    MODEL_EDITABLE = {"name", "appearance", "personality", "outfits", "scene_context", "full_description"}
+
+    allowed = ITEM_EDITABLE if asset_id.startswith("item_") else MODEL_EDITABLE
     for key, value in data.items():
-        if hasattr(asset, key) and key not in ("id", "status"):
+        if key in allowed:
             setattr(asset, key, value)
+        elif key not in ("id", "status"):
+            logger.warning(f"[API] 素材更新: 忽略不允许的字段 {key}")
 
     # 重新保存
     if asset_id.startswith("item_"):
@@ -728,7 +762,7 @@ async def quickstart_parse_api(
     image_bytes_list = []
     if images:
         for img in images:
-            image_bytes_list.append(await img.read())
+            image_bytes_list.append(await _validate_upload(img))
 
     result = await quickstart_parse(
         sentence=sentence,
@@ -757,7 +791,7 @@ async def quickstart_create_all(
     image_bytes_list = []
     if images:
         for img in images:
-            image_bytes_list.append(await img.read())
+            image_bytes_list.append(await _validate_upload(img))
 
     # 第 1 步：拆解
     parsed = await quickstart_parse(
@@ -802,7 +836,7 @@ async def quickstart_create_all(
     asset_manager.save_model(model_placeholder)
 
     # 后台异步生成造型方案图（不阻塞 quickstart 返回）
-    asyncio.create_task(
+    task = asyncio.create_task(
         _generate_model_looks(
             model_id=model_id,
             description=model_desc,
@@ -810,6 +844,8 @@ async def quickstart_create_all(
             asset_manager=asset_manager,
         )
     )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     result["model"] = {
         "asset": model_placeholder.model_dump(),
@@ -850,7 +886,7 @@ async def generate_video(
     for i, img in enumerate(product_images):
         ext = os.path.splitext(img.filename or "img.jpg")[1] or ".jpg"
         path = os.path.join(job_dir, f"product_{i}{ext}")
-        content = await img.read()
+        content = await _validate_upload(img)
         with open(path, "wb") as f:
             f.write(content)
         image_paths.append(path)

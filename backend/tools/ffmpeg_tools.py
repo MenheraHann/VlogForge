@@ -11,6 +11,7 @@ FFmpeg 视频处理工具
 
 import io
 import os
+import asyncio
 import logging
 import tempfile
 import subprocess
@@ -23,6 +24,25 @@ logger = logging.getLogger(__name__)
 TRIM_SEARCH_SECONDS = 3.0   # 从视频末尾往前搜索多少秒
 TRIM_FRAME_RATE = 12         # 提取帧的采样率（不需要全帧率，12fps 够用）
 TRIM_COMPARE_SIZE = 256      # 对比用的缩放尺寸（越小越快）
+
+
+async def _run_cmd(cmd: list[str], timeout: int = 60) -> tuple[int, str, str]:
+    """
+    安全执行外部命令：异步 + 超时自动杀进程，防止僵尸进程泄露。
+    返回 (returncode, stdout, stderr)
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError(f"命令超时 ({timeout}s): {' '.join(cmd[:3])}...")
+    return proc.returncode, stdout_bytes.decode(errors="replace"), stderr_bytes.decode(errors="replace")
 
 
 def _check_ffmpeg():
@@ -91,11 +111,11 @@ async def stitch_segments(
         ]
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        returncode, _, stderr_text = await _run_cmd(cmd, timeout=300)
 
-        if result.returncode != 0:
-            logger.error(f"[FFmpeg] 拼接失败: {result.stderr}")
-            raise RuntimeError(f"FFmpeg 拼接失败: {result.stderr}")
+        if returncode != 0:
+            logger.error(f"[FFmpeg] 拼接失败: {stderr_text}")
+            raise RuntimeError(f"FFmpeg 拼接失败: {stderr_text}")
 
         logger.info(f"[FFmpeg] 拼接完成: {output_path}")
         return output_path
@@ -128,9 +148,14 @@ async def _trim_overlaps(segment_paths: list[str]) -> list[str]:
             trimmed_path,
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            logger.warning(f"[FFmpeg] 裁帧失败，使用原片段: {result.stderr}")
+        try:
+            returncode, _, stderr_text = await _run_cmd(cmd, timeout=60)
+        except RuntimeError:
+            logger.warning(f"[FFmpeg] 裁帧超时，使用原片段: {path}")
+            trimmed.append(path)
+            continue
+        if returncode != 0:
+            logger.warning(f"[FFmpeg] 裁帧失败，使用原片段: {stderr_text}")
             trimmed.append(path)
         else:
             trimmed.append(trimmed_path)
@@ -165,10 +190,10 @@ async def get_video_duration(path: str) -> float:
         "-of", "default=noprint_wrappers=1:nokey=1",
         path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-    if result.returncode != 0:
-        raise RuntimeError(f"ffprobe 失败: {result.stderr}")
-    return float(result.stdout.strip())
+    returncode, stdout_text, stderr_text = await _run_cmd(cmd, timeout=30)
+    if returncode != 0:
+        raise RuntimeError(f"ffprobe 失败: {stderr_text}")
+    return float(stdout_text.strip())
 
 
 # ========== 智能裁切（首尾帧模式核心） ==========
@@ -240,9 +265,14 @@ async def smart_trim_to_target(
             "-q:v", "2",
             frame_pattern,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            logger.warning(f"[SmartTrim] 帧提取失败，使用原视频: {result.stderr}")
+        try:
+            returncode, _, stderr_text = await _run_cmd(cmd, timeout=60)
+        except RuntimeError:
+            logger.warning("[SmartTrim] 帧提取超时，使用原视频")
+            _copy_file(video_path, output_path)
+            return output_path
+        if returncode != 0:
+            logger.warning(f"[SmartTrim] 帧提取失败，使用原视频: {stderr_text}")
             _copy_file(video_path, output_path)
             return output_path
 
@@ -297,10 +327,15 @@ async def smart_trim_to_target(
         ]
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        try:
+            returncode, _, stderr_text = await _run_cmd(cmd, timeout=60)
+        except RuntimeError:
+            logger.warning("[SmartTrim] 裁切超时，使用原视频")
+            _copy_file(video_path, output_path)
+            return output_path
 
-        if result.returncode != 0:
-            logger.warning(f"[SmartTrim] 裁切失败，使用原视频: {result.stderr}")
+        if returncode != 0:
+            logger.warning(f"[SmartTrim] 裁切失败，使用原视频: {stderr_text}")
             _copy_file(video_path, output_path)
             return output_path
 
