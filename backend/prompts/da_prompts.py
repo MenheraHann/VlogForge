@@ -111,6 +111,14 @@ Based on the provided material information (item, person (including filming scen
   - "no commercial presentation style, no tutorial posture"
 - These negatives prevent Veo from generating overly polished or artificial-looking footage
 
+**Rotation/Orientation Continuity (STRICTLY ENFORCED)**:
+- If a veo_description includes any rotation or orientation change of the person or the product (e.g., "rotates the product to show the side", "turns slightly to the left"), the veo_description **MUST explicitly describe the return/counter-rotation process** so the end state matches the end frame
+- Example: if the person rotates the product 90° left to show the right side, the veo_description must also say "then slowly rotates it back to face the camera" before the segment ends
+- The veo_description must describe the **complete motion arc**: initial pose → rotation → hold briefly → counter-rotation back to end frame pose
+- If the start frame and end frame both show the product/person facing the camera, but the segment involves rotation in between, the rotation AND return MUST both be explicitly written — do NOT leave the return implicit
+- BAD: "She rotates the product to show the label on the side." (rotation only, no return — VGA won't know how to get back to the end frame)
+- GOOD: "She slowly rotates the product to the right, showing the label on the side, pauses briefly, then gently rotates it back to face the camera." (complete arc)
+
 **Speech Pacing**:
 - Specify speech rhythm: "speaks slowly, with natural pauses between sentences"
 - The person should NOT rush through dialogue — natural pauses make the video feel authentic
@@ -222,6 +230,7 @@ def build_da_script_prompt(
 - Composition lock: all frame prompts must have identical composition, camera distance, and angle — only actions may differ
 - Veo static camera: veo_description must not contain camera movement or transition descriptions — only describe the person's actions and dialogue
 - Veo description quality: each veo_description MUST include (1) opening state, (2) micro-action detail with trajectories, (3) emotional direction, (4) anti-pattern negatives at the end (e.g., "no exaggerated acting, intimate realism, real person real moment")
+- Rotation continuity: if veo_description involves rotating the product or person, it MUST explicitly describe the counter-rotation/return to match the end frame — never leave rotation without describing how to get back
 - Speech pacing: dialogue should be spoken slowly with natural pauses between sentences — the person is casually chatting, not presenting
 - Finally, fill in the self_check scoring and honestly evaluate the quality of your output
 """
@@ -267,6 +276,7 @@ def build_da_script_prompt_legacy(
 - Composition lock: all frame prompts must have identical composition, camera distance, and angle — only actions may differ
 - Veo static camera: veo_description must not contain camera movement or transition descriptions — only describe the person's actions and dialogue
 - Veo description quality: each veo_description MUST include (1) opening state, (2) micro-action detail with trajectories, (3) emotional direction, (4) anti-pattern negatives at the end
+- Rotation continuity: if veo_description involves rotating the product or person, it MUST explicitly describe the counter-rotation/return to match the end frame — never leave rotation without describing how to get back
 - Speech pacing: dialogue should be spoken slowly with natural pauses — casual chatting, not presenting
 - Finally, fill in the self_check scoring and honestly evaluate the quality of your output
 """
