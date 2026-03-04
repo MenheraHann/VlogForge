@@ -86,8 +86,8 @@ async def generate_segments(
         with open(last_frame_path, "rb") as f:
             last_frame = f.read()
 
-        # 构建 prompt：声音锚定 + veo_description
-        prompt = _build_prompt(seg.veo_description, voice_anchor)
+        # 构建 prompt：台词（最高优先级）+ 声音锚定 + veo_description
+        prompt = _build_prompt(seg.veo_description, voice_anchor, seg.narration)
 
         logger.info(
             f"[VGA] 片段 {seg.segment_id}: 首帧={os.path.basename(first_frame_path)}, "
@@ -194,16 +194,29 @@ VEO_FIXED_CAMERA_PREFIX = (
 )
 
 
-def _build_prompt(veo_description: str, voice_anchor: str) -> str:
+def _build_prompt(veo_description: str, voice_anchor: str, narration: str = "") -> str:
     """
-    构建完整的 Veo prompt：固定机位指令 + 声音锚定 + 动作描述。
+    构建完整的 Veo prompt：台词（最高优先级）+ 固定机位指令 + 声音锚定 + 动作描述。
 
     顺序：
-    1. 固定机位指令（最高优先级，确保无镜头运动/转场）
-    2. 声音锚定描述（跨片段声音一致性）
-    3. veo_description（具体动作和对话）
+    1. 台词指令（最高优先级 — 确保 Veo 忠实执行 DA 脚本的对白）
+    2. 固定机位指令（确保无镜头运动/转场）
+    3. 声音锚定描述（跨片段声音一致性）
+    4. veo_description（具体动作和对话）
     """
-    parts = [VEO_FIXED_CAMERA_PREFIX]
+    parts = []
+
+    # 台词最高优先级：明确告诉 Veo 必须说什么
+    if narration and narration.strip():
+        parts.append(
+            f"CRITICAL DIALOGUE INSTRUCTION (HIGHEST PRIORITY): "
+            f"The person MUST speak the following exact dialogue in this video segment. "
+            f"This is the ONLY dialogue allowed — do NOT add, change, or omit any words. "
+            f"Generate precise lip sync for this exact script:\n"
+            f'"{narration.strip()}"'
+        )
+
+    parts.append(VEO_FIXED_CAMERA_PREFIX)
     if voice_anchor:
         parts.append(voice_anchor)
     parts.append(veo_description)

@@ -139,7 +139,8 @@ Based on the provided material information (item, person (including filming scen
 
 ### Product Display Rule (STRICTLY ENFORCED)
 - **Faithful reproduction of physical form**: The product's physical appearance (shape, color, structure, packaging state) must match EXACTLY what ADA material provides — do NOT alter, unbox, disassemble, or transform it. If ADA shows a boxed item, show the box; if ADA shows an unboxed device, show the device as-is.
-- The person can: hold it in hand, show different angles, rotate it, point at details, bring it close to camera
+- **Product Standard Front-View in ALL Keyframes (MANDATORY)**: In ALL frame_start_prompt and frame_end_prompt descriptions, the product MUST be shown in its **standard front-facing orientation** — the same angle as the ADA reference photo. Do NOT describe the product at a rotated, tilted, or angled position in any keyframe. Rotation and angle changes are ONLY allowed inside veo_description (video segments), where the start/end frame constraint will naturally guide the product back to front-view.
+- The person can: hold it in hand, show different angles **in video segments only (veo_description)**, point at details, bring it close to camera
 - **ABSOLUTELY FORBIDDEN**: The person must NOT **operate/use/apply/activate** the product on camera
   - Electronics (game controllers, consoles, phones): hold and show, but do NOT press buttons, push joysticks, detach parts, or turn on the screen
   - Cosmetics/skincare (bottles, tubes, compacts): hold and show, but do NOT open caps, squeeze out product, pour liquid, or apply to skin
@@ -220,6 +221,7 @@ def build_da_script_prompt(
 - segment_id ranges from 1 to {segment_count}
 - At least 2 segments must be marked needs_product=true (product display scenes — NEVER operate/use the product on camera)
 - PRODUCT DISPLAY ONLY: The product must appear EXACTLY as provided in ADA material — do NOT alter its appearance, shape, structure, or state. The person holds and displays it but must NEVER operate/use/apply/activate it. Even if ADA's product info mentions usage methods, DA must NOT create any scene where the person uses the product. Only hold, show, rotate, and point at it.
+- PRODUCT FRONT-VIEW IN ALL KEYFRAMES: In every frame_start_prompt and frame_end_prompt, the product MUST be in standard front-facing orientation (same angle as ADA reference). Rotation/angle changes are ONLY allowed in veo_description (video segments), NOT in keyframe descriptions.
 - UPPER BODY ONLY: Every frame prompt must describe head-to-waist framing. No legs, knees, or full-body shots. No actions involving lower body (hugging knees, crossing legs, sitting cross-legged). Only hand gestures, facial expressions, and upper body movements.
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
@@ -270,6 +272,7 @@ def build_da_script_prompt_legacy(
 [REMINDERS]
 - segment_id ranges from 1 to {segment_count}
 - At least 2 segments must be marked needs_product=true (product display scenes — show the product EXACTLY as provided, do NOT alter its appearance/shape/structure, NEVER operate/use it on camera)
+- PRODUCT FRONT-VIEW IN ALL KEYFRAMES: In every frame_start_prompt and frame_end_prompt, the product MUST be in standard front-facing orientation. Rotation/angle changes are ONLY allowed in veo_description (video segments), NOT in keyframe descriptions.
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
 - Dialogue length: each segment's dialogue must fit approximately 3 seconds of natural speech; remaining time is for action performance

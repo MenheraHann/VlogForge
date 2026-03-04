@@ -69,6 +69,7 @@ Based on the provided asset images (person half-body close-up portrait (with fil
 [Product Placement]
 - When product placement is needed, the person naturally holds or displays the product without changing camera distance
 - Product appearance must strictly match the product asset photo
+- **Product must be in standard front-facing orientation** — the same angle as the product reference photo (ADA material). Do NOT rotate, tilt, or angle the product in the generated frame. The product always faces the camera directly in its default/front-view position
 
 [Visual Style]
 - Photorealistic, vlog selfie style, phone front camera quality
