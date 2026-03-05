@@ -175,10 +175,14 @@ VEO_FIXED_CAMERA_PREFIX = (
     "Only the person's actions, expressions, and gestures change.\n\n"
     "IMPORTANT SPEECH INSTRUCTION: "
     "The person in the video speaks directly to the camera. "
+    "The spoken dialogue MUST be English only. "
     "Her lip movements must match the dialogue in the description. "
     "This is NOT a voiceover or narration — the person is talking on camera like a vlog selfie video. "
     "Generate natural lip sync that matches the spoken words. "
     "Speech pace should be slow and natural, with pauses between sentences.\n\n"
+    "IMPORTANT NO-TEXT INSTRUCTION: "
+    "Do NOT add any on-screen text overlays: no subtitles, no captions, no stickers, no floating text, no burned-in typography, no UI labels, no watermarks, no logos. "
+    "If the product naturally contains printed text on its packaging, keep it as-is, but do not add any additional text.\n\n"
     "IMPORTANT REALISM INSTRUCTION: "
     "This video must look like authentic daily life footage, NOT a commercial or advertisement. "
     "The person's actions and expressions must be natural, casual, and unforced — like a real person chatting at home. "
@@ -210,7 +214,7 @@ def _build_prompt(veo_description: str, voice_anchor: str, narration: str = "") 
     if narration and narration.strip():
         parts.append(
             f"CRITICAL DIALOGUE INSTRUCTION (HIGHEST PRIORITY): "
-            f"The person MUST speak the following exact dialogue in this video segment. "
+            f"The person MUST speak the following exact dialogue in this video segment (English only). "
             f"This is the ONLY dialogue allowed — do NOT add, change, or omit any words. "
             f"Generate precise lip sync for this exact script:\n"
             f'"{narration.strip()}"'
