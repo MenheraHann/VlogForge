@@ -15,7 +15,7 @@ Based on the provided material information (item, person (including filming scen
 4. Segmented script (each segment includes dialogue, actions, start/end frame prompts, and Veo description)
 5. Self-check scoring (rate the quality of your own output)
 
-**Dialogue Language Rule (STRICTLY ENFORCED)**: The dialogue/narration text must be written in the character's spoken language as determined by the `language` field from the person material. For example, if language is "Mandarin Chinese", all dialogue must be in Chinese; if "English", all dialogue must be in English; if "Japanese", all dialogue must be in Japanese. Title should also match the character's language. Frame prompts and veo_description body remain in English.
+**Dialogue Language Rule (STRICTLY ENFORCED)**: All dialogue/narration MUST be written in English (and the title MUST be in English), regardless of the person's profile language. Frame prompts and veo_description remain in English.
 
 ## Core Rules
 
@@ -58,19 +58,14 @@ Based on the provided material information (item, person (including filming scen
 - This is the most important new field: a detailed description of the on-camera person's voice characteristics
 - Write entirely in English, as the Veo model is more responsive to English voice descriptions
 - Must include: gender, age range, language, tone (e.g., warm/cheerful/soft), speaking pace, speaking style (e.g., vlog-style/conversational)
-- **Language Rule (STRICTLY ENFORCED)**: The character's spoken language is already determined in the asset profile's `language` field. You MUST use this exact language for the `voice_anchor`. Do NOT change or override the language. For example, if the asset profile says language is "Mandarin Chinese", the voice_anchor MUST describe the person speaking Mandarin Chinese. If it says "Japanese", the voice_anchor MUST describe the person speaking Japanese.
-- Example: "A 22-year-old Chinese woman speaking Mandarin in a soft, upbeat, vlog-style tone. She sounds like a close friend sharing a skincare tip. Slightly breathy, medium-fast pace, casual and warm."
+- **Language Rule (STRICTLY ENFORCED)**: Set the spoken language to English in `voice_anchor`. Do NOT output non-English dialogue.
+- Example: "A 22-year-old woman speaking English in a soft, upbeat, vlog-style tone. She sounds like a close friend sharing a skincare tip. Slightly breathy, medium-fast pace, casual and warm."
 - This description will be prepended to every video segment's Veo prompt to ensure consistent voice across segments
 
 ### Dialogue Length Control (CRITICAL — STRICTLY ENFORCED)
 - Each video segment is 6 seconds long
 - Dialogue must fit within approximately **3 seconds of natural speech**, leaving 3 seconds for visual actions
-- Length limits by language (choose based on character's `language` field):
-  - Mandarin Chinese: **15-20 characters** per segment (must not exceed 20 characters)
-  - English: **8-12 words** per segment (must not exceed 12 words)
-  - Japanese: **15-25 characters** per segment (including hiragana/katakana/kanji)
-  - Korean: **10-15 syllable blocks** per segment
-  - Other languages: approximate 3 seconds of natural speech at conversational pace
+- English length limit: **8-12 words** per segment (must not exceed 12 words)
 - Prefer concise over verbose — one sentence to convey one core action or selling point
 - No compound sentences allowed, no connecting multiple ideas with commas — each segment delivers exactly one information point
 - Dialogue is what the person says directly to the camera, NOT a voiceover — when writing the script, treat dialogue as the person's on-camera spoken lines
@@ -78,9 +73,9 @@ Based on the provided material information (item, person (including filming scen
 ### Veo Description Requirements
 - veo_description is used for Veo video generation, describing the dynamic process from start frame to end frame
 - Includes: person's actions, expression changes, and what the person says to the camera
-- **IMPORTANT**: Dialogue must be written as the person speaking directly to the camera — Veo will use this to generate lip-synced speaking footage. The dialogue language MUST match the character's `language` field. Examples: if English → "She looks at the camera and says: 'This mask is amazing!'"; if Mandarin Chinese → "She looks at the camera and says: '这个面膜真的好用！'"; if Japanese → "She looks at the camera and says: 'このマスク本当にいい！'"
+- **IMPORTANT**: Dialogue must be written as the person speaking directly to the camera — Veo will use this to generate lip-synced speaking footage. The dialogue MUST be in English and wrapped in quotes. Example: "She looks at the camera and says: 'This mask is amazing!'"
 - **FORBIDDEN**: Writing dialogue as voiceover or third-person narration (e.g., do NOT write "narration: this mask is great" or "voiceover: ...")
-- The entire veo_description must be written in English, with only the spoken dialogue portions in the **character's language** (wrapped in quotes). The character's language is determined by the `language` field from person material — e.g., if language is "Mandarin Chinese", dialogue in quotes is Chinese; if "English", dialogue in quotes is English; if "Japanese", dialogue in quotes is Japanese
+- The entire veo_description must be written in English, and the spoken dialogue in quotes must also be English
 - No need to repeat voice descriptions in veo_description — voice_anchor will be automatically prepended
 
 ### Veo Description Quality Guidelines (CRITICAL — determines video naturalness)
@@ -192,11 +187,6 @@ def build_da_script_prompt(
     if extra_requirements:
         extra_block = f"\n[ADDITIONAL USER REQUIREMENTS]\n{extra_requirements}\n"
 
-    # v17: 语言字段（ADA 已判定，DA 必须沿用于 voice_anchor + 台词 + veo对话）
-    language_line = ""
-    if model_language:
-        language_line = f"\n- Language (MUST use for voice_anchor AND all dialogue/narration text): {model_language}"
-
     return f"""Please generate a vlog-style product promotion script based on the following material information:
 
 [ITEM MATERIAL]
@@ -209,7 +199,7 @@ def build_da_script_prompt(
 - Appearance: {model_appearance}
 - Personality/Vibe: {model_personality}
 - Outfit: {model_outfits}
-- Filming scene: {scene_context}{language_line}
+- Filming scene: {scene_context}
 
 [VIDEO PARAMETERS]
 - Target platform: {platform_name}
@@ -225,8 +215,8 @@ def build_da_script_prompt(
 - UPPER BODY ONLY: Every frame prompt must describe head-to-waist framing. No legs, knees, or full-body shots. No actions involving lower body (hugging knees, crossing legs, sitting cross-legged). Only hand gestures, facial expressions, and upper body movements.
 - Frame chain: Segment N's frame_end_prompt must be exactly identical to Segment N+1's frame_start_prompt
 - Keyframe uniqueness: among all {segment_count + 1} keyframes, any two frames must have clear visual differences — no duplicates allowed
-- Dialogue language: ALL dialogue/narration MUST be in the character's language (from the Language field above). Do NOT default to Chinese. If character is American → English dialogue; if Chinese → Chinese dialogue.
-- Dialogue length: each segment's dialogue must fit approximately 3 seconds of natural speech (see Dialogue Length Control rules for language-specific limits); remaining time is for action performance
+- Dialogue language: ALL dialogue/narration MUST be in English (no Chinese/Japanese/Korean/etc.)
+- Dialogue length: each segment's dialogue must fit approximately 3 seconds of natural speech (see Dialogue Length Control rules); remaining time is for action performance
 - Person description must strictly match the appearance and outfit from the person material
 - Scene description must strictly match the filming scene information from the person material
 - Composition lock: all frame prompts must have identical composition, camera distance, and angle — only actions may differ

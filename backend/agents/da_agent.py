@@ -10,6 +10,7 @@ Pipeline: DA(script+self-check) -> VA(chained img2img) -> VGA(start/end frame pa
 import asyncio
 import json
 import os
+import re
 import logging
 import traceback
 from typing import Optional
@@ -50,11 +51,11 @@ def _build_response_schema() -> dict:
         "properties": {
             "title": {
                 "type": "STRING",
-                "description": "Video title, click-worthy, conversational tone",
+                "description": "Video title (English only), click-worthy, conversational tone",
             },
             "voice_anchor": {
                 "type": "STRING",
-                "description": "Voice anchor description (entirely in English), detailed voice characteristics: gender, age, language, tone, speaking pace, speaking style. Used to maintain consistent voice across all video segments.",
+                "description": "Voice anchor description (entirely in English; spoken language must be English), detailed voice characteristics: gender, age, language, tone, speaking pace, speaking style. Used to maintain consistent voice across all video segments.",
             },
             "style_guide": {
                 "type": "OBJECT",
@@ -94,7 +95,7 @@ def _build_response_schema() -> dict:
                         },
                         "narration": {
                             "type": "STRING",
-                            "description": "Dialogue lines — MUST be written in the character's spoken language (determined by the 'language' field from person material). If language is English, write English dialogue; if Mandarin Chinese, write Chinese dialogue; if Japanese, write Japanese dialogue. Do NOT default to Chinese.",
+                            "description": "Dialogue lines — MUST be written in English only (no Chinese/Japanese/Korean/etc.), regardless of the person's profile language.",
                         },
                         "action_description": {
                             "type": "STRING",
@@ -114,7 +115,7 @@ def _build_response_schema() -> dict:
                         },
                         "veo_description": {
                             "type": "STRING",
-                            "description": "Veo video generation description: written in English, with spoken dialogue portions in the character's language (wrapped in quotes). Include opening state, micro-actions, emotional direction, and anti-pattern negatives.",
+                            "description": "Veo video generation description: written in English, with spoken dialogue portions also in English (wrapped in quotes). Include opening state, micro-actions, emotional direction, and anti-pattern negatives.",
                         },
                     },
                     "required": [
@@ -226,6 +227,26 @@ def _check_self_check(self_check: SelfCheck) -> tuple[bool, str]:
     return False, feedback
 
 
+_CJK_CHAR_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]")
+
+
+def _validate_english_only(script: ScriptOutput) -> list[str]:
+    """
+    Ensure DA output uses English-only title + dialogue.
+    Veo Chinese/Japanese/Korean speech quality is currently unreliable, so we retry if CJK characters are detected.
+    """
+    issues: list[str] = []
+
+    if script.title and _CJK_CHAR_RE.search(script.title):
+        issues.append("Title contains CJK characters (English-only required)")
+
+    for seg in script.segments:
+        if seg.narration and _CJK_CHAR_RE.search(seg.narration):
+            issues.append(f"Segment {seg.segment_id} narration contains CJK characters (English-only required)")
+
+    return issues
+
+
 async def generate_script(
     user_prompt: str,
     segment_count: int,
@@ -290,6 +311,15 @@ async def generate_script(
                     logger.warning(f"[DA] {issue}")
                 raise ValueError(
                     f"[DA] Script frame validation failed ({len(chain_issues)} issue(s)), triggering retry"
+                )
+
+            # Validate English-only output (hard validation, retry on failure)
+            language_issues = _validate_english_only(script)
+            if language_issues:
+                for issue in language_issues:
+                    logger.warning(f"[DA] {issue}")
+                raise ValueError(
+                    f"[DA] Script language validation failed ({len(language_issues)} issue(s)), triggering retry"
                 )
 
             logger.info(
