@@ -94,15 +94,29 @@ async def generate_segments(
             f"尾帧={os.path.basename(last_frame_path)}"
         )
 
-        # ① Veo 首尾帧生成（Vertex AI）
-        await generate_video_segment(
-            first_frame=first_frame,
-            last_frame=last_frame,
-            description=prompt,
-            output_path=raw_path,
-            aspect_ratio=aspect_ratio,
-            duration_seconds=DEFAULT_SEGMENT_DURATION,
-        )
+        # ① Veo 首尾帧生成（Vertex AI），失败时等 5 秒后重试 1 次
+        try:
+            await generate_video_segment(
+                first_frame=first_frame,
+                last_frame=last_frame,
+                description=prompt,
+                output_path=raw_path,
+                aspect_ratio=aspect_ratio,
+                duration_seconds=DEFAULT_SEGMENT_DURATION,
+            )
+        except Exception as first_err:
+            logger.warning(
+                f"[VGA] 片段 {seg.segment_id} 首次生成失败: {first_err}，5秒后重试..."
+            )
+            await asyncio.sleep(5)
+            await generate_video_segment(
+                first_frame=first_frame,
+                last_frame=last_frame,
+                description=prompt,
+                output_path=raw_path,
+                aspect_ratio=aspect_ratio,
+                duration_seconds=DEFAULT_SEGMENT_DURATION,
+            )
 
         # ② 智能裁切（对比尾帧图片，截掉漂移部分）
         await smart_trim_to_target(

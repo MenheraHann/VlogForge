@@ -173,6 +173,7 @@ def build_da_script_prompt(
     aspect_ratio: str,
     extra_requirements: str = "",
     model_language: str = "",
+    usage_guide: str = "",
 ) -> str:
     """Build the DA script generation user prompt (based on material profiles, v10 standard path: scene sourced from person material, v17: language from ADA)"""
 
@@ -187,13 +188,17 @@ def build_da_script_prompt(
     if extra_requirements:
         extra_block = f"\n[ADDITIONAL USER REQUIREMENTS]\n{extra_requirements}\n"
 
+    usage_guide_block = ""
+    if usage_guide:
+        usage_guide_block = f"\n- Usage guide (step-by-step): {usage_guide}"
+
     return f"""Please generate a vlog-style product promotion script based on the following material information:
 
 [ITEM MATERIAL]
 - Name: {item_name}
 - Usage method: {item_usage}
 - Core selling points: {item_selling_point}
-- Detailed description: {item_description}
+- Detailed description: {item_description}{usage_guide_block}
 
 [PERSON MATERIAL (including filming scene)]
 - Appearance: {model_appearance}

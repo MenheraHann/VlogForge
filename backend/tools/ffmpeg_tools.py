@@ -95,6 +95,7 @@ async def stitch_segments(
 
     try:
         # 重编码拼接：强制统一帧率/编码，解决 Veo VFR 视频拼接后时长异常的问题
+        # 这是唯一的一次有损编码（smart_trim 和 overlap_trim 已改为 -c copy）
         cmd = [
             "ffmpeg", "-y",
             "-f", "concat",
@@ -102,8 +103,8 @@ async def stitch_segments(
             "-i", concat_file,
             "-r", "30",
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "20",
+            "-preset", "medium",
+            "-crf", "18",
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
@@ -138,13 +139,12 @@ async def _trim_overlaps(segment_paths: list[str]) -> list[str]:
     for i, path in enumerate(segment_paths[1:], start=1):
         trimmed_path = path.replace(".mp4", "_trimmed.mp4")
 
+        # 使用 -c copy 直接复制流，不重新编码（避免多次有损编码导致画质劣化）
         cmd = [
             "ffmpeg", "-y",
             "-ss", "0.04",
             "-i", path,
-            "-r", "30",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-            "-c:a", "aac", "-b:a", "128k",
+            "-c", "copy",
             trimmed_path,
         ]
 
@@ -316,13 +316,12 @@ async def smart_trim_to_target(
         # 在最佳帧时间点 +0.04s（多留一帧余量）处截断
         trim_time = best_time + 0.04
 
+        # 使用 -c copy 直接复制流，不重新编码（避免多次有损编码导致画质劣化）
         cmd = [
             "ffmpeg", "-y",
             "-i", video_path,
             "-t", f"{trim_time:.3f}",
-            "-r", "30",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-            "-c:a", "aac", "-b:a", "128k",
+            "-c", "copy",
             output_path,
         ]
 

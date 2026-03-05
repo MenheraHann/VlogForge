@@ -281,7 +281,7 @@ async def generate_script(
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=DA_SCRIPT_SYSTEM_PROMPT,
-                        temperature=0.8,
+                        temperature=0.55,
                         response_mime_type="application/json",
                         response_schema=_build_response_schema(),
                     ),
@@ -402,6 +402,7 @@ async def run_pipeline(
                 aspect_ratio=job["aspect_ratio"],
                 extra_requirements=job.get("extra_requirements", ""),
                 model_language=model_language,
+                usage_guide=item.get("usage_guide", ""),
             )
         else:
             # Legacy mode: pass product info directly
@@ -692,29 +693,43 @@ def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[b
 
 def _load_first_product_image(job: dict) -> Optional[bytes]:
     """
-    Load product image (prefers instruction_image, falls back to first original_images entry).
+    Load product image for VA storyboard generation.
+    Priority: three_view_image (ADA标准产品图) → thumbnail_image (ADA缩略图) → original_images[0] (用户原图)
     """
     item = job.get("item")
     if not item:
         return None
 
-    # Prefer ADA-generated product instruction image
-    instruction = item.get("instruction_image")
-    if instruction and os.path.exists(instruction):
+    # 优先使用 ADA 生成的三视图（标准产品图，供 DA/VA/VGA 使用）
+    three_view = item.get("three_view_image")
+    if three_view and os.path.exists(three_view):
         try:
-            with open(instruction, "rb") as f:
+            with open(three_view, "rb") as f:
+                logger.info(f"[DA] 产品图加载: three_view_image = {three_view}")
                 return f.read()
         except Exception:
             pass
 
-    # Fall back to user-uploaded original images
+    # 其次使用 ADA 生成的缩略图（白底电商风）
+    thumbnail = item.get("thumbnail_image")
+    if thumbnail and os.path.exists(thumbnail):
+        try:
+            with open(thumbnail, "rb") as f:
+                logger.info(f"[DA] 产品图加载: thumbnail_image = {thumbnail}")
+                return f.read()
+        except Exception:
+            pass
+
+    # 最后退回到用户上传的原始图片
     originals = item.get("original_images", [])
     for path in originals:
         if path and os.path.exists(path):
             try:
                 with open(path, "rb") as f:
+                    logger.info(f"[DA] 产品图加载: original_images = {path}")
                     return f.read()
             except Exception:
                 continue
 
+    logger.warning("[DA] 未找到任何可用的产品图片")
     return None

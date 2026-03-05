@@ -99,4 +99,4 @@ PLATFORM_ASPECT_MAP = {
 # ========== self_check 阈值 ==========
 
 # 任一维度低于此值触发重跑（D6 决策）
-SELF_CHECK_THRESHOLD = 3
+SELF_CHECK_THRESHOLD = 4
