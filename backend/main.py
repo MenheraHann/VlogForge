@@ -14,7 +14,7 @@ from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, PLATFORM_ASPECT_MAP, MIN_SEGMENTS, MAX_SEGMENTS
@@ -98,6 +98,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API Key 认证中间件（VLOGFORGE_API_KEY 为空时自动跳过）
+from backend.middleware.auth import APIKeyMiddleware
+app.add_middleware(APIKeyMiddleware)
 
 
 # ========== 健康检查 ==========
@@ -1039,31 +1043,86 @@ async def stream_progress(job_id: str):
 
 @app.get("/api/download/{job_id}")
 async def download_video(job_id: str):
-    """下载最终视频"""
+    """下载最终视频（支持本地和 GCS）"""
     job = job_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"任务 {job_id} 不存在")
 
     video_path = job.get("final_video")
-    if not video_path or not os.path.exists(video_path):
-        raise HTTPException(status_code=404, detail="视频尚未生成完成")
 
-    return FileResponse(
-        video_path,
-        media_type="video/mp4",
-        filename=f"vlogforge_{job_id}.mp4",
-    )
+    # 先尝试本地文件
+    if video_path and os.path.exists(video_path):
+        return FileResponse(
+            video_path,
+            media_type="video/mp4",
+            filename=f"vlogforge_{job_id}.mp4",
+        )
+
+    # GCS 降级：本地不存在时尝试从 GCS 读取
+    from backend.config import USE_GCS
+    if USE_GCS:
+        from backend.services.file_storage import file_storage
+        data = file_storage.read(f"artifacts/{job_id}/final.mp4")
+        if data:
+            return Response(
+                content=data,
+                media_type="video/mp4",
+                headers={"Content-Disposition": f'attachment; filename="vlogforge_{job_id}.mp4"'},
+            )
+
+    raise HTTPException(status_code=404, detail="视频尚未生成完成")
 
 
-# 挂载素材静态文件（供前端加载素材图片）
-if os.path.exists(ASSETS_DIR):
-    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
+# ========== 文件代理路由（替代 StaticFiles，支持 GCS 降级） ==========
 
-# 挂载产物静态文件（供前端加载视频等）
-if os.path.exists(ARTIFACTS_DIR):
-    app.mount("/artifacts", StaticFiles(directory=ARTIFACTS_DIR), name="artifacts")
+import mimetypes as _mimetypes
 
-# 挂载前端静态文件（放最后，避免拦截 API 路由）
+
+@app.get("/assets/{path:path}")
+async def serve_asset(path: str):
+    """代理路由：从本地或 GCS 读取素材文件"""
+    local_path = os.path.realpath(os.path.join(ASSETS_DIR, path))
+    if not local_path.startswith(os.path.realpath(ASSETS_DIR) + os.sep):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if os.path.exists(local_path):
+        ct, _ = _mimetypes.guess_type(local_path)
+        return FileResponse(local_path, media_type=ct or "application/octet-stream")
+
+    # GCS 降级
+    from backend.config import USE_GCS
+    if USE_GCS:
+        from backend.services.file_storage import file_storage
+        data = file_storage.read(f"assets/{path}")
+        if data:
+            ct, _ = _mimetypes.guess_type(path)
+            return Response(content=data, media_type=ct or "application/octet-stream")
+
+    raise HTTPException(status_code=404, detail="File not found")
+
+
+@app.get("/artifacts/{path:path}")
+async def serve_artifact(path: str):
+    """代理路由：从本地或 GCS 读取产物文件"""
+    local_path = os.path.realpath(os.path.join(ARTIFACTS_DIR, path))
+    if not local_path.startswith(os.path.realpath(ARTIFACTS_DIR) + os.sep):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if os.path.exists(local_path):
+        ct, _ = _mimetypes.guess_type(local_path)
+        return FileResponse(local_path, media_type=ct or "application/octet-stream")
+
+    # GCS 降级
+    from backend.config import USE_GCS
+    if USE_GCS:
+        from backend.services.file_storage import file_storage
+        data = file_storage.read(f"artifacts/{path}")
+        if data:
+            ct, _ = _mimetypes.guess_type(path)
+            return Response(content=data, media_type=ct or "application/octet-stream")
+
+    raise HTTPException(status_code=404, detail="File not found")
+
+
+# 挂载前端静态文件（放最后，避免拦截 API 路由和代理路由）
 frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

@@ -19,8 +19,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-# Cloud Storage
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "vlogforge-artifacts")
+# Cloud Storage（为空则不启用 GCS，开发环境无需配置）
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "").strip()
+USE_GCS = bool(GCS_BUCKET_NAME)
+
+# Cloud Run 检测（K_SERVICE 是 Cloud Run 自动注入的环境变量）
+IS_CLOUD_RUN = bool(os.getenv("K_SERVICE"))
 
 # 服务
 PORT = int(os.getenv("PORT", "8000"))
@@ -72,12 +76,15 @@ VIDEO_GEN_MODEL = "veo-3.1-generate-preview"
 
 # ========== 存储路径 ==========
 
-# 本地产物存储路径（开发阶段使用，部署后切换到 Cloud Storage）
-ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "artifacts")
-os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+# Cloud Run 下使用 /tmp（容器文件系统只读），本地开发用项目目录
+if IS_CLOUD_RUN:
+    ARTIFACTS_DIR = "/tmp/artifacts"
+    ASSETS_DIR = "/tmp/assets"
+else:
+    ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "artifacts")
+    ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 
-# 素材存储路径
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
 # ========== 视频参数 ==========

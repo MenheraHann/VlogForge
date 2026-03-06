@@ -51,13 +51,33 @@ class JobManager:
     # ========== 持久化 ==========
 
     def _load_from_disk(self) -> None:
-        """启动时从磁盘恢复任务数据，非终态任务标记为 FAILED"""
-        if not os.path.exists(JOBS_PERSIST_FILE):
-            logger.info("[JobManager] 无历史任务数据文件，跳过恢复")
-            return
+        """启动时恢复任务数据。GCS 模式优先从 GCS 读取，本地模式读本地文件。非终态任务标记为 FAILED"""
+        raw_jobs = None
+
+        # GCS 模式：优先从 GCS 读取
+        from backend.config import USE_GCS
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import download_blob
+                blob_data = download_blob("artifacts/_jobs_data.json")
+                if blob_data:
+                    raw_jobs = json.loads(blob_data.decode("utf-8"))
+                    logger.info("[JobManager] 从 GCS 加载任务数据成功")
+            except Exception as e:
+                logger.warning(f"[JobManager] GCS 读取失败，降级到本地: {e}")
+
+        # 本地读取
+        if raw_jobs is None:
+            if not os.path.exists(JOBS_PERSIST_FILE):
+                logger.info("[JobManager] 无历史任务数据文件，跳过恢复")
+                return
+            try:
+                with open(JOBS_PERSIST_FILE, "r", encoding="utf-8") as f:
+                    raw_jobs = json.load(f)
+            except Exception as e:
+                logger.error(f"[JobManager] 恢复任务数据失败: {e}")
+                return
         try:
-            with open(JOBS_PERSIST_FILE, "r", encoding="utf-8") as f:
-                raw_jobs = json.load(f)
             recovered = 0
             for job_id, job_data in raw_jobs.items():
                 # 将字符串状态恢复为 JobStatus 枚举
@@ -81,7 +101,7 @@ class JobManager:
             logger.error(f"[JobManager] 恢复任务数据失败: {e}")
 
     def _save_to_disk(self) -> None:
-        """将任务数据原子写入磁盘（tmp + os.replace）"""
+        """将任务数据原子写入磁盘（tmp + os.replace），GCS 模式下同时上传"""
         try:
             # 序列化：将 JobStatus 枚举转为字符串
             serializable = {}
@@ -93,12 +113,24 @@ class JobManager:
                     else:
                         entry[k] = v
                 serializable[job_id] = entry
+            json_str = json.dumps(serializable, ensure_ascii=False, indent=2, default=str)
             tmp_path = JOBS_PERSIST_FILE + ".tmp"
             with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(serializable, f, ensure_ascii=False, indent=2, default=str)
+                f.write(json_str)
             os.replace(tmp_path, JOBS_PERSIST_FILE)
+
         except Exception as e:
             logger.error(f"[JobManager] 持久化任务数据失败: {e}")
+            return
+
+        # GCS 双写（独立 try/except，不影响本地持久化结果）
+        from backend.config import USE_GCS
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import upload_blob
+                upload_blob("artifacts/_jobs_data.json", json_str.encode("utf-8"), "application/json")
+            except Exception as e:
+                logger.warning(f"[JobManager] GCS 上传任务数据失败（本地已保存）: {e}")
 
     def set_pipeline_runner(self, runner: Callable[..., Coroutine[Any, Any, None]]) -> None:
         """

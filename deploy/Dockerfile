@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制项目代码
 COPY . .
 
-# 创建产物目录
-RUN mkdir -p artifacts
+# 创建产物和素材临时目录（Cloud Run 下使用 /tmp）
+RUN mkdir -p /tmp/artifacts /tmp/assets
 
 ENV PORT=8000
 EXPOSE $PORT

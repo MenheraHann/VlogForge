@@ -286,9 +286,29 @@ async def generate_with_interleaved_output(
 
 
 def save_image(image_bytes: bytes, path: str) -> str:
-    """将图片 bytes 保存到文件"""
+    """将图片 bytes 保存到文件，GCS 模式下同时上传"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
         f.write(image_bytes)
     logger.info(f"[ImageGen] 图片已保存: {path}")
+
+    # GCS 双写
+    from backend.config import USE_GCS, ASSETS_DIR, ARTIFACTS_DIR
+    if USE_GCS:
+        try:
+            from backend.services.gcs_client import upload_blob
+            # 推断 relative_path（用 realpath 确保前缀匹配准确）
+            resolved = os.path.realpath(path)
+            assets_base = os.path.realpath(ASSETS_DIR)
+            artifacts_base = os.path.realpath(ARTIFACTS_DIR)
+            if resolved.startswith(assets_base + os.sep):
+                relative = "assets/" + os.path.relpath(resolved, assets_base)
+            elif resolved.startswith(artifacts_base + os.sep):
+                relative = "artifacts/" + os.path.relpath(resolved, artifacts_base)
+            else:
+                relative = os.path.basename(path)
+            upload_blob(relative, image_bytes, "image/png")
+        except Exception as e:
+            logger.warning(f"[ImageGen] GCS 上传失败（不影响本地文件）: {e}")
+
     return path

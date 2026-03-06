@@ -1,19 +1,19 @@
 """
 存储工具
-开发阶段使用本地文件系统，部署后切换到 Google Cloud Storage
+开发阶段使用本地文件系统，GCS 模式下同时上传到 Cloud Storage
 """
 
 import os
 import logging
 
-from backend.config import ARTIFACTS_DIR
+from backend.config import ARTIFACTS_DIR, USE_GCS
 
 logger = logging.getLogger(__name__)
 
 
 def save_artifact(job_id: str, filename: str, data: bytes) -> str:
     """
-    保存中间产物（图片/视频）到本地
+    保存中间产物（图片/视频）到本地，GCS 模式下同时上传
     返回文件路径
     """
     job_dir = os.path.join(ARTIFACTS_DIR, job_id)
@@ -22,6 +22,18 @@ def save_artifact(job_id: str, filename: str, data: bytes) -> str:
     with open(path, "wb") as f:
         f.write(data)
     logger.info(f"[Job {job_id}] 产物已保存: {filename}")
+
+    # GCS 双写
+    if USE_GCS:
+        try:
+            from backend.services.gcs_client import upload_blob
+            relative = f"artifacts/{job_id}/{filename}"
+            import mimetypes
+            ct, _ = mimetypes.guess_type(filename)
+            upload_blob(relative, data, ct or "application/octet-stream")
+        except Exception as e:
+            logger.warning(f"[Job {job_id}] GCS 上传失败（不影响本地文件）: {e}")
+
     return path
 
 

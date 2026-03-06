@@ -23,19 +23,35 @@ class JsonStorageBackend(StorageBackend):
 
     def load_all(self) -> tuple[dict[str, ItemAsset], dict[str, ModelAsset], dict[AssetType, int]]:
         """
-        从磁盘 JSON 文件加载所有素材数据。
-        文件不存在时返回空数据（首次启动）。
+        加载所有素材数据。
+        GCS 模式：优先从 GCS 读取，失败则读本地。
+        本地模式：直接读本地文件。
         """
-        if not os.path.exists(PERSIST_FILE):
-            logger.info(f"[JsonStorage] 持久化文件不存在，首次启动: {PERSIST_FILE}")
-            return {}, {}, {AssetType.ITEM: 0, AssetType.MODEL: 0}
+        data = None
 
-        try:
-            with open(PERSIST_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"[JsonStorage] 读取持久化文件失败: {e}，将使用空数据启动")
-            return {}, {}, {AssetType.ITEM: 0, AssetType.MODEL: 0}
+        # GCS 模式：优先从 GCS 读取
+        from backend.config import USE_GCS
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import download_blob
+                blob_data = download_blob("assets/_assets_data.json")
+                if blob_data:
+                    data = json.loads(blob_data.decode("utf-8"))
+                    logger.info("[JsonStorage] 从 GCS 加载素材数据成功")
+            except Exception as e:
+                logger.warning(f"[JsonStorage] GCS 读取失败，降级到本地: {e}")
+
+        # 本地读取
+        if data is None:
+            if not os.path.exists(PERSIST_FILE):
+                logger.info(f"[JsonStorage] 持久化文件不存在，首次启动: {PERSIST_FILE}")
+                return {}, {}, {AssetType.ITEM: 0, AssetType.MODEL: 0}
+            try:
+                with open(PERSIST_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                logger.error(f"[JsonStorage] 读取持久化文件失败: {e}，将使用空数据启动")
+                return {}, {}, {AssetType.ITEM: 0, AssetType.MODEL: 0}
 
         # 反序列化物品素材
         items: dict[str, ItemAsset] = {}
@@ -75,6 +91,7 @@ class JsonStorageBackend(StorageBackend):
         """
         将所有素材数据序列化为 JSON 并写入磁盘。
         使用 tmp + os.replace 原子操作，确保数据完整性。
+        GCS 模式下同时上传到 Cloud Storage。
         """
         data = {
             "items": {k: v.model_dump(mode="json") for k, v in items.items()},
@@ -88,12 +105,14 @@ class JsonStorageBackend(StorageBackend):
         # 先写临时文件，再原子替换，避免写到一半崩溃导致文件损坏
         tmp_file = PERSIST_FILE + ".tmp"
         try:
+            json_str = json.dumps(data, ensure_ascii=False, indent=2)
             with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.write(json_str)
             os.replace(tmp_file, PERSIST_FILE)
             logger.debug(
                 f"[JsonStorage] 数据已持久化: {len(items)} 个物品, {len(models)} 个人物"
             )
+
         except IOError as e:
             logger.error(f"[JsonStorage] 写入持久化文件失败: {e}")
             # 清理可能残留的临时文件
@@ -102,3 +121,13 @@ class JsonStorageBackend(StorageBackend):
                     os.remove(tmp_file)
                 except OSError:
                     pass
+            return
+
+        # GCS 双写（独立 try/except，不影响本地持久化结果）
+        from backend.config import USE_GCS
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import upload_blob
+                upload_blob("assets/_assets_data.json", json_str.encode("utf-8"), "application/json")
+            except Exception as e:
+                logger.warning(f"[JsonStorage] GCS 上传数据失败（本地已保存）: {e}")

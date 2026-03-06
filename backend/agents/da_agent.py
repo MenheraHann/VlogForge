@@ -621,6 +621,16 @@ async def run_pipeline(
 
         logger.info(f"[DA][Job {job_id}] FFmpeg stitching complete: {final_path}")
 
+        # GCS 上传最终视频
+        from backend.config import USE_GCS
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import upload_blob
+                with open(final_path, "rb") as f:
+                    upload_blob(f"artifacts/{job_id}/final.mp4", f.read(), "video/mp4")
+            except Exception as e:
+                logger.warning(f"[DA][Job {job_id}] 最终视频 GCS 上传失败: {e}")
+
         # ========== Mark as completed ==========
         # final_video stores file path, get_progress will auto-generate the download URL
         job_manager.update_job(
@@ -666,6 +676,7 @@ async def run_pipeline(
 def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[bytes]:
     """
     Load an asset image from job data.
+    GCS 模式下本地不存在时从 GCS 下载。
 
     Args:
         job: Job data dict
@@ -680,56 +691,96 @@ def _load_asset_image(job: dict, asset_key: str, image_field: str) -> Optional[b
         return None
 
     path = asset.get(image_field)
-    if not path or not os.path.exists(path):
+    if not path:
         return None
 
-    try:
-        with open(path, "rb") as f:
-            return f.read()
-    except Exception as e:
-        logger.warning(f"[DA] Failed to load asset image ({asset_key}/{image_field}): {e}")
+    # 先尝试本地读取
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception as e:
+            logger.warning(f"[DA] Failed to load asset image ({asset_key}/{image_field}): {e}")
+
+    # GCS 降级：本地不存在时尝试从 GCS 下载
+    from backend.config import USE_GCS, ASSETS_DIR, ARTIFACTS_DIR
+    if USE_GCS:
+        from backend.services.file_storage import file_storage
+        relative = _to_gcs_key(path, ASSETS_DIR, ARTIFACTS_DIR)
+        data = file_storage.read(relative)
+        if data:
+            logger.info(f"[DA] 从 GCS 下载素材图片: {relative}")
+            return data
+
+    return None
+
+
+def _to_gcs_key(path: str, assets_dir: str, artifacts_dir: str) -> str:
+    """将本地文件路径转换为 GCS object key（用 realpath 确保前缀匹配准确）"""
+    resolved = os.path.realpath(path)
+    assets_base = os.path.realpath(assets_dir)
+    artifacts_base = os.path.realpath(artifacts_dir)
+    if resolved.startswith(assets_base + os.sep):
+        return "assets/" + os.path.relpath(resolved, assets_base)
+    elif resolved.startswith(artifacts_base + os.sep):
+        return "artifacts/" + os.path.relpath(resolved, artifacts_base)
+    return "assets/" + os.path.basename(path)
+
+
+def _try_read_image(path: str) -> Optional[bytes]:
+    """尝试读取图片：优先本地，GCS 模式下降级从 GCS 下载"""
+    if not path:
         return None
+
+    # 本地读取
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+
+    # GCS 降级
+    from backend.config import USE_GCS, ASSETS_DIR, ARTIFACTS_DIR
+    if USE_GCS:
+        from backend.services.file_storage import file_storage
+        relative = _to_gcs_key(path, ASSETS_DIR, ARTIFACTS_DIR)
+        data = file_storage.read(relative)
+        if data:
+            logger.info(f"[DA] 从 GCS 下载产品图片: {relative}")
+            return data
+
+    return None
 
 
 def _load_first_product_image(job: dict) -> Optional[bytes]:
     """
     Load product image for VA storyboard generation.
     Priority: three_view_image (ADA标准产品图) → thumbnail_image (ADA缩略图) → original_images[0] (用户原图)
+    GCS 模式下本地不存在时从 GCS 下载。
     """
     item = job.get("item")
     if not item:
         return None
 
     # 优先使用 ADA 生成的三视图（标准产品图，供 DA/VA/VGA 使用）
-    three_view = item.get("three_view_image")
-    if three_view and os.path.exists(three_view):
-        try:
-            with open(three_view, "rb") as f:
-                logger.info(f"[DA] 产品图加载: three_view_image = {three_view}")
-                return f.read()
-        except Exception:
-            pass
+    data = _try_read_image(item.get("three_view_image"))
+    if data:
+        logger.info(f"[DA] 产品图加载: three_view_image")
+        return data
 
     # 其次使用 ADA 生成的缩略图（白底电商风）
-    thumbnail = item.get("thumbnail_image")
-    if thumbnail and os.path.exists(thumbnail):
-        try:
-            with open(thumbnail, "rb") as f:
-                logger.info(f"[DA] 产品图加载: thumbnail_image = {thumbnail}")
-                return f.read()
-        except Exception:
-            pass
+    data = _try_read_image(item.get("thumbnail_image"))
+    if data:
+        logger.info(f"[DA] 产品图加载: thumbnail_image")
+        return data
 
     # 最后退回到用户上传的原始图片
-    originals = item.get("original_images", [])
-    for path in originals:
-        if path and os.path.exists(path):
-            try:
-                with open(path, "rb") as f:
-                    logger.info(f"[DA] 产品图加载: original_images = {path}")
-                    return f.read()
-            except Exception:
-                continue
+    for path in (item.get("original_images") or []):
+        data = _try_read_image(path)
+        if data:
+            logger.info(f"[DA] 产品图加载: original_images")
+            return data
 
     logger.warning("[DA] 未找到任何可用的产品图片")
     return None

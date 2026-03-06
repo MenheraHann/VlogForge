@@ -80,6 +80,7 @@ async def generate_video_segment(
             duration_seconds=duration_seconds,
             number_of_videos=1,
             person_generation="allow_adult",
+            generate_audio=True,
             last_frame=types.Image(
                 image_bytes=last_frame,
                 mime_type="image/png",
@@ -106,6 +107,19 @@ async def generate_video_segment(
         with open(output_path, "wb") as f:
             f.write(video_bytes)
         logger.info(f"[VideoGen] 视频已保存: {output_path} ({len(video_bytes)} bytes)")
+
+        # GCS 双写
+        from backend.config import USE_GCS, ARTIFACTS_DIR
+        if USE_GCS:
+            try:
+                from backend.services.gcs_client import upload_blob
+                resolved = os.path.realpath(output_path)
+                base = os.path.realpath(ARTIFACTS_DIR)
+                relative = "artifacts/" + os.path.relpath(resolved, base) if resolved.startswith(base + os.sep) else "artifacts/" + os.path.basename(output_path)
+                upload_blob(relative, video_bytes, "video/mp4")
+            except Exception as e:
+                logger.warning(f"[VideoGen] GCS 上传失败（不影响本地文件）: {e}")
+
         return output_path
 
     raise RuntimeError("[VideoGen] Veo 未返回视频结果")
