@@ -96,12 +96,8 @@ SEGMENT_DURATION = 6
 MIN_SEGMENTS = 3
 MAX_SEGMENTS = 10
 
-# 平台 → 画面比例映射
-PLATFORM_ASPECT_MAP = {
-    "douyin": "9:16",
-    "xiaohongshu": "9:16",
-    "youtube": "16:9",
-}
+# 画面比例（仅支持竖屏）
+ASPECT_RATIO = "9:16"
 
 # ========== self_check 阈值 ==========
 

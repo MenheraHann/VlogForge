@@ -167,22 +167,13 @@ def build_da_script_prompt(
     model_personality: str,
     model_outfits: str,
     scene_context: str,
-    platform: str,
     duration: str,
     segment_count: int,
-    aspect_ratio: str,
     extra_requirements: str = "",
     model_language: str = "",
     usage_guide: str = "",
 ) -> str:
     """Build the DA script generation user prompt (based on material profiles, v10 standard path: scene sourced from person material, v17: language from ADA)"""
-
-    platform_names = {
-        "douyin": "Douyin",
-        "xiaohongshu": "Xiaohongshu",
-        "youtube": "YouTube",
-    }
-    platform_name = platform_names.get(platform, platform)
 
     extra_block = ""
     if extra_requirements:
@@ -207,8 +198,7 @@ def build_da_script_prompt(
 - Filming scene: {scene_context}
 
 [VIDEO PARAMETERS]
-- Target platform: {platform_name}
-- Aspect ratio: {aspect_ratio}
+- Aspect ratio: 9:16 (vertical portrait)
 - Video duration: {duration}
 - Segment count: {segment_count} segments (strictly generate {segment_count} segments with {segment_count + 1} mutually distinct keyframes)
 {extra_block}
@@ -236,20 +226,11 @@ def build_da_script_prompt(
 def build_da_script_prompt_legacy(
     product_type: str,
     product_usage: str,
-    platform: str,
     duration: str,
     selling_point: str,
     segment_count: int,
-    aspect_ratio: str,
 ) -> str:
     """Build the DA script generation user prompt (legacy compatibility, receives product info directly)"""
-
-    platform_names = {
-        "douyin": "Douyin",
-        "xiaohongshu": "Xiaohongshu",
-        "youtube": "YouTube",
-    }
-    platform_name = platform_names.get(platform, platform)
 
     return f"""Please generate a vlog-style product promotion script for the following product:
 
@@ -259,8 +240,7 @@ def build_da_script_prompt_legacy(
 - Core selling points: {selling_point}
 
 [VIDEO PARAMETERS]
-- Target platform: {platform_name}
-- Aspect ratio: {aspect_ratio}
+- Aspect ratio: 9:16 (vertical portrait)
 - Video duration: {duration}
 - Segment count: {segment_count} segments (strictly generate {segment_count} segments with {segment_count + 1} mutually distinct keyframes)
 

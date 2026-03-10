@@ -253,12 +253,6 @@
     "createItem": "Create Item",
     "createModel": "Create Model"
   },
-  "platform": {
-    "douyin": "Douyin (9:16 Vertical)",
-    "xiaohongshu": "Xiaohongshu (9:16 Vertical)",
-    "youtube": "YouTube (16:9 Horizontal)",
-    "unselected": "Not selected"
-  },
   "section": {
     "generateVideo": "Generate Video"
   },

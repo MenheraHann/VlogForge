@@ -253,12 +253,6 @@
     "createItem": "创建物品",
     "createModel": "创建人物"
   },
-  "platform": {
-    "douyin": "抖音 (9:16 竖屏)",
-    "xiaohongshu": "小红书 (9:16 竖屏)",
-    "youtube": "YouTube (16:9 横屏)",
-    "unselected": "未选择"
-  },
   "section": {
     "generateVideo": "生成视频"
   },

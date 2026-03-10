@@ -253,12 +253,6 @@
     "createItem": "상품 생성",
     "createModel": "모델 생성"
   },
-  "platform": {
-    "douyin": "Douyin (9:16 세로)",
-    "xiaohongshu": "Xiaohongshu (9:16 세로)",
-    "youtube": "YouTube (16:9 가로)",
-    "unselected": "미선택"
-  },
   "section": {
     "generateVideo": "영상 생성"
   },

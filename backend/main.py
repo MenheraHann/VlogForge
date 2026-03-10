@@ -17,9 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, PLATFORM_ASPECT_MAP, MIN_SEGMENTS, MAX_SEGMENTS
+from backend.config import PORT, ARTIFACTS_DIR, ASSETS_DIR, ASPECT_RATIO, MIN_SEGMENTS, MAX_SEGMENTS
 from backend.models import (
-    Platform, JobStatus, AssetType,
+    JobStatus, AssetType,
     ItemAsset, ModelAsset,
     JobResponse, ProgressResponse,
 )
@@ -870,7 +870,6 @@ async def quickstart_create_all(
 async def generate_video(
     product_type: str = Form(..., description="产品类型"),
     product_usage: str = Form(..., description="产品使用方式描述"),
-    platform: Platform = Form(..., description="目标平台"),
     segment_count: int = Form(..., description="视频分段数（3~10）"),
     selling_point: str = Form(..., description="核心卖点"),
     product_images: list[UploadFile] = File(..., description="产品参考图"),
@@ -881,7 +880,7 @@ async def generate_video(
     """
     segment_count = max(MIN_SEGMENTS, min(MAX_SEGMENTS, segment_count))
     job_id = str(uuid.uuid4())[:8]
-    logger.info(f"[Job {job_id}] 收到生成请求: 产品={product_type}, 平台={platform}, 分段={segment_count}")
+    logger.info(f"[Job {job_id}] 收到生成请求: 产品={product_type}, 分段={segment_count}")
 
     # 保存上传的产品图片
     job_dir = os.path.join(ARTIFACTS_DIR, job_id)
@@ -896,22 +895,18 @@ async def generate_video(
         image_paths.append(path)
         logger.info(f"[Job {job_id}] 产品图片已保存: {path}")
 
-    # 计算衍生参数
-    aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
-
     # 创建任务
     job_data = {
         "job_id": job_id,
         "task_name": f"{product_type} {segment_count * 6}s",
         "product_type": product_type,
         "product_usage": product_usage,
-        "platform": platform.value,
         "duration": f"{segment_count * 6}s",
         "selling_point": selling_point,
         "product_images": image_paths,
         "segment_count": segment_count,
         "frame_count": segment_count + 1,
-        "aspect_ratio": aspect_ratio,
+        "aspect_ratio": ASPECT_RATIO,
     }
     job_manager.create_job(job_id, job_data)
 
@@ -928,7 +923,6 @@ async def generate_video(
 async def generate_video_v2(
     item_id: str = Form(..., description="物品素材 ID"),
     model_id: str = Form(..., description="人物素材 ID"),
-    platform: Platform = Form(..., description="目标平台"),
     segment_count: int = Form(..., description="视频分段数（3~10）"),
     extra_requirements: str = Form("", description="额外要求"),
 ):
@@ -953,8 +947,6 @@ async def generate_video_v2(
         f"物品={item.name}, 人物={model.name}, 分段={segment_count}"
     )
 
-    aspect_ratio = PLATFORM_ASPECT_MAP[platform.value]
-
     # 创建任务
     task_name = f"{item.name} {segment_count * 6}s"
     job_data = {
@@ -963,12 +955,11 @@ async def generate_video_v2(
         "mode": "v2_assets",
         "item": item.model_dump(),
         "model": model.model_dump(),
-        "platform": platform.value,
         "duration": f"{segment_count * 6}s",
         "extra_requirements": extra_requirements,
         "segment_count": segment_count,
         "frame_count": segment_count + 1,
-        "aspect_ratio": aspect_ratio,
+        "aspect_ratio": ASPECT_RATIO,
     }
     job_manager.create_job(job_id, job_data)
 

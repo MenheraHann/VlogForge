@@ -11,12 +11,6 @@ from pydantic import BaseModel, Field
 
 # ========== 枚举 ==========
 
-class Platform(str, Enum):
-    """目标平台"""
-    DOUYIN = "douyin"           # 抖音 9:16
-    XIAOHONGSHU = "xiaohongshu" # 小红书 9:16
-    YOUTUBE = "youtube"         # YouTube 16:9
-
 
 class Duration(str, Enum):
     """视频时长"""
@@ -148,7 +142,6 @@ class VideoGenerateRequest(BaseModel):
     """视频生成请求（v10：场景融入人物，不再需要 scene_id）"""
     item_id: str = Field(..., description="选中的物品素材 ID")
     model_id: str = Field(..., description="选中的人物素材 ID")
-    platform: Platform = Field(..., description="目标平台")
     duration: Duration = Field(..., description="视频时长")
     extra_requirements: str = Field("", description="用户额外要求（可选）")
 
@@ -157,7 +150,6 @@ class GenerateRequest(BaseModel):
     """用户提交的生成请求（旧版兼容，后续切换到 VideoGenerateRequest）"""
     product_type: str = Field(..., description="产品类型，如：洗面奶、面膜、手机App")
     product_usage: str = Field(..., description="产品使用方式描述")
-    platform: Platform = Field(..., description="目标平台")
     duration: Duration = Field(..., description="视频时长")
     selling_point: str = Field(..., description="核心卖点，一句话")
 

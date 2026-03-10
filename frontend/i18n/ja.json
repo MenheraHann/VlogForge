@@ -253,12 +253,6 @@
     "createItem": "商品を作成",
     "createModel": "モデルを作成"
   },
-  "platform": {
-    "douyin": "Douyin (9:16 縦型)",
-    "xiaohongshu": "Xiaohongshu (9:16 縦型)",
-    "youtube": "YouTube (16:9 横型)",
-    "unselected": "未選択"
-  },
   "section": {
     "generateVideo": "動画を生成"
   },

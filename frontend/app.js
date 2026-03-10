@@ -1972,10 +1972,9 @@ function updateGenButton() {
   // v19: 不仅检查素材是否绑定，还检查是否"就绪"
   const itemReady = slotAssets.item && slotAssets.item.questionnaire_status === "completed";
   const modelReady = !slotAssets.model || !!slotAssets.model.portrait_image; // 人物可选，但绑定后必须就绪
-  const platform = document.getElementById('gen-platform').value;
   const segments = document.getElementById('gen-segments').value;
-  // 物品就绪 + 人物就绪（或未绑定） + 平台 + 时长 → 启用生成按钮
-  $("#btn-generate").disabled = !(itemReady && modelReady && platform && segments);
+  // 物品就绪 + 人物就绪（或未绑定） + 时长 → 启用生成按钮
+  $("#btn-generate").disabled = !(itemReady && modelReady && segments);
 }
 
 $("#btn-generate").addEventListener("click", async () => {
@@ -1985,7 +1984,6 @@ $("#btn-generate").addEventListener("click", async () => {
   btn.disabled = true;
   btn.classList.add("loading");
 
-  const platform = $("#gen-platform").value;
   const segmentCount = $("#gen-segments").value;
   const extra = $("#gen-prompt").value.trim();
 
@@ -2009,7 +2007,6 @@ $("#btn-generate").addEventListener("click", async () => {
     const genForm = new FormData();
     genForm.append("item_id", slotAssets.item.id);
     genForm.append("model_id", slotAssets.model.id);
-    genForm.append("platform", platform);
     genForm.append("segment_count", segmentCount);
     genForm.append("extra_requirements", extra);
 
@@ -2492,12 +2489,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (segSel) {
     segSel.addEventListener("change", () => { updatePillStates(); updateGenButton(); });
     updateDurationOptions();
-  }
-
-  // 初始化平台下拉选择：切换时更新生成按钮状态
-  const platSel = $("#gen-platform");
-  if (platSel) {
-    platSel.addEventListener("change", () => { updateGenButton(); });
   }
 
   // 初始化图片预览 Lightbox

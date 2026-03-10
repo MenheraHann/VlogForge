@@ -396,10 +396,8 @@ async def run_pipeline(
                 model_personality=model["personality"],
                 model_outfits=model["outfits"],
                 scene_context=scene_context,
-                platform=job["platform"],
                 duration=job["duration"],
                 segment_count=job["segment_count"],
-                aspect_ratio=job["aspect_ratio"],
                 extra_requirements=job.get("extra_requirements", ""),
                 model_language=model_language,
                 usage_guide=item.get("usage_guide", ""),
@@ -409,11 +407,9 @@ async def run_pipeline(
             user_prompt = build_da_script_prompt_legacy(
                 product_type=job["product_type"],
                 product_usage=job["product_usage"],
-                platform=job["platform"],
                 duration=job["duration"],
                 selling_point=job["selling_point"],
                 segment_count=job["segment_count"],
-                aspect_ratio=job["aspect_ratio"],
             )
 
         script = await generate_script(

@@ -370,7 +370,6 @@ class JobManager:
                 "progress": job.get("progress", 0.0),
                 "message": job.get("message", ""),
                 "task_name": job.get("task_name", "未命名任务"),
-                "platform": job.get("platform", ""),
                 "duration": job.get("duration", ""),
                 "created_at": job.get("created_at", 0),
             })
