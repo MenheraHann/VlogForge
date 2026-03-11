@@ -139,12 +139,16 @@ async def _trim_overlaps(segment_paths: list[str]) -> list[str]:
     for i, path in enumerate(segment_paths[1:], start=1):
         trimmed_path = path.replace(".mp4", "_trimmed.mp4")
 
-        # 使用 -c copy 直接复制流，不重新编码（避免多次有损编码导致画质劣化）
+        # 必须使用重编码才能在 0.04s 精确截断（-c copy 只能在关键帧处截断）
+        # H.264 视频首帧通常是关键帧，使用 -c copy + -ss 0.04 会从 t=0 开始复制
         cmd = [
             "ffmpeg", "-y",
             "-ss", "0.04",
             "-i", path,
-            "-c", "copy",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-c:a", "aac",
             trimmed_path,
         ]
 

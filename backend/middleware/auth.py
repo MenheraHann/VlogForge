@@ -40,6 +40,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if path.startswith("/assets/") or path.startswith("/artifacts/"):
             return await call_next(request)
+        # SSE 流和状态轮询端点放行（浏览器 EventSource 无法发送自定义 Header）
+        if path.startswith("/api/stream/") or path.startswith("/api/status/"):
+            return await call_next(request)
         # 前端静态资源放行
         if not path.startswith("/api/"):
             return await call_next(request)
