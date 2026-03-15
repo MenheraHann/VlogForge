@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VlogForge Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f1117;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px;
+    color: #e0e0e0;
+  }
+  .container {
+    width: 1200px;
+    position: relative;
+  }
+  h1 {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 40px;
+  }
+  .main-layout {
+    display: flex;
+    gap: 32px;
+    align-items: stretch;
+  }
+
+  /* Left: Frontend */
+  .frontend-col {
+    width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .fe-box {
+    background: linear-gradient(135deg, #1a1f35, #1e2440);
+    border: 1px solid #2a3a5c;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+  }
+  .fe-box .icon { font-size: 28px; margin-bottom: 8px; }
+  .fe-box .label { font-size: 13px; font-weight: 600; color: #8ba4d9; }
+  .fe-box .tech { font-size: 11px; color: #667; margin-top: 4px; }
+
+  /* Center: Pipeline */
+  .pipeline-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .user-input {
+    background: linear-gradient(135deg, #1c2333, #222b3d);
+    border: 1px solid #3a4a6c;
+    border-radius: 14px;
+    padding: 16px 32px;
+    text-align: center;
+    margin-bottom: 8px;
+    width: 420px;
+  }
+  .user-input .icon { font-size: 22px; }
+  .user-input .label { font-size: 14px; font-weight: 600; color: #b0c4de; margin-top: 4px; }
+  .user-input .desc { font-size: 11px; color: #778; margin-top: 2px; }
+
+  .arrow-down {
+    width: 2px;
+    height: 20px;
+    background: #3a5a8a;
+    position: relative;
+    margin: 0 auto;
+  }
+  .arrow-down::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #3a5a8a;
+  }
+
+  .agent-card {
+    width: 420px;
+    background: linear-gradient(135deg, #141820, #1a2030);
+    border-radius: 14px;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+    margin: 4px 0;
+  }
+  .agent-card .agent-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .agent-card .agent-info { flex: 1; }
+  .agent-card .agent-name {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .agent-card .agent-role {
+    font-size: 11px;
+    color: #889;
+    margin-bottom: 4px;
+  }
+  .agent-card .agent-desc {
+    font-size: 11px;
+    color: #667;
+    line-height: 1.4;
+  }
+  .agent-card .model-badge {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 6px 10px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .agent-card .model-badge .model-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: #aab;
+  }
+  .agent-card .model-badge .model-via {
+    font-size: 9px;
+    color: #556;
+    margin-top: 2px;
+  }
+
+  /* Agent colors */
+  .agent-ada { border: 1px solid #2d6a4f; }
+  .agent-ada .agent-icon { background: linear-gradient(135deg, #1b4332, #2d6a4f); }
+  .agent-ada .agent-name { color: #52b788; }
+
+  .agent-da { border: 1px solid #5a4fcf; }
+  .agent-da .agent-icon { background: linear-gradient(135deg, #312e81, #5a4fcf); }
+  .agent-da .agent-name { color: #818cf8; }
+
+  .agent-va { border: 1px solid #b45309; }
+  .agent-va .agent-icon { background: linear-gradient(135deg, #78350f, #b45309); }
+  .agent-va .agent-name { color: #fbbf24; }
+
+  .agent-vga { border: 1px solid #be185d; }
+  .agent-vga .agent-icon { background: linear-gradient(135deg, #831843, #be185d); }
+  .agent-vga .agent-name { color: #f472b6; }
+
+  .ffmpeg-card {
+    width: 420px;
+    background: linear-gradient(135deg, #1a1a2e, #1f1f35);
+    border: 1px solid #333;
+    border-radius: 14px;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 4px 0;
+  }
+  .ffmpeg-card .agent-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #1a1a2e, #2a2a3e);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .ffmpeg-card .agent-name { font-size: 15px; font-weight: 700; color: #a0a0b0; }
+  .ffmpeg-card .agent-desc { font-size: 11px; color: #667; }
+
+  .output-box {
+    background: linear-gradient(135deg, #1c1c2e, #252540);
+    border: 1px solid #4a4a6a;
+    border-radius: 14px;
+    padding: 16px 32px;
+    text-align: center;
+    margin-top: 8px;
+    width: 420px;
+  }
+  .output-box .icon { font-size: 28px; }
+  .output-box .label { font-size: 14px; font-weight: 700; color: #c4b5fd; margin-top: 4px; }
+  .output-box .desc { font-size: 11px; color: #778; margin-top: 2px; }
+
+  /* Right: Cloud Services */
+  .cloud-col {
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .cloud-box {
+    background: linear-gradient(135deg, #1a2333, #1e2b3d);
+    border: 1px solid #2a4a6c;
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+  }
+  .cloud-box .icon { font-size: 28px; margin-bottom: 8px; }
+  .cloud-box .label { font-size: 13px; font-weight: 600; }
+  .cloud-box .tech { font-size: 11px; color: #667; margin-top: 4px; line-height: 1.5; }
+
+  .cloud-box.vertex .label { color: #4fc3f7; }
+  .cloud-box.vertex { border-color: #1a5276; }
+  .cloud-box.gcs .label { color: #66bb6a; }
+  .cloud-box.gcs { border-color: #2e7d32; }
+  .cloud-box.cloudrun .label { color: #ffab40; }
+  .cloud-box.cloudrun { border-color: #e65100; }
+
+  /* Connector lines (horizontal) */
+  .connector-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+  .h-line {
+    height: 1px;
+    background: #3a5a8a;
+    flex: 1;
+    max-width: 40px;
+    position: relative;
+  }
+  .h-line.left::before {
+    content: '◀';
+    position: absolute;
+    left: -8px;
+    top: -8px;
+    font-size: 8px;
+    color: #3a5a8a;
+  }
+  .h-line.right::after {
+    content: '▶';
+    position: absolute;
+    right: -8px;
+    top: -8px;
+    font-size: 8px;
+    color: #3a5a8a;
+  }
+
+  /* Feature badges */
+  .features {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+  .feat {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: #889;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .feat .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.green { background: #52b788; }
+  .dot.purple { background: #818cf8; }
+  .dot.yellow { background: #fbbf24; }
+  .dot.pink { background: #f472b6; }
+  .dot.blue { background: #4fc3f7; }
+
+  /* Parallel label */
+  .parallel-label {
+    font-size: 10px;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    position: absolute;
+    right: 16px;
+    bottom: -14px;
+    white-space: nowrap;
+    z-index: 10;
+  }
+
+  .sse-label {
+    font-size: 10px;
+    color: #4fc3f7;
+    text-align: center;
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>VlogForge Architecture</h1>
+  <p class="subtitle">4-Agent AI Video Production Pipeline &nbsp;|&nbsp; Gemini Live Agent Challenge</p>
+
+  <div class="main-layout">
+
+    <!-- Left: Frontend -->
+    <div class="frontend-col" style="justify-content: center;">
+      <div class="fe-box">
+        <div class="icon">🌐</div>
+        <div class="label">Frontend SPA</div>
+        <div class="tech">HTML / CSS / JS</div>
+        <div class="tech" style="margin-top: 8px; color: #4fc3f7; font-size: 10px;">SSE Real-time Progress ↔</div>
+      </div>
+      <div class="fe-box">
+        <div class="icon">🌍</div>
+        <div class="label">i18n Support</div>
+        <div class="tech">EN ZH JA KO ES PT</div>
+      </div>
+    </div>
+
+    <!-- Center: Pipeline -->
+    <div class="pipeline-col">
+
+      <div class="user-input">
+        <div class="icon">📸</div>
+        <div class="label">User Input</div>
+        <div class="desc">Product photo + one-sentence description</div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="agent-card agent-ada">
+        <div class="agent-icon">🎨</div>
+        <div class="agent-info">
+          <div class="agent-name">ADA — Asset Designer</div>
+          <div class="agent-role">Stage 1: Product Analysis</div>
+          <div class="agent-desc">Smart questionnaire → structured profile → reference images</div>
+        </div>
+        <div class="model-badge">
+          <div class="model-name">Gemini 2.5 Flash<br>+ Nano Banana Pro</div>
+          <div class="model-via">via Vertex AI</div>
+        </div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="agent-card agent-da">
+        <div class="agent-icon">🎬</div>
+        <div class="agent-info">
+          <div class="agent-name">DA — Creative Director</div>
+          <div class="agent-role">Stage 2: Script & Orchestration</div>
+          <div class="agent-desc">Script generation with self-check loop (4-dimension scoring)</div>
+        </div>
+        <div class="model-badge">
+          <div class="model-name">Gemini 2.5 Flash</div>
+          <div class="model-via">via Vertex AI</div>
+        </div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="agent-card agent-va" style="position: relative;">
+        <div class="agent-icon">🖼</div>
+        <div class="agent-info">
+          <div class="agent-name">VA — Visual Director</div>
+          <div class="agent-role">Stage 3: Storyboard Generation</div>
+          <div class="agent-desc">N+1 keyframes generated in parallel from shared references</div>
+        </div>
+        <div class="model-badge">
+          <div class="model-name">Nano Banana</div>
+          <div class="model-via">img2img via Vertex AI</div>
+        </div>
+        <div class="parallel-label">⚡ Parallel × Semaphore(3)</div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="agent-card agent-vga" style="position: relative;">
+        <div class="agent-icon">🎥</div>
+        <div class="agent-info">
+          <div class="agent-name">VGA — Video Editor</div>
+          <div class="agent-role">Stage 4: Video Segment Generation</div>
+          <div class="agent-desc">First/last frame mode + MSE smart trim + voice anchor</div>
+        </div>
+        <div class="model-badge">
+          <div class="model-name">Veo 3.1 Preview</div>
+          <div class="model-via">via Vertex AI</div>
+        </div>
+        <div class="parallel-label">⚡ Parallel × Semaphore(3)</div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="ffmpeg-card">
+        <div class="agent-icon">⚙️</div>
+        <div class="agent-info">
+          <div class="agent-name">FFmpeg Stitcher</div>
+          <div class="agent-desc">Overlap removal → re-encode → concat → final.mp4</div>
+        </div>
+      </div>
+
+      <div class="arrow-down"></div>
+
+      <div class="output-box">
+        <div class="icon">🎬</div>
+        <div class="label">Final Video</div>
+        <div class="desc">18–60s &nbsp;|&nbsp; 9:16 Vertical &nbsp;|&nbsp; Voice-Narrated</div>
+      </div>
+
+    </div>
+
+    <!-- Right: Cloud Services -->
+    <div class="cloud-col" style="justify-content: center;">
+      <div class="cloud-box vertex">
+        <div class="icon">☁️</div>
+        <div class="label">Vertex AI</div>
+        <div class="tech">Gemini 2.5 Flash<br>Nano Banana / Pro<br>Veo 3.1 Preview</div>
+      </div>
+      <div class="cloud-box gcs">
+        <div class="icon">🗄</div>
+        <div class="label">Cloud Storage (GCS)</div>
+        <div class="tech">Dual-write pattern<br>Persistent artifacts</div>
+      </div>
+      <div class="cloud-box cloudrun">
+        <div class="icon">🚀</div>
+        <div class="label">Cloud Run</div>
+        <div class="tech">Docker container<br>Stateless deployment</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Feature badges -->
+  <div class="features">
+    <div class="feat"><span class="dot purple"></span>Self-Check Loop</div>
+    <div class="feat"><span class="dot pink"></span>Frame Chain Continuity</div>
+    <div class="feat"><span class="dot yellow"></span>MSE Smart Trim</div>
+    <div class="feat"><span class="dot green"></span>Voice Anchor</div>
+    <div class="feat"><span class="dot blue"></span>Parallel-but-Consistent</div>
+  </div>
+
+</div>
+</body>
+</html>
